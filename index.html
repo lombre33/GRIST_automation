@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Grist Automation Builder — Placeholder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Grist Automation Builder</h1>
+    <span class="badge">Placeholder — POC en cours de construction</span>
+  </header>
+
+  <main class="app-main">
+    <section class="panel panel-flow">
+      <h2>Zone de construction du workflow</h2>
+      <div id="flow-canvas" class="flow-canvas">
+        <div class="node node-trigger">Déclencheur</div>
+        <div class="arrow">→</div>
+        <div class="node node-condition">Condition</div>
+        <div class="arrow">→</div>
+        <div class="node node-action">Action</div>
+      </div>
+    </section>
+
+    <section class="panel panel-side">
+      <h2>Statut</h2>
+      <p>Workflow : <strong>inactif</strong></p>
+      <button id="toggle-active">Activer</button>
+      <button id="test-workflow">Tester le workflow</button>
+
+      <h2>Logs</h2>
+      <ul id="log-list" class="log-list">
+        <li>En attente d'événements Grist...</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
