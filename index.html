@@ -2,32 +2,79 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Grist Automation Builder — Placeholder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grist Automation Builder — POC V0.5</title>
   <link rel="stylesheet" href="style.css">
+  <!-- Plugin API : URL à remplacer par la copie hébergée sur l'instance DINUM (voir README). -->
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
 <body>
   <header class="app-header">
     <h1>Grist Automation Builder</h1>
-    <span class="badge">Placeholder — POC en cours de construction</span>
+    <span class="badge">POC V0.5 — formulaire simple</span>
   </header>
+
+  <p id="open-tab-warning" class="warning" hidden>
+    Automation active : elle ne s'exécute que tant que cette vue reste ouverte dans votre navigateur.
+  </p>
 
   <main class="app-main">
     <section class="panel panel-flow">
-      <h2>Zone de construction du workflow</h2>
-      <div id="flow-canvas" class="flow-canvas">
-        <div class="node node-trigger">Déclencheur</div>
-        <div class="arrow">→</div>
-        <div class="node node-condition">Condition</div>
-        <div class="arrow">→</div>
-        <div class="node node-action">Action</div>
-      </div>
+      <h2>Workflow</h2>
+      <form id="wf-form" autocomplete="off">
+        <fieldset>
+          <legend>Déclencheur</legend>
+          <label>Quand une ligne est
+            <select id="trg-action">
+              <option value="update">modifiée</option>
+              <option value="create">créée</option>
+              <option value="delete">supprimée</option>
+            </select>
+          </label>
+          <label>Colonne surveillée (optionnel)
+            <input id="trg-column" type="text" placeholder="ex : Statut">
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Condition (optionnel)</legend>
+          <label>Colonne <input id="cond-column" type="text" placeholder="ex : Statut"></label>
+          <label>Opérateur
+            <select id="cond-operator">
+              <option value="eq">est égal à</option>
+              <option value="neq">est différent de</option>
+              <option value="gt">est supérieur à</option>
+              <option value="lt">est inférieur à</option>
+              <option value="contains">contient</option>
+              <option value="empty">est vide</option>
+              <option value="notEmpty">n'est pas vide</option>
+            </select>
+          </label>
+          <label>Valeur <input id="cond-value" type="text"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Action</legend>
+          <label>Type
+            <select id="act-type">
+              <option value="UpdateRecord">Mettre à jour la ligne</option>
+              <option value="AddRecord">Ajouter une ligne</option>
+            </select>
+          </label>
+          <label>Table cible <input id="act-table" type="text" placeholder="vide = table courante"></label>
+          <label>Colonne <input id="act-column" type="text"></label>
+          <label>Valeur <input id="act-value" type="text"></label>
+        </fieldset>
+
+        <button type="submit">Enregistrer le workflow</button>
+      </form>
     </section>
 
     <section class="panel panel-side">
       <h2>Statut</h2>
-      <p>Workflow : <strong>inactif</strong></p>
-      <button id="toggle-active">Activer</button>
-      <button id="test-workflow">Tester le workflow</button>
+      <p>Workflow : <strong id="wf-state">inactif</strong></p>
+      <button id="toggle-active" type="button">Activer</button>
+      <button id="test-workflow" type="button">Tester (dry-run)</button>
 
       <h2>Logs</h2>
       <ul id="log-list" class="log-list">
@@ -36,6 +83,7 @@
     </section>
   </main>
 
+  <script src="src/engine.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
