@@ -2,40 +2,89 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Grist Automation Builder — Placeholder</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Aucune requête vers un autre site que celui du widget, hors le script de l'API Grist (validé par la DINUM). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://docs.getgrist.com/grist-plugin-api.js; style-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+  <title>Grist Automation Builder</title>
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/modal.css">
+  <script src="js/theme.js"></script>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
 </head>
 <body>
   <header class="app-header">
-    <h1>Grist Automation Builder</h1>
-    <span class="badge">Placeholder — POC en cours de construction</span>
+    <h1 data-i18n="app.title"></h1>
+    <span class="badge" data-i18n="app.badge"></span>
+    <button id="open-settings" type="button" class="icon-only" data-i18n-label="settings.open" aria-haspopup="dialog"><span class="icon icon-settings" aria-hidden="true"></span></button>
   </header>
+
+  <p id="open-tab-warning" class="warning" data-i18n="app.openTab" hidden></p>
 
   <main class="app-main">
     <section class="panel panel-flow">
-      <h2>Zone de construction du workflow</h2>
-      <div id="flow-canvas" class="flow-canvas">
-        <div class="node node-trigger">Déclencheur</div>
-        <div class="arrow">→</div>
-        <div class="node node-condition">Condition</div>
-        <div class="arrow">→</div>
-        <div class="node node-action">Action</div>
-      </div>
+      <h2 data-i18n="wf.title"></h2>
+      <form id="wf-form" autocomplete="off">
+        <fieldset>
+          <legend data-i18n="trigger.legend"></legend>
+          <div class="row"><label for="trg-action" data-i18n="trigger.when"></label>
+            <select id="trg-action">
+              <option value="update" data-i18n="trigger.update"></option>
+              <option value="create" data-i18n="trigger.create"></option>
+              <option value="delete" data-i18n="trigger.delete"></option>
+            </select></div>
+          <div class="row"><label for="trg-column" data-i18n="trigger.column"></label><select id="trg-column"></select></div>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="cond.legend"></legend>
+          <div class="row"><label for="cond-column" data-i18n="cond.column"></label><select id="cond-column"></select></div>
+          <div class="row"><label for="cond-operator" data-i18n="cond.operator"></label>
+            <select id="cond-operator">
+              <option value="eq" data-i18n="op.eq"></option>
+              <option value="neq" data-i18n="op.neq"></option>
+              <option value="gt" data-i18n="op.gt"></option>
+              <option value="lt" data-i18n="op.lt"></option>
+              <option value="contains" data-i18n="op.contains"></option>
+              <option value="empty" data-i18n="op.empty"></option>
+              <option value="notEmpty" data-i18n="op.notEmpty"></option>
+            </select></div>
+          <div class="row"><label for="cond-value" data-i18n="cond.value"></label><input id="cond-value" type="text"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="act.legend"></legend>
+          <div class="row"><label for="act-type" data-i18n="act.type"></label>
+            <select id="act-type">
+              <option value="UpdateRecord" data-i18n="act.update"></option>
+              <option value="AddRecord" data-i18n="act.add"></option>
+            </select></div>
+          <div class="row"><label for="act-table" data-i18n="act.table"></label><select id="act-table"></select></div>
+          <div class="row"><label for="act-column" data-i18n="act.column"></label><select id="act-column"></select></div>
+          <div class="row"><label for="act-value" data-i18n="act.value"></label><input id="act-value" type="text"></div>
+        </fieldset>
+
+        <button type="submit" class="primary" data-i18n="wf.save"></button>
+      </form>
     </section>
 
     <section class="panel panel-side">
-      <h2>Statut</h2>
-      <p>Workflow : <strong>inactif</strong></p>
-      <button id="toggle-active">Activer</button>
-      <button id="test-workflow">Tester le workflow</button>
-
-      <h2>Logs</h2>
-      <ul id="log-list" class="log-list">
-        <li>En attente d'événements Grist...</li>
-      </ul>
+      <h2 data-i18n="status.title"></h2>
+      <p><span data-i18n="status.workflow"></span> <strong id="wf-state"></strong></p>
+      <div class="side-actions">
+        <button id="toggle-active" type="button"></button>
+        <button id="test-workflow" type="button"><span class="icon icon-play" aria-hidden="true"></span><span data-i18n="test.run"></span></button>
+      </div>
+      <h2 data-i18n="logs.title"></h2>
+      <ul id="log-list" class="log-list"><li data-i18n="logs.waiting"></li></ul>
     </section>
   </main>
 
-  <script src="script.js"></script>
+  <script src="js/version.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/modal.js"></script>
+  <script src="js/search-select.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
