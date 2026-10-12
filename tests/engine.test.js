@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const E = require('../src/engine.js');
+const E = require('../js/engine.js');
 const { createFakeApi } = require('./fakes/fakeGrist.js');
 
 const rows = (...r) => r;
@@ -143,6 +143,6 @@ test('DRY-01/02 dry-run : effets listés, aucune écriture, même si inactif', a
 });
 
 test('SEC-02 le moteur n\'utilise ni eval ni Function ni réseau', () => {
-  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../src/engine.js'), 'utf8');
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../js/engine.js'), 'utf8');
   assert.doesNotMatch(src, /\beval\s*\(|new\s+Function|\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon/);
 });

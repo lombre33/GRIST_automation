@@ -1,0 +1,16 @@
+/* Base commune des fenêtres : voile, cadre, trois zones (titre fixe, contenu qui défile, boutons fixes), trois largeurs. */
+.modal { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: var(--scrim); }
+.modal-box { display: flex; flex-direction: column; width: 400px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-frame); box-shadow: var(--shadow-float); }
+.modal-box.w-form { width: 480px; }
+.modal-box.w-large { width: 960px; }
+.modal-title { margin: 0; padding: 10px 14px; font-size: 14px; font-weight: 700; border-bottom: 1px solid var(--border); }
+.modal-body { padding: 10px 14px; overflow: auto; min-height: 0; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 14px; border-top: 1px solid var(--border); }
+.modal-body p { margin: 0 0 8px; }
+.modal-body a { color: var(--accent); }
+.modal-body dl { display: grid; grid-template-columns: 6em 1fr; gap: 4px 8px; margin: 0 0 8px; }
+.modal-body dt { color: var(--text-muted); }
+.modal-body dd { margin: 0; }
+.segmented { display: flex; gap: 4px; }
+.segmented button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); font-weight: 600; }
+.copy-row { display: flex; gap: 6px; }

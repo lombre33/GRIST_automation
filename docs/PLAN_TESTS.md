@@ -121,6 +121,26 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - SEC-04 injection (HTML, formule Grist `=...`, valeurs très longues) dans les valeurs écrites par les actions.
 - SEC-05 les droits de l'utilisateur Grist sont respectés (jamais d'élévation).
 
+### Tests déjà écrits (état au 2026-10-12)
+
+| Groupe | Contenu | Où |
+|---|---|---|
+| DIFF, TRG, COND, ACT, DRY, SEC-02 | moteur (voir plus haut), tests listés comme « partiels » | `tests/engine.test.js` |
+| I18N-01 à 05 | clés fr/en identiques, clés utilisées existantes, pluriels, langue initiale, vocabulaire | `tests/i18n.test.js` |
+| SRCH-01 à 04 | recherche par mots (ordre libre, accents, ponctuation) | `tests/search-select.test.js` |
+| CTR-01 à 03 | contrastes des jetons, clair et sombre | `tests/contrast.test.js` |
+| HYG-01 à 09 | aucun réseau, police, image ou style externe ; pas d'`innerHTML` ; pas d'emoji ; politique de sécurité ; pas de couleur en dur ; pas de compte personnel ; stockage limité | `tests/hygiene.test.js` |
+| E2E-01 à 07 | scénario de base dans Chromium avec une API Grist simulée : configuration, écriture, dry-run, thème et langue, fenêtres et clavier, 700×400, hors Grist | `tests/e2e/smoke.mjs` (`npm run test:e2e`) |
+
+Les E2E ne remplacent pas les scénarios IT du Grist réel (`docs/GRIST_TEST_DOC.md`).
+
+### Groupes ajoutés par les règles UI/UX et Grist.Gouv (à compléter au fil des fonctionnalités)
+
+- **MODAL** : largeurs, trois zones, fenêtre empilée au-dessus, voile qui ne ferme rien, retour du focus.
+- **A11Y** : navigation clavier complète, noms accessibles, `aria-expanded` sur les listes, contrastes mesurés sur les éléments réels.
+- **CONSENT** : création des tables `_Automation_*` demandée d'abord, redemandée à chaque action en cas de refus.
+- **BOOT** : fenêtres de démarrage (réseau bloqué, chargement long, erreur) en plus du cas « hors de Grist ».
+
 ## 4. Intégration (Grist réel)
 
 Scénarios IT-01 à IT-nn dans `docs/GRIST_TEST_DOC.md` : création / modification / suppression réelles, filtre de vue actif, deux onglets ouverts, droits restreints, table cible absente.

@@ -128,3 +128,19 @@ Widget custom pour Grist (instance DINUM), distribué via GitHub Pages, permetta
 2. Seuil exact de la limite anti-récursivité (1 ou 2 tours) — à trancher pendant le développement du POC en observant des cas concrets.
 3. Comportement exact de la popup anti-fermeture selon navigateurs (Chrome/Firefox/Edge) — à tester empiriquement, le comportement `beforeunload` variant selon les navigateurs modernes.
 4. Modalités précises de vérification de l'accès à l'email utilisateur via l'API Grist (à confirmer techniquement en tout début de dev, avant de figer le schéma des logs).
+
+---
+
+## 7. Règles transverses (ajout du 2026-10-12)
+
+Le widget suit la charte UI/UX **Grist Factory** et le **guide de contribution Grist.Gouv** : synthèse et correspondance avec le code dans `docs/REGLES_UI_UX_ET_DEV.md`.
+
+- **Interface** : jetons de couleur à un seul accent, thèmes clair/sombre, police système, icônes SVG en contour, bilingue fr/en dans le même lot, fenêtres sur une base commune, listes avec recherche pour choisir colonnes et tables (jamais de `<select>` natif visible), tout tient dans un panneau de 700×400.
+- **Marque** : éditeur « Grist Factory », licence GPL v3, panneau Crédits.
+- **Qualité (guide Grist.Gouv)** : périmètre étroit, code lisible et concis, README, tests unitaires et d'intégration, aucune dépendance inutile, aucune requête externe non documentée, aucune donnée utilisateur hors de Grist. Le code généré avec l'aide d'une IA doit être relu et compris par Antoine avant soumission.
+- **Ce que ces règles changent au CDC** :
+  - §4.1 : la bibliothèque nodale (Drawflow) est remplacée par un canevas maison, plus simple à auditer et sans dépendance (à confirmer à la phase de la vue nodale).
+  - §3.5 : les écritures de tables `_Automation_*` demandent d'abord l'accord de la personne et le redemandent à chaque action en cas de refus.
+  - §6 point 1 (fraîcheur de Drawflow) : sans objet si le canevas maison est retenu.
+  - Le chargement de `grist-plugin-api.js` depuis docs.getgrist.com est validé par la DINUM.
+
