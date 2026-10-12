@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Aucune requête vers un autre site que celui du widget, hors le script de l'API Grist (validé par la DINUM). -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://docs.getgrist.com/grist-plugin-api.js; style-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+  <!-- Aucune requête vers un autre site que celui du widget, hors le script de l'API Grist (validé par la DINUM).
+       'unsafe-eval' reste, faute de mieux : le fichier que Grist sert (docs.getgrist.com/grist-plugin-api.js) est un bundle dont chaque module
+       s'évalue par eval(), et sans lui l'objet grist n'existe pas (le widget ne demande alors pas l'accès au document). Le code du widget n'utilise pas eval (HYG-01). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-eval' https://docs.getgrist.com/grist-plugin-api.js; style-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
   <title>Grist Automation Builder</title>
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/style.css">

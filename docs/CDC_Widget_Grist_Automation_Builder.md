@@ -143,4 +143,4 @@ Le widget suit la charte UI/UX **Grist Factory** et le **guide de contribution G
   - §3.5 : les écritures de tables `_Automation_*` demandent d'abord l'accord de la personne et le redemandent à chaque action en cas de refus.
   - §6 point 1 (fraîcheur de Drawflow) : sans objet si le canevas maison est retenu.
   - Le chargement de `grist-plugin-api.js` depuis docs.getgrist.com est validé par la DINUM.
-
+  - Politique de sécurité (CSP) de `index.html` : `default-src 'none'`, scripts du widget et de l'API Grist uniquement. `'unsafe-eval'` y figure **à cause du bundle `grist-plugin-api.js` lui-même**, qui évalue ses modules par `eval()` (constaté le 2026-10-12 : sans lui, `grist` n'existe pas et le widget ne demande pas l'accès au document). Le code du widget n'utilise ni `eval` ni `Function` (test HYG-01). Point à signaler à l'audit DINUM.

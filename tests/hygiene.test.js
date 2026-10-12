@@ -41,7 +41,9 @@ test('HYG-05 pas d\'emoji ni de police d\'icônes dans l\'interface', () => {
 test('HYG-06 la politique de sécurité n\'autorise que le widget et l\'API Grist', () => {
   const csp = read('index.html').match(/Content-Security-Policy" content="([^"]+)"/)[1];
   assert.match(csp, /default-src 'none'/);
-  assert.doesNotMatch(csp, /unsafe-|connect-src/);
+  // 'unsafe-eval' est imposé par le bundle de l'API Grist (voir index.html) ; rien d'autre n'est assoupli.
+  assert.match(csp, /'unsafe-eval'/, 'sans lui, l\'API Grist ne démarre pas');
+  assert.doesNotMatch(csp.replace(/'unsafe-eval'/, ''), /unsafe-|connect-src/);
   assert.deepStrictEqual([...csp.matchAll(/https:\/\/[^\s;]+/g)].map((m) => m[0]), ['https://docs.getgrist.com/grist-plugin-api.js']);
 });
 

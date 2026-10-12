@@ -18,7 +18,8 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((resolve) => server.listen(0, resolve));
 const url = `http://localhost:${server.address().port}/`;
-const stubSource = fs.readFileSync(path.join(root, 'tests/e2e/grist-stub.js'), 'utf8');
+// Le vrai grist-plugin-api.js évalue chacun de ses modules par eval() : le simulateur fait de même, pour que la politique de sécurité de la page soit éprouvée comme en vrai.
+const stubSource = `eval(${JSON.stringify(fs.readFileSync(path.join(root, 'tests/e2e/grist-stub.js'), 'utf8'))});`;
 const API = 'https://docs.getgrist.com/grist-plugin-api.js';
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
