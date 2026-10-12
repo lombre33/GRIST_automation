@@ -58,6 +58,10 @@
     return { events, next };
   }
 
+  function parseValue(text) {
+    return text !== '' && text !== null && text !== undefined && !isNaN(Number(text)) ? Number(text) : text;
+  }
+
   function matchesTrigger(trigger, event) {
     if (!trigger || trigger.action !== event.type) return false;
     if (event.type === 'update' && trigger.column) {
@@ -67,24 +71,21 @@
   }
 
   function evalCondition(cond, event) {
-    if (!cond) return true;
+    if (!cond || !cond.column) throw new Error('Condition incomplète : aucune colonne');
     const op = OPERATORS[cond.operator];
     if (!op) throw new Error('Opérateur inconnu : ' + cond.operator);
     if (!event.record) throw new Error('Condition impossible sans contenu de ligne');
-    return op(event.record[cond.column], cond.value);
+    return op(event.record[cond.column], parseValue(cond.value));
   }
 
-  // Construit la liste des écritures sans les exécuter (utilisée par le dry-run).
-  function planActions(workflow, event) {
-    return workflow.actions.map((act) => {
-      if (act.type === 'UpdateRecord') {
-        return { type: 'UpdateRecord', table: act.table, rowId: event.rowId, values: Object.assign({}, act.values) };
-      }
-      if (act.type === 'AddRecord') {
-        return { type: 'AddRecord', table: act.table, values: Object.assign({}, act.values) };
-      }
-      throw new Error('Action inconnue : ' + act.type);
-    });
+  // Écriture prévue par un nœud action, sans l'exécuter (utilisée par le dry-run).
+  function planAction(config, event, currentTable) {
+    if (!config.column) throw new Error('Action incomplète : aucune colonne');
+    const values = { [config.column]: parseValue(config.value) };
+    const table = config.table || currentTable;
+    if (config.type === 'UpdateRecord') return { type: 'UpdateRecord', table, rowId: event.rowId, values };
+    if (config.type === 'AddRecord') return { type: 'AddRecord', table, values };
+    throw new Error('Action inconnue : ' + config.type);
   }
 
   function toUserAction(plan) {
@@ -93,23 +94,44 @@
       : ['AddRecord', plan.table, null, plan.values];
   }
 
-  // Exécute un workflow pour un événement. api.applyUserActions(actions) -> Promise.
-  // dryRun : retourne les effets attendus sans écrire.
-  async function runWorkflow(workflow, event, api, opts) {
-    const dryRun = Boolean(opts && opts.dryRun);
-    const result = { workflow: workflow.name, event: event.type, rowId: event.rowId, dryRun, status: 'skipped', effects: [] };
+  // Parcourt le graphe depuis un déclencheur : une condition fausse arrête sa branche.
+  // trace : état de chaque nœud atteint ('passed', 'blocked', 'action'), pour l'affichage du dry-run.
+  function walk(graph, node, event, currentTable, trace, plan) {
+    for (const edge of graph.edges) {
+      if (edge.from !== node.id) continue;
+      const next = graph.nodes.find((candidate) => candidate.id === edge.to);
+      if (next.type === 'condition') {
+        const passed = evalCondition(next.config, event);
+        trace[next.id] = passed ? 'passed' : 'blocked';
+        if (passed) walk(graph, next, event, currentTable, trace, plan);
+      } else if (next.type === 'action') {
+        plan.push(planAction(next.config, event, currentTable));
+        trace[next.id] = 'action';
+      } else {
+        throw new Error('Nœud inattendu : ' + next.type);
+      }
+    }
+  }
+
+  // Exécute le graphe pour un événement. api.applyUserActions(actions) -> Promise.
+  // opts.dryRun : retourne les effets attendus sans écrire. opts.currentTable : table de la vue.
+  async function runWorkflow(graph, event, api, opts) {
+    const options = opts || {};
+    const dryRun = Boolean(options.dryRun);
+    const result = { event: event.type, rowId: event.rowId, dryRun, status: 'skipped', effects: [], trace: {} };
     try {
-      if (!workflow.active && !dryRun) return result;
-      if (!matchesTrigger(workflow.trigger, event)) return result;
-      if (!evalCondition(workflow.condition, event)) {
+      if (!graph.active && !dryRun) return result;
+      const triggers = graph.nodes.filter((node) => node.type === 'trigger' && matchesTrigger(node.config, event));
+      if (!triggers.length) return result;
+      for (const trigger of triggers) {
+        result.trace[trigger.id] = 'passed';
+        walk(graph, trigger, event, options.currentTable, result.trace, result.effects);
+      }
+      if (!result.effects.length) {
         result.status = 'condition-false';
         return result;
       }
-      const plan = planActions(workflow, event);
-      result.effects = plan;
-      if (!dryRun) {
-        await api.applyUserActions(plan.map(toUserAction));
-      }
+      if (!dryRun) await api.applyUserActions(result.effects.map(toUserAction));
       result.status = 'success';
     } catch (err) {
       result.status = 'error';
@@ -118,7 +140,7 @@
     return result;
   }
 
-  const api = { diff, matchesTrigger, evalCondition, planActions, runWorkflow, OPERATORS };
+  const api = { diff, matchesTrigger, evalCondition, planAction, runWorkflow, parseValue, OPERATORS };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

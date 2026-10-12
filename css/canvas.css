@@ -1,0 +1,46 @@
+/* Canevas nodal : fond uni, nœuds sur une couche déplaçable et zoomable. */
+.canvas { position: absolute; inset: 0; overflow: hidden; background: var(--bg); touch-action: none; cursor: default; outline-offset: -2px; }
+.canvas.is-panning { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+.wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.wire { fill: none; stroke: var(--border-strong); stroke-width: 2; }
+.wire-hit { fill: none; stroke: transparent; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.wire-group:hover .wire { stroke: var(--accent); }
+.wire-group.is-selected .wire { stroke: var(--accent); stroke-width: 3; }
+.wire-temp { stroke: var(--accent); stroke-dasharray: 6 4; }
+
+.canvas-hint { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); margin: 0; max-width: 80%; text-align: center; color: var(--text-muted); pointer-events: none; }
+.canvas-connect-hint { top: auto; bottom: 12px; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 10px; }
+
+.node { position: absolute; width: 232px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-frame); box-shadow: var(--shadow-card); }
+.node.is-top { z-index: 5; }
+.node.is-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+.node-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: var(--radius-frame) var(--radius-frame) 0 0; font-weight: 700; cursor: grab; user-select: none; }
+.node-head:active { cursor: grabbing; }
+.node-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-trigger .node-head { background: var(--accent-soft); color: var(--accent-ink); }
+.node-condition .node-head { background: var(--surface-sunken); color: var(--text); }
+.node-action .node-head { background: var(--accent-solid); color: #fff; }
+.node-action .node-head button { color: #fff; border-color: transparent; background: transparent; }
+.node-delete { width: 24px; min-height: 24px; border-color: transparent; background: transparent; }
+.node-body { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 5px; }
+.node-row { display: grid; grid-template-columns: 4.9em 1fr; align-items: center; gap: 6px; }
+.node-row > label { color: var(--text-muted); font-size: 12px; }
+.node-state { padding: 3px 10px; border-top: 1px solid var(--border); font-size: 12px; font-weight: 600; border-radius: 0 0 var(--radius-frame) var(--radius-frame); }
+.trace-passed { border-color: var(--accent); }
+.trace-passed .node-state { background: var(--accent-soft); color: var(--accent-ink); }
+.trace-blocked { border-style: dashed; }
+.trace-blocked .node-state { background: var(--surface-sunken); color: var(--text-muted); }
+.trace-action { border-color: var(--good); }
+.trace-action .node-state { background: var(--good-soft); color: var(--good); }
+
+/* Broches : entrée à gauche, sortie à droite, alignées sur l'en-tête. */
+.pin { position: absolute; top: 8px; width: 14px; height: 14px; min-height: 0; padding: 0; border-radius: 50%; border: 2px solid var(--border-strong); background: var(--surface); cursor: crosshair; }
+.pin::after { content: ""; position: absolute; inset: -6px; }
+.pin-in { left: -8px; }
+.pin-out { right: -8px; }
+.pin:hover:not(:disabled), .node.is-connecting .pin-out, .pin.is-target { border-color: var(--accent); background: var(--accent-soft); }
+.pin.is-target { box-shadow: 0 0 0 3px var(--accent-soft-border); }
+.pin-none { display: none; }
+
+.add-menu { position: absolute; width: 190px; z-index: 50; }

@@ -25,7 +25,9 @@
 
   const instances = [];
 
-  function attach(select) {
+  // options.menu : pas de bouton, le panneau s'ouvre par open() à l'endroit de l'hôte (menu d'ajout du canevas) ; onClose est appelé à la fermeture.
+  function attach(select, options) {
+    const settings = options || {};
     const host = document.createElement('div');
     host.className = 'ss-host';
     select.before(host);
@@ -42,6 +44,7 @@
     chevron.className = 'icon icon-chevron';
     chevron.setAttribute('aria-hidden', 'true');
     button.append(label, chevron);
+    button.hidden = Boolean(settings.menu);
 
     const panel = document.createElement('div');
     panel.className = 'ss-panel';
@@ -115,9 +118,11 @@
     }
 
     function close(returnFocus) {
+      if (panel.hidden) return;
       panel.hidden = true;
       button.setAttribute('aria-expanded', 'false');
-      if (returnFocus) button.focus();
+      if (returnFocus && !settings.menu) button.focus();
+      if (settings.onClose) settings.onClose();
     }
 
     function choose(option) {
@@ -141,7 +146,7 @@
     });
     document.addEventListener('mousedown', (event) => { if (!host.contains(event.target)) close(false); });
 
-    const instance = { refresh };
+    const instance = { refresh, open };
     instances.push(instance);
     refresh();
     return instance;

@@ -6,15 +6,20 @@ Périmètre : `docs/CDC_Widget_Grist_Automation_Builder.md`. Règles d'interface
 
 ## État : POC V0.5
 
-Formulaire simple (la vue nodale viendra ensuite) : déclencheur (création, modification, suppression), condition optionnelle, action (mettre à jour la ligne ou ajouter une ligne dans la table courante ou une autre), activation, dry-run, logs à l'écran. Interface fr/en, thèmes clair et sombre, pensée pour un panneau de 700×400 px.
+Vue nodale sur fond uni : on ajoute des nœuds (clic droit sur le fond, ou « Ajouter »), on les relie en glissant d'une sortie vers une entrée (ou clic sur la sortie puis sur l'entrée), on déplace le fond et on zoome à la molette.
 
-Le workflow est stocké dans les options du widget ; les tables `_Automation_*` du CDC viennent ensuite.
+- **Déclencheur** : ligne créée, modifiée ou supprimée (colonne surveillée optionnelle).
+- **Condition** : colonne, opérateur, valeur ; plusieurs conditions en série valent un ET.
+- **Action** : mettre à jour la ligne ou ajouter une ligne, dans la table courante ou une autre.
+- « Tester » simule sur la première ligne de la vue sans rien écrire et affiche l'état de chaque nœud ; « Activer » refuse tant que le graphe est incomplet.
+
+Le graphe est enregistré automatiquement dans les options du widget ; les tables `_Automation_*` du CDC viennent ensuite. Interface fr/en, thèmes clair et sombre, pensée pour un panneau de 700×400 px.
 
 ## Configuration
 
 1. Publier le dépôt (GitHub Pages).
 2. Dans Grist : ajouter une vue « Personnalisé », coller l'adresse de la page, accès « Accès complet au document ».
-3. Choisir les colonnes dans les listes, enregistrer, activer. Garder la vue ouverte.
+3. Construire le graphe, activer. Garder la vue ouverte.
 
 ## Dépendances
 
@@ -24,11 +29,14 @@ Aucune : HTML, CSS et JavaScript sans framework ni build. Seul script externe : 
 
 | Fichier | Rôle |
 |---|---|
-| `js/engine.js` | moteur : détection des événements, conditions, actions, dry-run (sans DOM ni Grist) |
-| `js/main.js` | formulaire et branchement sur l'API Grist |
+| `js/nodes.js` | types de nœuds (champs, broches) |
+| `js/graph.js` | modèle du graphe : liens, validation, lecture (sans DOM) |
+| `js/engine.js` | moteur : détection des événements, parcours du graphe, dry-run (sans DOM ni Grist) |
+| `js/canvas.js` | canevas nodal : déplacement, zoom, nœuds, liens |
+| `js/main.js` | branchement sur l'API Grist, sauvegarde, exécution |
 | `js/i18n.js`, `js/theme.js` | textes fr/en, thèmes |
 | `js/modal.js`, `js/search-select.js` | fenêtres et listes avec recherche |
-| `css/` | jetons de la charte, styles, fenêtres |
+| `css/` | jetons de la charte, styles, canevas, fenêtres |
 
 ## Tests
 
@@ -41,6 +49,7 @@ npm run test:e2e    # scénario de base dans Chromium avec une API Grist simulé
 
 ## Limites connues du POC
 
+- Un nœud Condition a une seule sortie (« vrai ») : pas encore de branche « sinon », ni de nœud Transformation.
 - Anti-boucle approximatif, pas de gestion de plusieurs onglets ouverts (MUL-* du plan de tests).
 - Pas d'email d'auteur dans les logs, pas de persistance des logs.
 - `onRecords` ne voit que les lignes de la vue : un filtre actif peut simuler des créations ou suppressions (DIFF-07).

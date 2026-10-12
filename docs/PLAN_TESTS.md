@@ -125,12 +125,13 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 
 | Groupe | Contenu | Où |
 |---|---|---|
-| DIFF, TRG, COND, ACT, DRY, SEC-02 | moteur (voir plus haut), tests listés comme « partiels » | `tests/engine.test.js` |
-| I18N-01 à 05 | clés fr/en identiques, clés utilisées existantes, pluriels, langue initiale, vocabulaire | `tests/i18n.test.js` |
+| DIFF, TRG, COND, ACT, DRY, SEC-02 | moteur (voir plus haut), tests listés comme « partiels » ; le moteur parcourt un graphe (conditions en série = ET) | `tests/engine.test.js` |
+| GRAPH-01 à 10 | ajout, liens (sortie vers entrée, pas de cycle, une entrée = un lien), suppression, validation, aller-retour JSON | `tests/graph.test.js` |
+| I18N-01 à 06 | clés fr/en identiques, clés utilisées existantes, aucune clé inutilisée, pluriels, langue initiale, vocabulaire | `tests/i18n.test.js` |
 | SRCH-01 à 04 | recherche par mots (ordre libre, accents, ponctuation) | `tests/search-select.test.js` |
 | CTR-01 à 03 | contrastes des jetons, clair et sombre | `tests/contrast.test.js` |
 | HYG-01 à 09 | aucun réseau, police, image ou style externe ; pas d'`innerHTML` ; pas d'emoji ; politique de sécurité ; pas de couleur en dur ; pas de compte personnel ; stockage limité | `tests/hygiene.test.js` |
-| E2E-01 à 07 | scénario de base dans Chromium avec une API Grist simulée : configuration, écriture, dry-run, thème et langue, fenêtres et clavier, 700×400, hors Grist | `tests/e2e/smoke.mjs` (`npm run test:e2e`) |
+| E2E-01 à 11 | dans Chromium avec une API Grist simulée : construction du graphe (menu d'ajout, liens au clic et au glisser), écriture, dry-run avec état des nœuds, thème et langue, fenêtres et clavier, 700×400, hors Grist, activation refusée, suppression, déplacement et zoom, sauvegarde et rechargement | `tests/e2e/smoke.mjs` (`npm run test:e2e`) |
 
 Les E2E ne remplacent pas les scénarios IT du Grist réel (`docs/GRIST_TEST_DOC.md`).
 

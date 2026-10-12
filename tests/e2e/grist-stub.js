@@ -1,5 +1,5 @@
 // Simulateur de l'API de widgets Grist pour les tests de bout en bout : sert à la place de grist-plugin-api.js.
-window.__stub = { applied: [], options: {}, records: [], pushRecords: null };
+window.__stub = { applied: [], options: window.__preloadOptions || {}, pushRecords: null };
 window.grist = {
   ready() {},
   onOptions(cb) { cb(window.__stub.options); },

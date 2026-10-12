@@ -30,6 +30,7 @@ test('HYG-03 la police de l\'interface commence par system-ui', () => {
 test('HYG-04 pas de prompt() ni confirm() natifs, pas d\'innerHTML ni d\'attribut style', () => {
   assert.deepStrictEqual(offenders(jsFiles, /\b(prompt|confirm)\s*\(|innerHTML|outerHTML|insertAdjacentHTML|document\.write/), []);
   assert.doesNotMatch(read('index.html'), /\sstyle="/);
+  assert.deepStrictEqual(offenders(jsFiles, /setAttribute\(\s*['"]style['"]|cssText/), []);
 });
 
 test('HYG-05 pas d\'emoji ni de police d\'icônes dans l\'interface', () => {

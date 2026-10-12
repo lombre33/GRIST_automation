@@ -19,8 +19,9 @@ Dernière colonne : où la règle est appliquée ou vérifiée dans ce dépôt.
 | Bilingue fr/en, même lot ; vocabulaire (« modèle », pas de pluriel entre parenthèses, vide = « — Choisir … — ») | `js/i18n.js`, I18N-01 à I18N-05 |
 | Fenêtres : base commune (3 zones, 3 largeurs, focus piégé, Échap, voile qui ne ferme rien) | `js/modal.js`, E2E-04 |
 | Pas de `prompt()` / `confirm()` natifs : fenêtres du widget | HYG-04 |
-| Choix d'une colonne ou d'une table : liste avec recherche, jamais de `<select>` natif visible | `js/search-select.js`, SRCH-01 à SRCH-04, E2E-05 |
-| Fonction indisponible : grisée, jamais masquée | `syncDisabledState` (`js/main.js`) |
+| Choix d'une colonne ou d'une table : liste avec recherche, jamais de `<select>` natif visible (aussi dans les nœuds et le menu d'ajout) | `js/search-select.js`, SRCH-01 à SRCH-04, E2E-05 |
+| Vue nodale : fond uni, nœuds reliés par des liens, ajout par clic droit (demande d'Antoine, inspiration Blender / Unreal) | `js/canvas.js`, E2E-01, E2E-09, E2E-10 |
+| Fonction indisponible : grisée, jamais masquée | `syncDisabled` (`js/canvas.js`) |
 | Panneau de référence 700×400 | E2E-06 |
 | Widget qui ne démarre pas : une fenêtre qui dit quoi faire | `showOutsideGrist`, E2E-07 (les trois autres cas : à faire) |
 | Tables du widget : demander d'abord, redemander à chaque action si refus | à faire avec les tables `_Automation_*` |

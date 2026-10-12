@@ -12,17 +12,31 @@ test('I18N-01 les deux langues ont exactement les mêmes clés', () => {
   assert.deepStrictEqual(Object.keys(I.DICT.fr).sort(), Object.keys(I.DICT.en).sort());
 });
 
-test('I18N-02 chaque clé utilisée dans index.html et js/ existe', () => {
+// Clés citées dans index.html et dans le code (hors js/i18n.js) : littéraux 'ns.clé' et préfixes dynamiques 'ns.' + ….
+function usedKeys() {
+  const namespaces = [...new Set(Object.keys(I.DICT.fr).map((key) => key.split('.')[0]))].join('|');
   const used = new Set();
   for (const match of read('index.html').matchAll(/data-i18n(?:-placeholder|-label)?="([^"]+)"/g)) used.add(match[1]);
-  const namespaces = [...new Set(Object.keys(I.DICT.fr).map((key) => key.split('.')[0]))].join('|');
-  for (const match of read('js/main.js').matchAll(new RegExp(`'((?:${namespaces})\\.\\w+)'`, 'g'))) used.add(match[1]);
-  for (const match of read('js/main.js').matchAll(/t\('(result|event|theme)\.' \+/g)) {
-    for (const key of Object.keys(I.DICT.fr).filter((k) => k.startsWith(match[1] + '.'))) used.add(key);
+  const sources = fs.readdirSync(path.join(root, 'js')).filter((f) => f.endsWith('.js') && f !== 'i18n.js');
+  for (const file of sources) {
+    const code = read('js/' + file);
+    for (const match of code.matchAll(new RegExp(`'((?:${namespaces})\\.\\w+)'`, 'g'))) used.add(match[1]);
+    for (const match of code.matchAll(new RegExp(`'(${namespaces})\\.'\\s*\\+`, 'g'))) {
+      for (const key of Object.keys(I.DICT.fr).filter((k) => k.startsWith(match[1] + '.'))) used.add(key);
+    }
   }
-  assert.ok(used.has('log.saved') && used.has('wf.save'), 'la recherche des clés doit trouver les clés connues');
-  const missing = [...used].filter((key) => !(key in I.DICT.fr));
-  assert.deepStrictEqual(missing, []);
+  return used;
+}
+
+test('I18N-02 chaque clé utilisée dans index.html et js/ existe', () => {
+  const used = usedKeys();
+  assert.ok(used.has('add.node') && used.has('trace.passed') && used.has('trigger.update'), 'la recherche des clés doit trouver les clés connues');
+  assert.deepStrictEqual([...used].filter((key) => !(key in I.DICT.fr)), []);
+});
+
+test('I18N-06 aucune clé inutilisée (pas de texte mort)', () => {
+  const used = usedKeys();
+  assert.deepStrictEqual(Object.keys(I.DICT.fr).filter((key) => !used.has(key)), []);
 });
 
 test('I18N-03 pluriels : 0 et 1 au singulier en français, seul 1 en anglais', () => {

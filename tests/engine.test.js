@@ -44,12 +44,25 @@ test('DIFF-09 égalité sur types variés', () => {
   assert.strictEqual(events.length, 0);
 });
 
-const wf = (over) => Object.assign({
-  name: 'wf', active: true,
-  trigger: { action: 'update', column: 'Statut' },
-  condition: { column: 'Statut', operator: 'eq', value: 'Clos' },
-  actions: [{ type: 'AddRecord', table: 'Archive', values: { Motif: 'clos' } }],
-}, over);
+// Graphe de test : déclencheur -> condition -> action (chaque morceau peut être remplacé).
+function chain(over) {
+  const o = Object.assign({ active: true, trigger: { action: 'update', column: 'Statut' }, condition: { column: 'Statut', operator: 'eq', value: 'Clos' },
+    actions: [{ type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'clos' }] }, over);
+  const nodes = [{ id: 't', type: 'trigger', config: o.trigger }];
+  const edges = [];
+  let last = 't';
+  if (o.condition) {
+    nodes.push({ id: 'c', type: 'condition', config: o.condition });
+    edges.push({ from: last, to: 'c' });
+    last = 'c';
+  }
+  o.actions.forEach((config, i) => {
+    nodes.push({ id: 'a' + i, type: 'action', config });
+    edges.push({ from: last, to: 'a' + i });
+  });
+  return { version: 2, active: o.active, nodes, edges };
+}
+const opts = { currentTable: 'Contacts' };
 
 const updateEvent = (statut) => ({
   type: 'update', rowId: 7, record: { id: 7, Statut: statut },
@@ -63,7 +76,7 @@ test('TRG-01 le type d\'événement filtre', () => {
 
 test('TRG-06 workflow inactif : jamais exécuté', async () => {
   const api = createFakeApi();
-  const r = await E.runWorkflow(wf({ active: false }), updateEvent('Clos'), api);
+  const r = await E.runWorkflow(chain({ active: false }), updateEvent('Clos'), api, opts);
   assert.strictEqual(r.status, 'skipped');
   assert.strictEqual(api.applied.length, 0);
 });
@@ -71,7 +84,7 @@ test('TRG-06 workflow inactif : jamais exécuté', async () => {
 test('TRG-07 update sur une autre colonne que celle du trigger : ignoré', async () => {
   const api = createFakeApi();
   const ev = { type: 'update', rowId: 7, record: { id: 7, Statut: 'Clos' }, changed: { Nom: { from: 'a', to: 'b' } } };
-  const r = await E.runWorkflow(wf(), ev, api);
+  const r = await E.runWorkflow(chain(), ev, api, opts);
   assert.strictEqual(r.status, 'skipped');
 });
 
@@ -80,6 +93,7 @@ test('COND-01 opérateurs', () => {
   const c = (column, operator, value) => E.evalCondition({ column, operator, value }, ev);
   assert.ok(c('N', 'gt', 3));
   assert.ok(!c('N', 'lt', 3));
+  assert.ok(c('N', 'gt', '3'), 'la valeur saisie en texte est lue comme un nombre');
   assert.ok(c('T', 'contains', 'b'));
   assert.ok(c('V', 'empty'));
   assert.ok(c('T', 'notEmpty'));
@@ -93,52 +107,78 @@ test('COND-05 types incompatibles : faux, pas de coercition', () => {
 
 test('COND-04 opérateur inconnu : erreur explicite', async () => {
   const api = createFakeApi();
-  const r = await E.runWorkflow(wf({ condition: { column: 'Statut', operator: 'nope', value: 1 } }), updateEvent('Clos'), api);
+  const r = await E.runWorkflow(chain({ condition: { column: 'Statut', operator: 'nope', value: 1 } }), updateEvent('Clos'), api, opts);
   assert.strictEqual(r.status, 'error');
   assert.match(r.error, /Opérateur inconnu/);
   assert.strictEqual(api.applied.length, 0);
 });
 
+test('COND-07 condition sans colonne : erreur explicite', async () => {
+  const r = await E.runWorkflow(chain({ condition: { column: '', operator: 'eq', value: '' } }), updateEvent('Clos'), createFakeApi(), opts);
+  assert.strictEqual(r.status, 'error');
+  assert.match(r.error, /incomplète/);
+});
+
 test('ACT-01 condition vraie : AddRecord appliqué', async () => {
   const api = createFakeApi();
-  const r = await E.runWorkflow(wf(), updateEvent('Clos'), api);
+  const r = await E.runWorkflow(chain(), updateEvent('Clos'), api, opts);
   assert.strictEqual(r.status, 'success');
   assert.deepStrictEqual(api.applied, [['AddRecord', 'Archive', null, { Motif: 'clos' }]]);
 });
 
-test('ACT-02 UpdateRecord cible la ligne de l\'événement', async () => {
+test('ACT-02 UpdateRecord cible la ligne de l\'événement, table courante par défaut', async () => {
   const api = createFakeApi();
-  const w = wf({ actions: [{ type: 'UpdateRecord', table: 'Contacts', values: { Statut: 'Vu' } }] });
-  await E.runWorkflow(w, updateEvent('Clos'), api);
+  const w = chain({ actions: [{ type: 'UpdateRecord', table: '', column: 'Statut', value: 'Vu' }] });
+  await E.runWorkflow(w, updateEvent('Clos'), api, opts);
   assert.deepStrictEqual(api.applied, [['UpdateRecord', 'Contacts', 7, { Statut: 'Vu' }]]);
+});
+
+test('ACT-05 plusieurs actions : toutes appliquées dans l\'ordre, en un seul lot', async () => {
+  const api = createFakeApi();
+  const w = chain({ actions: [{ type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'a' }, { type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'b' }] });
+  await E.runWorkflow(w, updateEvent('Clos'), api, opts);
+  assert.deepStrictEqual(api.applied.map((a) => a[3].Motif), ['a', 'b']);
 });
 
 test('COND-02 condition fausse : aucune écriture', async () => {
   const api = createFakeApi();
-  const r = await E.runWorkflow(wf(), updateEvent('En cours'), api);
+  const r = await E.runWorkflow(chain(), updateEvent('En cours'), api, opts);
   assert.strictEqual(r.status, 'condition-false');
   assert.strictEqual(api.applied.length, 0);
 });
 
+test('COND-08 conditions en série : toutes doivent être vraies (ET)', async () => {
+  const g = chain();
+  g.nodes.push({ id: 'c2', type: 'condition', config: { column: 'Montant', operator: 'gt', value: '100' } });
+  g.edges = [{ from: 't', to: 'c' }, { from: 'c', to: 'c2' }, { from: 'c2', to: 'a0' }];
+  const api = createFakeApi();
+  const small = await E.runWorkflow(g, { ...updateEvent('Clos'), record: { id: 7, Statut: 'Clos', Montant: 50 } }, api, opts);
+  assert.strictEqual(small.status, 'condition-false');
+  assert.strictEqual(small.trace.c2, 'blocked');
+  const big = await E.runWorkflow(g, { ...updateEvent('Clos'), record: { id: 7, Statut: 'Clos', Montant: 500 } }, api, opts);
+  assert.strictEqual(big.status, 'success');
+});
+
 test('ACT-06 refus de l\'API : erreur journalisée', async () => {
   const api = createFakeApi({ failWith: 'Droits insuffisants' });
-  const r = await E.runWorkflow(wf(), updateEvent('Clos'), api);
+  const r = await E.runWorkflow(chain(), updateEvent('Clos'), api, opts);
   assert.strictEqual(r.status, 'error');
   assert.strictEqual(r.error, 'Droits insuffisants');
 });
 
-test('ACT-08 action inconnue : erreur', async () => {
+test('ACT-08 action inconnue ou incomplète : erreur', async () => {
   const api = createFakeApi();
-  const r = await E.runWorkflow(wf({ actions: [{ type: 'Boom' }] }), updateEvent('Clos'), api);
-  assert.strictEqual(r.status, 'error');
+  assert.strictEqual((await E.runWorkflow(chain({ actions: [{ type: 'Boom', column: 'x' }] }), updateEvent('Clos'), api, opts)).status, 'error');
+  assert.strictEqual((await E.runWorkflow(chain({ actions: [{ type: 'AddRecord', column: '' }] }), updateEvent('Clos'), api, opts)).status, 'error');
 });
 
-test('DRY-01/02 dry-run : effets listés, aucune écriture, même si inactif', async () => {
+test('DRY-01/02 dry-run : effets listés, trace par nœud, aucune écriture, même si inactif', async () => {
   const api = createFakeApi();
-  const r = await E.runWorkflow(wf({ active: false }), updateEvent('Clos'), api, { dryRun: true });
+  const r = await E.runWorkflow(chain({ active: false }), updateEvent('Clos'), api, { ...opts, dryRun: true });
   assert.strictEqual(r.status, 'success');
   assert.strictEqual(r.dryRun, true);
   assert.strictEqual(r.effects.length, 1);
+  assert.deepStrictEqual(r.trace, { t: 'passed', c: 'passed', a0: 'action' });
   assert.strictEqual(api.applied.length, 0);
 });
 

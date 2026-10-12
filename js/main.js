@@ -1,19 +1,20 @@
-// Couche Grist et interface du POC V0.5. La logique métier est dans js/engine.js.
-// Le workflow est stocké dans les options du widget (grist.setOption) ; les tables _Automation_* du CDC arriveront après le POC.
+// Couche Grist du widget : branche le canevas (js/canvas.js), le graphe (js/graph.js) et le moteur (js/engine.js) sur l'API Grist.
+// Le graphe est stocké dans les options du widget (grist.setOption) ; les tables _Automation_* du CDC arriveront après le POC.
 'use strict';
 
 const $ = (id) => document.getElementById(id);
 const t = I18n.t;
 const Engine = window.AutomationEngine;
 
-let workflow = null;
+let graph = Graph.create();
+let canvas = null;
+let loaded = false;
 let tableId = null;
 let cache = null;
 let lastRecords = [];
 let suppressNext = false;
 let tables = [];
 const columnsByTable = new Map();
-const pickers = {};
 
 const gristApi = { applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
 
@@ -23,31 +24,7 @@ function addLog(message) {
   $('log-list').prepend(li);
 }
 
-function parseValue(text) {
-  return text !== '' && !isNaN(Number(text)) ? Number(text) : text;
-}
-
-/* ---------- Listes déroulantes ---------- */
-
-function setOptions(select, entries, emptyKey) {
-  const previous = select.value;
-  select.replaceChildren();
-  if (emptyKey) {
-    const empty = document.createElement('option');
-    empty.value = '';
-    empty.dataset.i18n = emptyKey;
-    empty.textContent = t(emptyKey);
-    select.append(empty);
-  }
-  for (const name of entries) {
-    const option = document.createElement('option');
-    option.value = name;
-    option.textContent = name;
-    select.append(option);
-  }
-  select.value = entries.includes(previous) ? previous : '';
-  if (pickers[select.id]) pickers[select.id].refresh();
-}
+/* ---------- Schéma du document (colonnes et tables proposées dans les nœuds) ---------- */
 
 function isUserColumn(name) {
   return name !== 'id' && name !== 'manualSort' && !name.startsWith('gristHelper_');
@@ -65,84 +42,39 @@ async function loadColumns(table) {
   return columnsByTable.get(table);
 }
 
-async function refreshTargetColumns() {
-  const target = $('act-table').value || tableId;
-  setOptions($('act-column'), target ? await loadColumns(target) : [], 'list.choose');
-}
+const schema = { currentTable: () => tableId, tables: () => tables, columns: loadColumns };
 
 async function loadSchema() {
   tables = (await grist.docApi.listTables()).filter((name) => !name.startsWith('_Automation_'));
-  setOptions($('act-table'), tables, 'list.currentTable');
-  const currentColumns = await loadColumns(tableId);
-  setOptions($('trg-column'), currentColumns, 'list.none');
-  setOptions($('cond-column'), currentColumns, 'list.none');
-  await refreshTargetColumns();
-  if (workflow) await writeForm(workflow);
+  await canvas.refreshSchema();
 }
 
-/* ---------- Formulaire ---------- */
+/* ---------- Sauvegarde ---------- */
 
-function readForm() {
-  const value = (id) => $(id).value.trim();
-  const condition = value('cond-column')
-    ? { column: value('cond-column'), operator: value('cond-operator'), value: parseValue(value('cond-value')) }
-    : null;
-  const values = value('act-column') ? { [value('act-column')]: parseValue(value('act-value')) } : {};
-  return {
-    name: 'Workflow 1',
-    active: workflow ? workflow.active : false,
-    trigger: { action: value('trg-action'), column: value('trg-column') || null },
-    condition,
-    actions: [{ type: value('act-type'), table: value('act-table') || tableId, values }],
-  };
-}
+let saveTimer = null;
 
-function setPicker(id, value) {
-  $(id).value = value;
-  if (pickers[id]) pickers[id].refresh();
-}
-
-async function writeForm(wf) {
-  const action = wf.actions[0];
-  setPicker('trg-action', wf.trigger.action);
-  setPicker('trg-column', wf.trigger.column || '');
-  setPicker('cond-column', wf.condition ? wf.condition.column : '');
-  setPicker('cond-operator', wf.condition ? wf.condition.operator : 'eq');
-  $('cond-value').value = wf.condition && wf.condition.value !== undefined ? String(wf.condition.value) : '';
-  setPicker('act-type', action.type);
-  setPicker('act-table', action.table === tableId ? '' : action.table);
-  await refreshTargetColumns();
-  const column = Object.keys(action.values)[0];
-  setPicker('act-column', column || '');
-  $('act-value').value = column ? String(action.values[column]) : '';
-  syncDisabledState();
-}
-
-// Un champ sans objet est grisé, jamais masqué.
-function syncDisabledState() {
-  const operator = $('cond-operator').value;
-  $('cond-value').disabled = operator === 'empty' || operator === 'notEmpty';
-  $('cond-operator').disabled = !$('cond-column').value;
-  if (pickers['cond-operator']) pickers['cond-operator'].refresh();
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => grist.setOption('workflow', JSON.stringify(graph)), 300);
 }
 
 function refreshState() {
-  const active = Boolean(workflow && workflow.active);
-  $('wf-state').textContent = t(active ? 'status.active' : 'status.inactive');
+  const active = graph.active;
   $('toggle-active').textContent = t(active ? 'toggle.deactivate' : 'toggle.activate');
+  $('toggle-active').setAttribute('aria-pressed', String(active));
   $('open-tab-warning').hidden = !active;
+  canvas.setActive(active);
 }
 
-async function persist() {
-  await grist.setOption('workflow', JSON.stringify(workflow));
-  refreshState();
+function onGraphChange() {
+  scheduleSave();
 }
 
 /* ---------- Exécution ---------- */
 
 async function handleEvents(events) {
   for (const event of events) {
-    const result = await Engine.runWorkflow(workflow, event, gristApi);
+    const result = await Engine.runWorkflow(graph, event, gristApi, { currentTable: tableId });
     if (result.status === 'skipped' || result.status === 'condition-false') continue;
     if (result.status === 'success' && result.effects.some((effect) => effect.table === tableId)) suppressNext = true;
     const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : '');
@@ -160,21 +92,46 @@ async function onRecords(records) {
     suppressNext = false;
     return;
   }
-  if (!workflow || !workflow.active || events.length === 0) return;
+  if (!graph.active || events.length === 0) return;
   await handleEvents(events);
 }
 
+// Simule sur la première ligne de la vue l'événement du premier déclencheur, sans rien écrire.
 async function dryRun() {
   const record = lastRecords[0];
+  const trigger = graph.nodes.find((node) => node.type === 'trigger');
   if (!record) return addLog(t('log.dryNoRow'));
-  const wf = readForm();
-  const column = wf.trigger.column;
-  const event = wf.trigger.action === 'update'
+  if (!trigger) return addLog(t('log.cannotActivate', { issue: t('issue.noTrigger') }));
+  const { action, column } = trigger.config;
+  const event = action === 'update'
     ? { type: 'update', rowId: record.id, record, changed: column ? { [column]: { from: null, to: record[column] } } : {} }
-    : { type: wf.trigger.action, rowId: record.id, record };
-  const result = await Engine.runWorkflow(wf, event, gristApi, { dryRun: true });
+    : { type: action, rowId: record.id, record };
+  const result = await Engine.runWorkflow(graph, event, gristApi, { dryRun: true, currentTable: tableId });
+  canvas.showTrace(result.trace);
   const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : '');
   addLog(t('log.dryRun', { row: record.id, status, n: result.effects.length }) + ' ' + JSON.stringify(result.effects));
+}
+
+function toggleActive() {
+  if (!graph.active) {
+    const issues = Graph.validate(graph);
+    if (issues.length) {
+      $('logs').hidden = false;
+      $('toggle-logs').setAttribute('aria-pressed', 'true');
+      for (const issue of issues) addLog(t('log.cannotActivate', { issue: t(issue.key, { node: issue.node ? canvas.nodeLabel(issue.node) : '' }) }));
+      return;
+    }
+  }
+  graph.active = !graph.active;
+  refreshState();
+  scheduleSave();
+  addLog(t(graph.active ? 'log.activated' : 'log.deactivated'));
+}
+
+function toggleLogs() {
+  const logs = $('logs');
+  logs.hidden = !logs.hidden;
+  $('toggle-logs').setAttribute('aria-pressed', String(!logs.hidden));
 }
 
 /* ---------- Réglages et crédits ---------- */
@@ -264,33 +221,20 @@ function showOutsideGrist() {
 
 function start() {
   I18n.apply();
-  for (const id of ['trg-action', 'trg-column', 'cond-column', 'cond-operator', 'act-type', 'act-table', 'act-column']) {
-    pickers[id] = SearchSelect.attach($(id));
-  }
+  canvas = Canvas.create($('canvas'), graph, schema, onGraphChange);
+  I18n.apply();
   refreshState();
   $('open-settings').addEventListener('click', openSettings);
   document.addEventListener('langchange', refreshState);
 
   if (typeof grist === 'undefined') return showOutsideGrist();
 
-  $('wf-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    workflow = readForm();
-    await persist();
-    addLog(t('log.saved'));
-  });
-  $('toggle-active').addEventListener('click', async () => {
-    workflow = workflow || readForm();
-    workflow.active = !workflow.active;
-    await persist();
-    addLog(t(workflow.active ? 'log.activated' : 'log.deactivated'));
-  });
+  $('add-node').addEventListener('click', () => canvas.openAddMenu());
+  $('toggle-active').addEventListener('click', toggleActive);
   $('test-workflow').addEventListener('click', dryRun);
-  $('cond-column').addEventListener('change', syncDisabledState);
-  $('cond-operator').addEventListener('change', syncDisabledState);
-  $('act-table').addEventListener('change', refreshTargetColumns);
+  $('toggle-logs').addEventListener('click', toggleLogs);
   window.addEventListener('beforeunload', (event) => {
-    if (workflow && workflow.active) {
+    if (graph.active) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -298,14 +242,13 @@ function start() {
 
   grist.ready({ requiredAccess: 'full' });
   grist.onOptions((options) => {
-    if (!options || !options.workflow || workflow) return;
-    try {
-      workflow = JSON.parse(options.workflow);
-    } catch (err) {
-      return addLog(t('log.badConfig'));
-    }
+    if (loaded || !options || !options.workflow) return;
+    const saved = Graph.parse(options.workflow);
+    if (!saved) return addLog(t('log.badConfig'));
+    loaded = true;
+    graph = saved;
+    canvas.load(graph);
     refreshState();
-    if (tableId) writeForm(workflow);
   });
   grist.onRecords(onRecords, { includeColumns: 'all' });
   grist.selectedTable.getTableId().then((id) => {
