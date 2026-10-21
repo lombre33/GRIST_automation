@@ -45,10 +45,12 @@
       titleKey: 'node.action',
       inputs: 1,
       branches: [],
-      defaults: { type: 'UpdateRecord', table: '', column: '', value: '' },
+      defaults: { type: 'UpdateRecord', table: '', matchColumn: '', matchValue: '', column: '', value: '' },
       fields: [
         { key: 'type', labelKey: 'act.type', kind: 'choice', choices: [['UpdateRecord', 'act.update'], ['AddRecord', 'act.add']] },
         { key: 'table', labelKey: 'act.table', kind: 'table', emptyKey: 'list.currentTable' },
+        { key: 'matchColumn', labelKey: 'act.matchColumn', kind: 'targetColumn', emptyKey: 'list.eventRow', disabledWhen: (config) => config.type === 'AddRecord' },
+        { key: 'matchValue', labelKey: 'act.matchValue', kind: 'text', disabledWhen: (config) => config.type === 'AddRecord' || !config.matchColumn },
         { key: 'column', labelKey: 'act.column', kind: 'targetColumn', emptyKey: 'list.choose' },
         { key: 'value', labelKey: 'act.value', kind: 'text' },
       ],

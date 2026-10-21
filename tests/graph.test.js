@@ -192,3 +192,33 @@ test('GRAPH-17 une transformation se relie comme un maillon (une entrée, une so
   assert.strictEqual(G.connect(g, f.id, a.id, 'else').ok, false, 'pas de sortie « sinon »');
   assert.deepStrictEqual(G.parse(JSON.stringify(g)).nodes[1].config, { name: 'resultat', op: 'concat', a: '', b: '' });
 });
+
+test('GRAPH-18 mise à jour d\'une autre table : la colonne clé et sa valeur sont exigées', () => {
+  const g = G.create();
+  const t = G.addNode(g, 'trigger', 0, 0);
+  const a = G.addNode(g, 'action', 0, 0);
+  G.connect(g, t.id, a.id);
+  a.config.column = 'Source';
+  a.config.table = 'Archive';
+  const keys = () => G.validate(g, { currentTable: 'Contacts' }).map((i) => i.key);
+  assert.deepStrictEqual(keys(), ['issue.actionMatch']);
+  assert.deepStrictEqual(G.validate(g).map((i) => i.key), [], 'sans table courante connue, pas de refus');
+  a.config.matchColumn = 'Motif';
+  assert.deepStrictEqual(keys(), ['issue.actionMatchValue']);
+  a.config.matchValue = '{Nom}';
+  assert.deepStrictEqual(keys(), []);
+  a.config.type = 'AddRecord';
+  a.config.matchColumn = '';
+  assert.deepStrictEqual(keys(), [], 'une ajout n\'a pas de ligne cible');
+});
+
+test('GRAPH-19 un graphe enregistré avant la clé de ligne reste valable (champs absents)', () => {
+  const g = G.create();
+  const t = G.addNode(g, 'trigger', 0, 0);
+  const a = G.addNode(g, 'action', 0, 0);
+  G.connect(g, t.id, a.id);
+  a.config.column = 'Motif';
+  delete a.config.matchColumn;
+  delete a.config.matchValue;
+  assert.deepStrictEqual(G.validate(G.parse(JSON.stringify(g)), { currentTable: 'Contacts' }), []);
+});

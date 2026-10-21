@@ -66,7 +66,9 @@
   }
 
   // Problèmes qui empêchent d'activer : retourne une liste de { key, node } (clés de i18n `issue.*`).
-  function validate(graph) {
+  // context.currentTable (facultatif) : permet de repérer une mise à jour d'une autre table sans ligne cible.
+  function validate(graph, context) {
+    const currentTable = context && context.currentTable;
     const issues = [];
     const triggers = graph.nodes.filter((node) => node.type === 'trigger');
     if (!triggers.length) issues.push({ key: 'issue.noTrigger' });
@@ -75,6 +77,11 @@
       if (node.type !== 'trigger' && !graph.edges.some((edge) => edge.to === node.id)) issues.push({ key: 'issue.notConnected', node: node.id });
       if (node.type === 'condition' && node.config.checks.some((check) => !check.column)) issues.push({ key: 'issue.conditionColumn', node: node.id });
       if (node.type === 'action' && !node.config.column) issues.push({ key: 'issue.actionColumn', node: node.id });
+      if (node.type === 'action' && node.config.type === 'UpdateRecord') {
+        const { table, matchColumn, matchValue } = node.config;
+        if (!matchColumn && currentTable && table && table !== currentTable) issues.push({ key: 'issue.actionMatch', node: node.id });
+        if (matchColumn && String(matchValue).trim() === '') issues.push({ key: 'issue.actionMatchValue', node: node.id });
+      }
     }
     const names = new Set();
     for (const node of graph.nodes.filter((candidate) => candidate.type === 'transform')) {
@@ -126,7 +133,7 @@
         const checks = c.checks.map((check) => `${check.column || '—'} ${t('op.' + check.operator)}${Types.needsValue(check) && check.value !== '' ? ' ' + check.value : ''}`);
         return `${t('node.condition')} : ${checks.join(` ${t(c.join === 'or' ? 'sum.or' : 'sum.and')} `)}`;
       }
-      return `${t('node.action')} : ${t(c.type === 'UpdateRecord' ? 'act.update' : 'act.add')} ${c.table || '—'}.${c.column || '—'} = ${c.value}`;
+      return `${t('node.action')} : ${t(c.type === 'UpdateRecord' ? 'act.update' : 'act.add')} ${c.table || '—'}.${c.column || '—'} = ${c.value}${c.type === 'UpdateRecord' && c.matchColumn ? ` (${t('sum.where')} ${c.matchColumn} = ${c.matchValue})` : ''}`;
     };
     const paths = [];
     const walk = (node, trail) => {

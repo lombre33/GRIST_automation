@@ -113,6 +113,21 @@ Les valeurs de l'action et des transformations acceptent `{NomDeColonne}` (valeu
 | TRF-10 | V0.8 | Suppression | Déclencheur « supprimée » avec `{Nom}` dans l'action | Erreur claire « pas de contenu de ligne » (limite connue, CDC §4.2) | ➖ |
 | TRF-11 | V0.8 | Accolades littérales | Action Archive.Motif = `{{Nom}}` | Écrit `{Nom}` | ➖ |
 
+## Mise à jour d'une ligne repérée par une clé
+
+Une action « Mettre à jour la ligne » sur une autre table doit dire quelle ligne : « Ligne repérée par » (colonne de la table cible) et « Valeur clé » (texte ou `{Colonne}`). Avant la 0.9, elle écrivait sur la ligne portant le même numéro que celle de l'événement (erreur corrigée).
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| KEY-01 | V0.9 | Champs de l'action | Action « Mettre à jour la ligne » | « Ligne repérée par » (liste des colonnes de la table cible, « — Ligne de l'événement — » par défaut) et « Valeur clé » (grisée tant qu'aucune colonne n'est choisie) ; les deux grisés pour « Ajouter une ligne » | ➖ |
+| KEY-02 | V0.9 | Mise à jour par clé | Action sur Archive, repérée par Motif = `{Nom}`, colonne Source = vu. Archive contient une ligne Motif = Ada ; passer à Clos le contact Ada | Seule la ligne Ada d'Archive reçoit Source = vu | ➖ |
+| KEY-03 | V0.9 | Clé introuvable | Modifier un contact dont le nom n'est dans aucune ligne d'Archive | Erreur « Ligne introuvable dans Archive : Motif = … », rien d'écrit | ➖ |
+| KEY-04 | V0.9 | Clé en double | Deux lignes d'Archive avec le même Motif, déclencher | Erreur « Plusieurs lignes dans Archive … », rien d'écrit | ➖ |
+| KEY-05 | V0.9 | Autre table sans clé | Action « Mettre à jour » sur Archive sans colonne clé, Activer | Refus, avec « indiquez la colonne qui repère la ligne » | ➖ |
+| KEY-06 | V0.9 | Type de la clé | Clé numérique d'un côté, texte de l'autre (5 et « 5 ») | La ligne est trouvée | ➖ |
+| KEY-07 | V0.9 | Même table, autre ligne | Action sur « Table courante », repérée par Cle = k2 | La ligne dont Cle = k2 est modifiée, pas celle qui a déclenché | ➖ |
+| KEY-08 | V0.9 | Test à blanc | Cliquer Tester | Les effets annoncés portent le numéro de la ligne trouvée ; rien n'est écrit | ➖ |
+
 ## Activation et sauvegarde
 
 | ID | Depuis | Scénario | Étapes | Attendu | Résultat |

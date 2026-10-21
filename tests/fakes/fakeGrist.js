@@ -6,6 +6,11 @@ function createFakeApi(opts) {
   const applied = [];
   return {
     applied,
+    // options.tables : { Table: { id: [..], Colonne: [..] } } lues par fetchTable, comme grist.docApi.
+    async fetchTable(name) {
+      if (!options.tables || !options.tables[name]) throw new Error('Table inconnue : ' + name);
+      return options.tables[name];
+    },
     async applyUserActions(actions) {
       if (options.failWith) throw new Error(options.failWith);
       applied.push(...actions);

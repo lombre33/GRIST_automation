@@ -327,7 +327,7 @@ await scenario('E2E-18 condition à deux vérifications (OU) et branche « sinon
   await page.fill('#condition-1-value-2', '100');
   assert.equal(await page.locator('#condition-1-join').isDisabled(), false, 'le champ « Combiner » s\'active avec deux vérifications');
   await pick(page, 'condition-1-join', 'une au moins');
-  await addNode(page, 'Action', 620, 330);
+  await addNode(page, 'Action', 620, 390);
   await pick(page, 'action-2-type', 'ajouter');
   await pick(page, 'action-2-table', 'archive');
   await pick(page, 'action-2-column', 'motif');
@@ -388,6 +388,44 @@ await scenario('E2E-20 transformation incomplète : activation refusée avec la 
   await page.locator('.node-action .pin-in').click();
   await page.click('#toggle-active');
   assert.match(await page.locator('#log-list').innerText(), /il manque une valeur/);
+});
+
+await scenario('E2E-21 mise à jour d\'une ligne d\'une autre table repérée par une clé', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await addNode(page, 'Action', 400, 60);
+  await waitSchema(page);
+  await pick(page, 'trigger-1-column', 'statut');
+  await pick(page, 'action-1-table', 'archive');
+  assert.equal(await page.locator('#action-1-matchValue').isDisabled(), true, 'valeur clé grisée tant que la colonne clé est vide');
+  await pick(page, 'action-1-matchColumn', 'motif');
+  assert.equal(await page.locator('#action-1-matchValue').isDisabled(), false);
+  await page.fill('#action-1-matchValue', '{Nom}');
+  await pick(page, 'action-1-column', 'source');
+  await page.fill('#action-1-value', 'vu');
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+  await page.click('#toggle-active');
+  const push = (record) => page.evaluate((r) => window.__stub.pushRecords([r]), record);
+  await push({ id: 1, Nom: 'a', Statut: 'Nouveau' });
+  await push({ id: 1, Nom: 'b', Statut: 'Clos' });
+  await page.waitForFunction(() => window.__stub.applied.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['UpdateRecord', 'Archive', 2, { Source: 'vu' }]);
+  await push({ id: 1, Nom: 'zzz', Statut: 'Nouveau' });
+  await page.click('#toggle-logs');
+  await page.waitForFunction(() => /Ligne introuvable dans Archive/.test(document.getElementById('log-list').innerText));
+  assert.equal(await page.evaluate(() => window.__stub.applied.length), 1);
+});
+
+await scenario('E2E-22 mise à jour d\'une autre table sans clé : activation refusée', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await addNode(page, 'Action', 400, 60);
+  await waitSchema(page);
+  await pick(page, 'action-1-table', 'archive');
+  await pick(page, 'action-1-column', 'source');
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+  await page.click('#toggle-active');
+  assert.match(await page.locator('#log-list').innerText(), /colonne qui repère la ligne/);
 });
 
 await browser.close();

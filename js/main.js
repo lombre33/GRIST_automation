@@ -21,8 +21,8 @@ let tables = [];
 let tablesAvailable = false;   // la table Automation existe dans le document
 const columnsByTable = new Map();
 
-const gristApi = { applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
-const docApi = { listTables: () => grist.docApi.listTables(), fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: gristApi.applyUserActions };
+const gristApi = { fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
+const docApi = Object.assign({ listTables: () => grist.docApi.listTables() }, gristApi);
 
 function addLog(message, date = new Date()) {
   const li = document.createElement('li');
@@ -242,7 +242,7 @@ async function dryRun() {
 
 async function toggleActive() {
   if (!graph.active) {
-    const issues = Graph.validate(graph);
+    const issues = Graph.validate(graph, { currentTable: tableId });
     if (issues.length) {
       $('logs').hidden = false;
       $('toggle-logs').setAttribute('aria-pressed', 'true');

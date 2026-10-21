@@ -315,14 +315,18 @@
       }
     }
 
+    // Colonnes de la table cible de l'action, pour les listes « Ligne repérée par » et « Colonne ».
     async function refreshTargetColumns(entry) {
-      const select = entry.selects.column;
-      if (entry.node.type !== 'action' || !select) return;
+      if (entry.node.type !== 'action') return;
       const table = entry.node.config.table || schema.currentTable();
       const names = table ? await schema.columns(table) : [];
-      fillSelect(select, names.map((name) => [name, name]), 'list.choose');
-      select.value = entry.node.config.column;
-      entry.pickers.column.refresh();
+      for (const spec of NodeTypes.TYPES.action.fields) {
+        const select = spec.kind === 'targetColumn' && entry.selects[spec.key];
+        if (!select) continue;
+        fillSelect(select, names.map((name) => [name, name]), spec.emptyKey);
+        select.value = entry.node.config[spec.key];
+        entry.pickers[spec.key].refresh();
+      }
     }
 
     // Reconstruit les listes qui dépendent du document (colonnes de la table courante, tables, colonnes de la cible).

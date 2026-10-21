@@ -3,7 +3,7 @@
 // window.__noTables : le document démarre sans la table Automation. `applied` ne liste que les écritures hors table Automation.
 const FIXED = {
   Contacts: { id: [1], manualSort: [1], Nom: ['A'], Statut: ['Nouveau'], Montant: [10], gristHelper_Display: [''] },
-  Archive: { id: [], manualSort: [], Motif: [], Source: [] },
+  Archive: { id: [1, 2], manualSort: [1, 2], Motif: ['a', 'b'], Source: ['x', 'y'] },
 };
 const docTables = {};
 function createTable(name, columns) { docTables[name] = { columns: columns.map((c) => c.id), rows: [], nextId: 1 }; }

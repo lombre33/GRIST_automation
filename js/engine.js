@@ -137,9 +137,36 @@
     if (!config.column) throw new Error('Action incomplète : aucune colonne');
     const values = { [config.column]: resolveTemplate(config.value, event, vars || {}) };
     const table = config.table || currentTable;
-    if (config.type === 'UpdateRecord') return { type: 'UpdateRecord', table, rowId: event.rowId, values };
+    if (config.type === 'UpdateRecord' && config.matchColumn) {
+      // Ligne repérée par une colonne clé : l'identifiant est cherché dans la table avant l'écriture (resolveTargets).
+      const matchValue = resolveTemplate(config.matchValue, event, vars || {});
+      return { type: 'UpdateRecord', table, rowId: null, values, match: { column: config.matchColumn, value: matchValue } };
+    }
+    if (config.type === 'UpdateRecord') {
+      if (table !== currentTable) throw new Error('Mise à jour d\'une autre table : indiquez la colonne qui repère la ligne');
+      return { type: 'UpdateRecord', table, rowId: event.rowId, values };
+    }
     if (config.type === 'AddRecord') return { type: 'AddRecord', table, values };
     throw new Error('Action inconnue : ' + config.type);
+  }
+
+  const looselyEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b) || (typeof a !== 'object' && typeof b !== 'object' && a !== null && b !== null && a !== undefined && b !== undefined && String(a) === String(b));
+
+  // Cherche l'identifiant des lignes repérées par une clé (lecture seule, aussi en test à blanc) : exactement une ligne attendue.
+  async function resolveTargets(effects, api) {
+    const tables = new Map();
+    for (const effect of effects) {
+      if (!effect.match) continue;
+      const { column, value } = effect.match;
+      if (!api.fetchTable) throw new Error('Lecture de la table impossible');
+      if (!tables.has(effect.table)) tables.set(effect.table, await api.fetchTable(effect.table));
+      const data = tables.get(effect.table);
+      if (!Object.prototype.hasOwnProperty.call(data, column)) throw new Error('Colonne inconnue dans ' + effect.table + ' : ' + column);
+      const ids = (data.id || []).filter((id, index) => looselyEqual(data[column][index], value));
+      if (ids.length === 0) throw new Error('Ligne introuvable dans ' + effect.table + ' : ' + column + ' = ' + display(value));
+      if (ids.length > 1) throw new Error('Plusieurs lignes dans ' + effect.table + ' pour ' + column + ' = ' + display(value));
+      effect.rowId = ids[0];
+    }
   }
 
   function toUserAction(plan) {
@@ -190,6 +217,7 @@
         result.status = 'condition-false';
         return result;
       }
+      await resolveTargets(result.effects, api);
       if (!dryRun) {
         if (options.beforeApply) options.beforeApply(result.effects);
         await api.applyUserActions(result.effects.map(toUserAction));

@@ -358,3 +358,65 @@ test('DRY-05 le dry-run montre les valeurs déjà calculées, état « Passé »
   assert.strictEqual(result.trace.f0, 'passed');
   assert.deepStrictEqual(api.applied, []);
 });
+
+// Action « mettre à jour » ciblant une ligne par une clé : t -> a.
+function keyed(config) {
+  const g = chain({ condition: null, actions: [Object.assign({ type: 'UpdateRecord', table: 'Archive', column: 'Source', value: 'vu', matchColumn: 'Motif', matchValue: '{Nom}' }, config)] });
+  return g;
+}
+const archive = { Archive: { id: [10, 11, 12], Motif: ['a', 'b', 'b'], Source: ['x', 'y', 'z'], Ref: [5, 6, 7] } };
+const keyEvent = (record) => ({ type: 'update', rowId: 7, record: { id: 7, ...record }, changed: { Statut: { from: 'x', to: 'y' } } });
+const runKeyed = (config, record, api) => E.runWorkflow(keyed(config), keyEvent(record), api || createFakeApi({ tables: archive }), opts);
+
+test('ACT-09 mise à jour d\'une autre table : la ligne est repérée par la colonne clé, pas par le numéro de la ligne de l\'événement', async () => {
+  const api = createFakeApi({ tables: archive });
+  const result = await runKeyed({}, { Nom: 'a' }, api);
+  assert.strictEqual(result.status, 'success');
+  assert.deepStrictEqual(api.applied, [['UpdateRecord', 'Archive', 10, { Source: 'vu' }]]);
+});
+
+test('ACT-10 clé introuvable ou en doublon : erreur claire, rien n\'est écrit', async () => {
+  const none = createFakeApi({ tables: archive });
+  const missing = await runKeyed({}, { Nom: 'zzz' }, none);
+  assert.strictEqual(missing.status, 'error');
+  assert.match(missing.error, /Ligne introuvable dans Archive : Motif = zzz/);
+  const many = createFakeApi({ tables: archive });
+  const twice = await runKeyed({}, { Nom: 'b' }, many);
+  assert.match(twice.error, /Plusieurs lignes dans Archive/);
+  assert.deepStrictEqual([none.applied, many.applied], [[], []]);
+});
+
+test('ACT-11 clé numérique ou texte : comparaison sans tenir compte du type (5 et « 5 »)', async () => {
+  const api = createFakeApi({ tables: archive });
+  await runKeyed({ matchColumn: 'Ref', matchValue: '{Num}' }, { Num: '6' }, api);
+  assert.deepStrictEqual(api.applied, [['UpdateRecord', 'Archive', 11, { Source: 'vu' }]]);
+});
+
+test('ACT-12 colonne clé inconnue ou lecture impossible : erreur explicite', async () => {
+  const unknown = await runKeyed({ matchColumn: 'Nope' }, { Nom: 'a' });
+  assert.match(unknown.error, /Colonne inconnue dans Archive : Nope/);
+  const unreadable = await runKeyed({}, { Nom: 'a' }, { applyUserActions: async () => {} });
+  assert.match(unreadable.error, /Lecture de la table impossible/);
+});
+
+test('ACT-13 autre table sans colonne clé : refusé au lieu d\'écrire sur la mauvaise ligne', async () => {
+  const api = createFakeApi({ tables: archive });
+  const result = await runKeyed({ matchColumn: '', matchValue: '' }, { Nom: 'a' }, api);
+  assert.strictEqual(result.status, 'error');
+  assert.match(result.error, /colonne qui repère la ligne/);
+  assert.deepStrictEqual(api.applied, []);
+});
+
+test('ACT-14 dry-run : la ligne trouvée est annoncée, rien n\'est écrit', async () => {
+  const api = createFakeApi({ tables: archive });
+  const result = await E.runWorkflow(keyed({}), keyEvent({ Nom: 'a' }), api, { ...opts, dryRun: true });
+  assert.strictEqual(result.effects[0].rowId, 10);
+  assert.deepStrictEqual(api.applied, []);
+});
+
+test('ACT-15 autre ligne de la table courante repérée par clé : permis', async () => {
+  const api = createFakeApi({ tables: { Contacts: { id: [1, 2], Cle: ['k1', 'k2'] } } });
+  const result = await E.runWorkflow(keyed({ table: '', matchColumn: 'Cle', matchValue: 'k2', column: 'Statut' }), keyEvent({ Nom: 'a' }), api, opts);
+  assert.strictEqual(result.status, 'success');
+  assert.deepStrictEqual(api.applied, [['UpdateRecord', 'Contacts', 2, { Statut: 'vu' }]]);
+});
