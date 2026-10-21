@@ -14,8 +14,8 @@ function flow() {
   const cond = G.addNode(g, 'condition', 0, 0);
   const act = G.addNode(g, 'action', 0, 0);
   trigger.config.column = 'Statut';
-  cond.config.column = 'Statut';
-  cond.config.value = 'Clos';
+  cond.config.checks[0].column = 'Statut';
+  cond.config.checks[0].value = 'Clos';
   act.config.column = 'Motif';
   act.config.table = 'Archive';
   act.config.value = 'clos';

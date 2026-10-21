@@ -52,7 +52,7 @@ function chain(over) {
   const edges = [];
   let last = 't';
   if (o.condition) {
-    nodes.push({ id: 'c', type: 'condition', config: o.condition });
+    nodes.push({ id: 'c', type: 'condition', config: o.condition.checks ? o.condition : { join: 'and', checks: [o.condition] } });
     edges.push({ from: last, to: 'c' });
     last = 'c';
   }
@@ -60,7 +60,7 @@ function chain(over) {
     nodes.push({ id: 'a' + i, type: 'action', config });
     edges.push({ from: last, to: 'a' + i });
   });
-  return { version: 2, active: o.active, nodes, edges };
+  return { version: 3, active: o.active, nodes, edges };
 }
 const opts = { currentTable: 'Contacts' };
 
@@ -149,7 +149,7 @@ test('COND-02 condition fausse : aucune écriture', async () => {
 
 test('COND-08 conditions en série : toutes doivent être vraies (ET)', async () => {
   const g = chain();
-  g.nodes.push({ id: 'c2', type: 'condition', config: { column: 'Montant', operator: 'gt', value: '100' } });
+  g.nodes.push({ id: 'c2', type: 'condition', config: { join: 'and', checks: [{ column: 'Montant', operator: 'gt', value: '100' }] } });
   g.edges = [{ from: 't', to: 'c' }, { from: 'c', to: 'c2' }, { from: 'c2', to: 'a0' }];
   const api = createFakeApi();
   const small = await E.runWorkflow(g, { ...updateEvent('Clos'), record: { id: 7, Statut: 'Clos', Montant: 50 } }, api, opts);
@@ -185,4 +185,73 @@ test('DRY-01/02 dry-run : effets listés, trace par nœud, aucune écriture, mê
 test('SEC-02 le moteur n\'utilise ni eval ni Function ni réseau', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../js/engine.js'), 'utf8');
   assert.doesNotMatch(src, /\beval\s*\(|new\s+Function|\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon/);
+});
+
+// Condition à plusieurs vérifications, avec ou sans branche « sinon » : t -> c -(oui)-> yes ; c -(sinon)-> no.
+function branched(condition, withElse) {
+  const g = chain({ condition, actions: [{ type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'oui' }] });
+  if (withElse) {
+    g.nodes.push({ id: 'n', type: 'action', config: { type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'non' } });
+    g.edges.push({ from: 'c', to: 'n', branch: 'else' });
+  }
+  return g;
+}
+const event = (record) => ({ type: 'update', rowId: 7, record: { id: 7, ...record }, changed: { Statut: { from: 'x', to: record.Statut } } });
+const both = (join) => ({ join, checks: [{ column: 'Statut', operator: 'eq', value: 'Clos' }, { column: 'Montant', operator: 'gt', value: '100' }] });
+
+test('COND-09 ET : toutes les vérifications doivent être vraies', async () => {
+  const run = (record) => E.runWorkflow(branched(both('and')), event(record), createFakeApi(), opts);
+  assert.strictEqual((await run({ Statut: 'Clos', Montant: 500 })).status, 'success');
+  assert.strictEqual((await run({ Statut: 'Clos', Montant: 5 })).status, 'condition-false');
+  assert.strictEqual((await run({ Statut: 'Ouvert', Montant: 500 })).status, 'condition-false');
+});
+
+test('COND-10 OU : une seule vérification vraie suffit', async () => {
+  const run = (record) => E.runWorkflow(branched(both('or')), event(record), createFakeApi(), opts);
+  assert.strictEqual((await run({ Statut: 'Clos', Montant: 5 })).status, 'success');
+  assert.strictEqual((await run({ Statut: 'Ouvert', Montant: 500 })).status, 'success');
+  assert.strictEqual((await run({ Statut: 'Ouvert', Montant: 5 })).status, 'condition-false');
+});
+
+test('COND-11 une vérification sans colonne dans une condition à plusieurs : erreur explicite en ET', async () => {
+  const bad = { join: 'and', checks: [{ column: 'Statut', operator: 'eq', value: 'Clos' }, { column: '', operator: 'eq', value: '' }] };
+  const result = await E.runWorkflow(branched(bad), event({ Statut: 'Clos' }), createFakeApi(), opts);
+  assert.strictEqual(result.status, 'error');
+  assert.match(result.error, /aucune colonne/);
+});
+
+test('ELSE-01 condition vraie : la branche « oui » seule s\'exécute', async () => {
+  const api = createFakeApi();
+  const result = await E.runWorkflow(branched(both('and'), true), event({ Statut: 'Clos', Montant: 500 }), api, opts);
+  assert.deepStrictEqual(api.applied, [['AddRecord', 'Archive', null, { Motif: 'oui' }]]);
+  assert.strictEqual(result.trace.c, 'passed');
+  assert.strictEqual(result.trace.n, undefined);
+});
+
+test('ELSE-02 condition fausse : la branche « sinon » s\'exécute à la place', async () => {
+  const api = createFakeApi();
+  const result = await E.runWorkflow(branched(both('and'), true), event({ Statut: 'Ouvert', Montant: 500 }), api, opts);
+  assert.deepStrictEqual(api.applied, [['AddRecord', 'Archive', null, { Motif: 'non' }]]);
+  assert.strictEqual(result.status, 'success');
+  assert.strictEqual(result.trace.c, 'else');
+  assert.strictEqual(result.trace.n, 'action');
+  assert.strictEqual(result.trace.a0, undefined);
+});
+
+test('ELSE-03 condition fausse sans lien « sinon » : bloquée, rien n\'est écrit', async () => {
+  const api = createFakeApi();
+  const result = await E.runWorkflow(branched(both('and'), false), event({ Statut: 'Ouvert', Montant: 500 }), api, opts);
+  assert.strictEqual(result.status, 'condition-false');
+  assert.strictEqual(result.trace.c, 'blocked');
+  assert.deepStrictEqual(api.applied, []);
+});
+
+test('ELSE-04 conditions en chaîne : chaque condition a son propre « sinon »', async () => {
+  const g = branched(both('and'), true);
+  g.nodes.push({ id: 'c2', type: 'condition', config: { join: 'and', checks: [{ column: 'Nom', operator: 'notEmpty', value: '' }] } });
+  g.nodes.push({ id: 'z', type: 'action', config: { type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'z' } });
+  g.edges.push({ from: 'c', to: 'c2' }, { from: 'c2', to: 'z', branch: 'else' });
+  const apply = async (record) => { const api = createFakeApi(); await E.runWorkflow(g, event(record), api, opts); return api.applied.map((a) => a[3].Motif); };
+  assert.deepStrictEqual(await apply({ Statut: 'Clos', Montant: 500, Nom: '' }), ['oui', 'z'], 'c vrai, c2 faux : « oui » de c et « sinon » de c2');
+  assert.deepStrictEqual(await apply({ Statut: 'Ouvert', Montant: 500, Nom: '' }), ['non'], 'c faux : seul son « sinon », c2 n\'est pas atteinte');
 });

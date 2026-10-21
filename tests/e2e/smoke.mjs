@@ -81,7 +81,7 @@ async function buildFlow(page) {
   await page.fill('#action-1-value', 'clos');
   await page.locator('.node-trigger .pin-out').click();
   await page.locator('.node-condition .pin-in').click();
-  const out = await page.locator('.node-condition .pin-out').boundingBox();
+  const out = await page.locator('.node-condition .pin-out[data-branch=then]').boundingBox();
   const inn = await page.locator('.node-action .pin-in').boundingBox();
   await page.mouse.move(out.x + 7, out.y + 7);
   await page.mouse.down();
@@ -318,6 +318,35 @@ await scenario('E2E-17 un autre onglet exécute déjà : celui-ci reste en veill
   await page.waitForTimeout(500);
   assert.deepEqual(await page.evaluate(() => window.__stub.applied), []);
 }, { foreignLock: true });
+
+await scenario('E2E-18 condition à deux vérifications (OU) et branche « sinon »', async (page) => {
+  await buildFlow(page);
+  await page.click('.node-condition .check-add');
+  await pick(page, 'condition-1-column-2', 'montant');
+  await pick(page, 'condition-1-operator-2', 'supérieur');
+  await page.fill('#condition-1-value-2', '100');
+  assert.equal(await page.locator('#condition-1-join').isDisabled(), false, 'le champ « Combiner » s\'active avec deux vérifications');
+  await pick(page, 'condition-1-join', 'une au moins');
+  await addNode(page, 'Action', 620, 330);
+  await pick(page, 'action-2-type', 'ajouter');
+  await pick(page, 'action-2-table', 'archive');
+  await pick(page, 'action-2-column', 'motif');
+  await page.fill('#action-2-value', 'autre');
+  await page.locator('.node-condition .pin-out[data-branch=else]').click();
+  await page.locator('#action-2-value').locator('xpath=ancestor::div[contains(@class,"node")]').locator('.pin-in').click();
+  assert.equal(await page.locator('.wire-else').count(), 1);
+  await page.click('#toggle-active');
+  const push = (record) => page.evaluate((r) => window.__stub.pushRecords([r]), record);
+  await push({ id: 1, Nom: 'A', Statut: 'Nouveau', Montant: 10 });
+  await push({ id: 1, Nom: 'A', Statut: 'Ouvert', Montant: 500 });
+  await page.waitForFunction(() => window.__stub.applied.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['AddRecord', 'Archive', null, { Motif: 'clos' }], 'OU : le montant suffit');
+  await push({ id: 1, Nom: 'A', Statut: 'En cours', Montant: 5 });
+  await page.waitForFunction(() => window.__stub.applied.length === 2);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied[1]), ['AddRecord', 'Archive', null, { Motif: 'autre' }], 'faux : branche « sinon »');
+  await page.click('#test-workflow');
+  assert.match(await page.locator('.node-condition .node-state').innerText(), /sinon/);
+});
 
 await browser.close();
 server.close();

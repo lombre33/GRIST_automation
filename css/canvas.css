@@ -31,6 +31,8 @@
 .trace-passed .node-state { background: var(--accent-soft); color: var(--accent-ink); }
 .trace-blocked { border-style: dashed; }
 .trace-blocked .node-state { background: var(--surface-sunken); color: var(--text-muted); }
+.trace-else { border-color: var(--warn-ink); }
+.trace-else .node-state { background: var(--warn-soft); color: var(--warn-ink); }
 .trace-action { border-color: var(--good); }
 .trace-action .node-state { background: var(--good-soft); color: var(--good); }
 
@@ -39,8 +41,18 @@
 .pin::after { content: ""; position: absolute; inset: -6px; }
 .pin-in { left: -8px; }
 .pin-out { right: -8px; }
-.pin:hover:not(:disabled), .node.is-connecting .pin-out, .pin.is-target { border-color: var(--accent); background: var(--accent-soft); }
+.pin:hover:not(:disabled), .pin.is-source, .pin.is-target { border-color: var(--accent); background: var(--accent-soft); }
 .pin.is-target { box-shadow: 0 0 0 3px var(--accent-soft-border); }
 .pin-none { display: none; }
 
 .add-menu { position: absolute; width: 190px; z-index: 50; }
+
+/* Condition : vérifications empilées, et deux sorties « oui » / « sinon » en pied de nœud. */
+.checks { display: flex; flex-direction: column; gap: 6px; }
+.check { position: relative; display: flex; flex-direction: column; gap: 5px; padding: 6px 28px 6px 6px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-sunken); }
+.check-remove { position: absolute; top: 4px; right: 3px; }
+.check-add { align-self: flex-start; font-size: 12px; }
+.node-outs { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.out-row { position: relative; display: flex; justify-content: flex-end; padding: 4px 14px 4px 10px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.out-row .pin { top: 50%; margin-top: -7px; }
+.wire-else .wire { stroke-dasharray: 6 4; }

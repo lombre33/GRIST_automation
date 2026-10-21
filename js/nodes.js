@@ -8,28 +8,28 @@
     trigger: {
       titleKey: 'node.trigger',
       inputs: 0,
-      outputs: 1,
+      branches: ['then'],
       defaults: { action: 'update', column: '' },
       fields: [
         { key: 'action', labelKey: 'trigger.when', kind: 'choice', choices: [['update', 'trigger.update'], ['create', 'trigger.create'], ['delete', 'trigger.delete']] },
         { key: 'column', labelKey: 'trigger.column', kind: 'column', emptyKey: 'list.none' },
       ],
     },
+    // Une condition porte une ou plusieurs vérifications reliées par ET ou OU, et deux sorties : « oui » (condition vraie) et « sinon ».
     condition: {
       titleKey: 'node.condition',
       inputs: 1,
-      outputs: 1,
-      defaults: { column: '', operator: 'eq', value: '' },
+      branches: ['then', 'else'],
+      defaults: { join: 'and', checks: [{ column: '', operator: 'eq', value: '' }] },
       fields: [
-        { key: 'column', labelKey: 'cond.column', kind: 'column', emptyKey: 'list.choose' },
-        { key: 'operator', labelKey: 'cond.operator', kind: 'choice', choices: [['eq', 'op.eq'], ['neq', 'op.neq'], ['gt', 'op.gt'], ['lt', 'op.lt'], ['contains', 'op.contains'], ['empty', 'op.empty'], ['notEmpty', 'op.notEmpty']] },
-        { key: 'value', labelKey: 'cond.value', kind: 'text', disabledWhen: (config) => config.operator === 'empty' || config.operator === 'notEmpty' },
+        { key: 'checks', kind: 'checks' },
+        { key: 'join', labelKey: 'cond.join', kind: 'choice', choices: [['and', 'join.and'], ['or', 'join.or']], disabledWhen: (config) => config.checks.length < 2 },
       ],
     },
     action: {
       titleKey: 'node.action',
       inputs: 1,
-      outputs: 0,
+      branches: [],
       defaults: { type: 'UpdateRecord', table: '', column: '', value: '' },
       fields: [
         { key: 'type', labelKey: 'act.type', kind: 'choice', choices: [['UpdateRecord', 'act.update'], ['AddRecord', 'act.add']] },
@@ -40,7 +40,11 @@
     },
   };
 
-  const api = { TYPES, ORDER: ['trigger', 'condition', 'action'] };
+  // Opérateurs d'une vérification de condition, avec la clé de traduction de leur libellé.
+  const OPERATORS = [['eq', 'op.eq'], ['neq', 'op.neq'], ['gt', 'op.gt'], ['lt', 'op.lt'], ['contains', 'op.contains'], ['empty', 'op.empty'], ['notEmpty', 'op.notEmpty']];
+  const needsValue = (check) => check.operator !== 'empty' && check.operator !== 'notEmpty';
+
+  const api = { TYPES, OPERATORS, needsValue, ORDER: ['trigger', 'condition', 'action'] };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NodeTypes = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -9,7 +9,7 @@ Périmètre : `docs/CDC_Widget_Grist_Automation_Builder.md`. Règles d'interface
 Vue nodale sur fond uni : on ajoute des nœuds (clic droit sur le fond, ou « Ajouter »), on les relie en glissant d'une sortie vers une entrée (ou clic sur la sortie puis sur l'entrée), on déplace le fond et on zoome à la molette.
 
 - **Déclencheur** : ligne créée, modifiée ou supprimée (colonne surveillée optionnelle).
-- **Condition** : colonne, opérateur, valeur ; plusieurs conditions en série valent un ET.
+- **Condition** : une ou plusieurs vérifications (colonne, opérateur, valeur) reliées par ET ou OU, avec une sortie « Oui » et une sortie « Sinon » ; plusieurs conditions en série valent un ET.
 - **Action** : mettre à jour la ligne ou ajouter une ligne, dans la table courante ou une autre.
 - « Tester » simule sur la première ligne de la vue sans rien écrire et affiche l'état de chaque nœud ; « Activer » refuse tant que le graphe est incomplet.
 

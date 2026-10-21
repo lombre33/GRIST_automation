@@ -29,9 +29,9 @@ Liste de scénarios manuels, à jouer par Antoine sur son Grist (instance Grist.
 | NODE-02 | V0.5 | Colonnes proposées | Dans le déclencheur, ouvrir « Colonne surveillée » | Les colonnes de Contacts (Nom, Email, Statut, Montant, Date, Service, Cle), sans id, manualSort ni colonne technique ; la recherche trouve « stat » et « statut » | ➖ |
 | NODE-03 | V0.5 | Tables proposées | Dans l'action, ouvrir « Table cible » | Contacts, Services, Archive ; « Table courante » en premier ; aucune table `Automation_` | ➖ |
 | NODE-04 | V0.5 | Colonnes de la cible | Choisir Archive comme table cible, ouvrir « Colonne » | Les colonnes d'Archive (Nom, Motif, Source), plus celles de Contacts | ➖ |
-| NODE-05 | V0.5 | Opérateurs sans valeur | Dans la condition, choisir « est vide » | Le champ Valeur est grisé, pas masqué | ➖ |
+| NODE-05 | V0.7 (modifié) | Opérateurs sans valeur | Dans une vérification de la condition, choisir « est vide » | Le champ Valeur de cette vérification est grisé, pas masqué | ➖ |
 | LINK-01 | V0.5 | Lien en glissant | Glisser de la sortie du déclencheur vers l'entrée de la condition | Un lien courbe apparaît ; pendant le glissement, les entrées possibles sont mises en évidence | ➖ |
-| LINK-02 | V0.5 | Lien au clic | Cliquer la sortie de la condition, puis l'entrée de l'action | Lien créé ; Échap pendant l'attente l'annule | ➖ |
+| LINK-02 | V0.7 (modifié) | Lien au clic | Cliquer la sortie « Oui » de la condition, puis l'entrée de l'action | Lien créé ; Échap pendant l'attente l'annule | ➖ |
 | LINK-03 | V0.5 | Liens refusés | Essayer de relier une action vers une condition, une sortie vers le déclencheur, une condition à elle-même, et fermer un cycle entre deux conditions | Aucun lien créé, sans message d'erreur ni plantage | ➖ |
 | LINK-04 | V0.5 | Une entrée, un lien | Relier deux nœuds différents à la même entrée | Le nouveau lien remplace l'ancien | ➖ |
 | LINK-05 | V0.5 | Suppression | Cliquer un lien puis Suppr ; supprimer un nœud avec sa corbeille | Le lien disparaît ; le nœud part avec ses liens | ➖ |
@@ -76,9 +76,24 @@ Prérequis : table `Automation` créée, graphe de base activé.
 | ID | Depuis | Scénario | Étapes | Attendu | Résultat |
 |---|---|---|---|---|---|
 | DRY-01 | V0.5 | Aucun effet | Cliquer Tester avec le graphe de base | Aucune ligne écrite dans Archive ; chaque nœud affiche « Passé » ou « Action prévue » | ➖ |
-| DRY-02 | V0.5 | Branche bloquée | Mettre une valeur de condition différente de celle de la première ligne, Tester | La condition affiche « Bloqué par la condition », l'action n'affiche rien | ➖ |
+| DRY-02 | V0.5 | Branche bloquée (condition sans lien « Sinon ») | Mettre une valeur de condition différente de celle de la première ligne, Tester | La condition affiche « Bloqué par la condition », l'action n'affiche rien | ➖ |
 | DRY-03 | V0.5 | Sans ligne | Filtrer la vue pour qu'elle soit vide, Tester | Message « Dry-run impossible : aucune ligne dans la vue. » | ➖ |
 | DRY-04 | V0.5 | Workflow inactif | Désactiver, Tester | Le test fonctionne quand même | ➖ |
+
+## Conditions à plusieurs vérifications et branche « Sinon »
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| CHK-01 | V0.7 | Ajouter et retirer | Dans une condition, cliquer « Ajouter une vérification », puis la corbeille d'une vérification | Un second bloc Colonne / Opérateur / Valeur apparaît ; la liste « Combiner » est grisée tant qu'il n'y a qu'une vérification ; la corbeille n'apparaît que s'il y en a plusieurs | ➖ |
+| CHK-02 | V0.7 | ET | Statut = Clos ET Montant > 100, « Combiner : Toutes (ET) ». Passer un contact à Clos avec un montant de 50, puis un autre de 500 | Seul le contact à 500 déclenche l'action | ➖ |
+| CHK-03 | V0.7 | OU | Même condition, « Combiner : Une au moins (OU) ». Passer à Ouvert un contact à 500, puis à Clos un contact à 5 | Les deux déclenchent l'action | ➖ |
+| CHK-04 | V0.7 | Vérification incomplète | Ajouter une vérification sans colonne, cliquer Activer | Refus, avec le nom de la condition dans le journal | ➖ |
+| BRA-01 | V0.7 | Deux sorties | Regarder une condition | Deux sorties étiquetées « Oui » et « Sinon » ; le lien « Sinon » est en pointillés | ➖ |
+| BRA-02 | V0.7 | Branche « Sinon » exécutée | Relier « Sinon » à une seconde action (Motif = autre), passer un Statut à « En cours » | L'action du « Sinon » écrit dans Archive, pas celle du « Oui » ; une seule ligne de journal | ➖ |
+| BRA-03 | V0.7 | Test à blanc | Cliquer Tester quand la condition est fausse | La condition affiche « Faux : branche « sinon » », l'action du « Sinon » affiche « Action prévue » | ➖ |
+| BRA-04 | V0.7 | Sans « Sinon » | Retirer le lien « Sinon », provoquer une condition fausse | Rien n'est écrit (comme avant la 0.7) | ➖ |
+| BRA-05 | V0.7 | Clavier | Tab jusqu'à la sortie « Sinon », Entrée, Tab jusqu'à l'entrée de l'action, Entrée | Le lien « Sinon » est créé | ➖ |
+| MIG-01 | V0.7 | Ancien graphe | Ouvrir un document enregistré avec la 0.6 (table `Automation` déjà remplie) | Le graphe est retrouvé : chaque condition devient une vérification unique, l'état actif est conservé ; après une modification, la ligne `Workflow` est réécrite au nouveau format (Version = 3) | ➖ |
 
 ## Activation et sauvegarde
 
