@@ -76,6 +76,13 @@
       if (node.type === 'condition' && node.config.checks.some((check) => !check.column)) issues.push({ key: 'issue.conditionColumn', node: node.id });
       if (node.type === 'action' && !node.config.column) issues.push({ key: 'issue.actionColumn', node: node.id });
     }
+    const names = new Set();
+    for (const node of graph.nodes.filter((candidate) => candidate.type === 'transform')) {
+      const { name, op, a, b } = node.config;
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || names.has(name)) issues.push({ key: 'issue.transformName', node: node.id });
+      names.add(name);
+      if (String(a).trim() === '' || (!Types.UNARY.includes(op) && String(b).trim() === '')) issues.push({ key: 'issue.transformOperand', node: node.id });
+    }
     if (triggers.length && !graph.nodes.some((node) => node.type === 'action' && triggers.some((t) => reaches(graph, t.id, node.id)))) {
       if (graph.nodes.some((node) => node.type === 'action')) issues.push({ key: 'issue.noPath' });
     }
@@ -114,6 +121,7 @@
     const describe = (node) => {
       const c = node.config;
       if (node.type === 'trigger') return `${t('node.trigger')} : ${t('trigger.' + c.action)}${c.column ? ' (' + c.column + ')' : ''}`;
+      if (node.type === 'transform') return `${t('node.transform')} : {${c.name}} = ${Types.UNARY.includes(c.op) ? `${t('tf.' + c.op)} (${c.a})` : `${c.a} ${t('tf.' + c.op)} ${c.b}`}`;
       if (node.type === 'condition') {
         const checks = c.checks.map((check) => `${check.column || '—'} ${t('op.' + check.operator)}${Types.needsValue(check) && check.value !== '' ? ' ' + check.value : ''}`);
         return `${t('node.condition')} : ${checks.join(` ${t(c.join === 'or' ? 'sum.or' : 'sum.and')} `)}`;

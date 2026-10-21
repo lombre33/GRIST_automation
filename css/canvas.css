@@ -19,7 +19,7 @@
 .node-head:active { cursor: grabbing; }
 .node-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node-trigger .node-head { background: var(--accent-soft); color: var(--accent-ink); }
-.node-condition .node-head { background: var(--surface-sunken); color: var(--text); }
+.node-condition .node-head, .node-transform .node-head { background: var(--surface-sunken); color: var(--text); }
 .node-action .node-head { background: var(--accent-solid); color: #fff; }
 .node-action .node-head button { color: #fff; border-color: transparent; background: transparent; }
 .node-delete { width: 24px; min-height: 24px; border-color: transparent; background: transparent; }

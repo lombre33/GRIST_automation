@@ -78,6 +78,52 @@
     return op(event.record[cond.column], parseValue(cond.value));
   }
 
+  // Valeurs {Colonne} d'un texte : colonnes de la ligne ou variables des nœuds Transformation (qui priment). {{ et }} donnent des accolades littérales.
+  // Un texte réduit à une seule valeur garde son type d'origine ; sinon le texte assemblé passe par parseValue, comme une valeur saisie.
+  const display = (value) => (value === null || value === undefined ? '' : Array.isArray(value) ? value.join(', ') : String(value));
+
+  function resolveTemplate(text, event, vars) {
+    const source = display(text);
+    const lookup = (name) => {
+      if (Object.prototype.hasOwnProperty.call(vars, name)) return vars[name];
+      if (!event.record) throw new Error('Valeur {' + name + '} indisponible : pas de contenu de ligne');
+      if (!Object.prototype.hasOwnProperty.call(event.record, name)) throw new Error('Valeur inconnue : {' + name + '}');
+      return event.record[name];
+    };
+    const whole = /^\{([^{}]+)\}$/.exec(source);
+    if (whole) return lookup(whole[1]);
+    return parseValue(source.replace(/\{\{|\}\}|\{([^{}]+)\}/g, (match, name) => (match === '{{' ? '{' : match === '}}' ? '}' : display(lookup(name)))));
+  }
+
+  function toNumber(value) {
+    const number = typeof value === 'number' ? value : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
+    if (Number.isNaN(number)) throw new Error('Valeur non numérique : « ' + display(value) + ' »');
+    return number;
+  }
+
+  const round = (number) => Number(number.toFixed(10));   // 0.1 + 0.2 donne 0.3
+
+  const TRANSFORMS = {
+    concat: (a, b) => display(a) + display(b),
+    add: (a, b) => round(toNumber(a) + toNumber(b)),
+    sub: (a, b) => round(toNumber(a) - toNumber(b)),
+    mul: (a, b) => round(toNumber(a) * toNumber(b)),
+    div: (a, b) => {
+      if (toNumber(b) === 0) throw new Error('Division par zéro');
+      return round(toNumber(a) / toNumber(b));
+    },
+    upper: (a) => display(a).toUpperCase(),
+    lower: (a) => display(a).toLowerCase(),
+    trim: (a) => display(a).trim(),
+  };
+
+  // Valeur calculée par un nœud Transformation.
+  function applyTransform(config, event, vars) {
+    const op = TRANSFORMS[config.op];
+    if (!op) throw new Error('Transformation inconnue : ' + config.op);
+    return op(resolveTemplate(config.a, event, vars), resolveTemplate(config.b, event, vars));
+  }
+
   // Toutes les vérifications d'un nœud condition, reliées par ET (défaut) ou OU.
   function evalChecks(config, event) {
     const checks = config && config.checks;
@@ -87,9 +133,9 @@
   }
 
   // Écriture prévue par un nœud action, sans l'exécuter (utilisée par le dry-run).
-  function planAction(config, event, currentTable) {
+  function planAction(config, event, currentTable, vars) {
     if (!config.column) throw new Error('Action incomplète : aucune colonne');
-    const values = { [config.column]: parseValue(config.value) };
+    const values = { [config.column]: resolveTemplate(config.value, event, vars || {}) };
     const table = config.table || currentTable;
     if (config.type === 'UpdateRecord') return { type: 'UpdateRecord', table, rowId: event.rowId, values };
     if (config.type === 'AddRecord') return { type: 'AddRecord', table, values };
@@ -105,7 +151,7 @@
   // Parcourt le graphe depuis un déclencheur. Une condition suit sa sortie « oui » quand elle est vraie, sa sortie « sinon » sinon.
   // trace : état de chaque nœud atteint ('passed', 'else', 'blocked', 'action'), pour l'affichage du dry-run.
   // 'blocked' : condition fausse sans lien « sinon » ; 'else' : condition fausse, la branche « sinon » est suivie.
-  function walk(graph, node, event, currentTable, trace, plan, branch) {
+  function walk(graph, node, event, currentTable, trace, plan, branch, vars) {
     for (const edge of graph.edges) {
       if (edge.from !== node.id || (edge.branch || 'then') !== (branch || 'then')) continue;
       const next = graph.nodes.find((candidate) => candidate.id === edge.to);
@@ -113,9 +159,12 @@
         const passed = evalChecks(next.config, event);
         const hasElse = graph.edges.some((other) => other.from === next.id && other.branch === 'else');
         trace[next.id] = passed ? 'passed' : (hasElse ? 'else' : 'blocked');
-        walk(graph, next, event, currentTable, trace, plan, passed ? 'then' : 'else');
+        walk(graph, next, event, currentTable, trace, plan, passed ? 'then' : 'else', vars);
+      } else if (next.type === 'transform') {
+        trace[next.id] = 'passed';
+        walk(graph, next, event, currentTable, trace, plan, 'then', Object.assign({}, vars, { [next.config.name]: applyTransform(next.config, event, vars) }));
       } else if (next.type === 'action') {
-        plan.push(planAction(next.config, event, currentTable));
+        plan.push(planAction(next.config, event, currentTable, vars));
         trace[next.id] = 'action';
       } else {
         throw new Error('Nœud inattendu : ' + next.type);
@@ -135,7 +184,7 @@
       if (!triggers.length) return result;
       for (const trigger of triggers) {
         result.trace[trigger.id] = 'passed';
-        walk(graph, trigger, event, options.currentTable, result.trace, result.effects);
+        walk(graph, trigger, event, options.currentTable, result.trace, result.effects, 'then', {});
       }
       if (!result.effects.length) {
         result.status = 'condition-false';
@@ -153,7 +202,7 @@
     return result;
   }
 
-  const api = { diff, matchesTrigger, evalCondition, evalChecks, planAction, runWorkflow, parseValue, OPERATORS };
+  const api = { diff, matchesTrigger, evalCondition, evalChecks, resolveTemplate, applyTransform, planAction, runWorkflow, parseValue, OPERATORS };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

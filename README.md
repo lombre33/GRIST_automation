@@ -10,6 +10,7 @@ Vue nodale sur fond uni : on ajoute des nœuds (clic droit sur le fond, ou « Aj
 
 - **Déclencheur** : ligne créée, modifiée ou supprimée (colonne surveillée optionnelle).
 - **Condition** : une ou plusieurs vérifications (colonne, opérateur, valeur) reliées par ET ou OU, avec une sortie « Oui » et une sortie « Sinon » ; plusieurs conditions en série valent un ET.
+- **Transformation** : calcule une valeur (concaténation, + − × ÷, majuscules, minuscules, sans espaces) et la rend disponible sous `{nom}` ; les valeurs des actions acceptent aussi `{Colonne}`.
 - **Action** : mettre à jour la ligne ou ajouter une ligne, dans la table courante ou une autre.
 - « Tester » simule sur la première ligne de la vue sans rien écrire et affiche l'état de chaque nœud ; « Activer » refuse tant que le graphe est incomplet.
 

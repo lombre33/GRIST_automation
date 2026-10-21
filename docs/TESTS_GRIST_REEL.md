@@ -95,6 +95,24 @@ Prérequis : table `Automation` créée, graphe de base activé.
 | BRA-05 | V0.7 | Clavier | Tab jusqu'à la sortie « Sinon », Entrée, Tab jusqu'à l'entrée de l'action, Entrée | Le lien « Sinon » est créé | ➖ |
 | MIG-01 | V0.7 | Ancien graphe | Ouvrir un document enregistré avec la 0.6 (table `Automation` déjà remplie) | Le graphe est retrouvé : chaque condition devient une vérification unique, l'état actif est conservé ; après une modification, la ligne `Workflow` est réécrite au nouveau format (Version = 3) | ➖ |
 
+## Transformation et valeurs {Colonne}
+
+Les valeurs de l'action et des transformations acceptent `{NomDeColonne}` (valeur de la ligne qui déclenche) et `{nom}` (résultat d'un nœud Transformation). `{{` et `}}` donnent des accolades littérales.
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| TRF-01 | V0.8 | Nœud Transformation | Ajouter un nœud Transformation entre le déclencheur et l'action | Champs Nom, Opération, Valeur A, Valeur B ; une entrée et une sortie ; « Valeur B » grisée (pas masquée) pour Majuscules, Minuscules, Sans espaces | ➖ |
+| TRF-02 | V0.8 | Concaténation | Transformation « titre » = `{Nom}` accolé à ` - {Statut}` ; action Archive.Motif = `Fiche {titre}`. Passer le Statut de « Ada » à Clos | Archive reçoit « Fiche Ada - Clos » | ➖ |
+| TRF-03 | V0.8 | Calcul | Transformation `{Montant}` × 2 ; action Archive.Source = `{total}` (nom « total ») | Montant 21 écrit 42 ; 0,1 + 0,2 donne 0,3 | ➖ |
+| TRF-04 | V0.8 | Colonne numérique | Même calcul vers une colonne numérique | La valeur reste un nombre dans Grist (pas du texte) | ➖ |
+| TRF-05 | V0.8 | Erreurs lisibles | Division par 0 ; `{ColonneInconnue}` ; calcul sur une cellule vide ou textuelle | Message clair dans le journal (« Division par zéro », « Valeur inconnue : {…} », « Valeur non numérique ») ; rien n'est écrit | ➖ |
+| TRF-06 | V0.8 | Chaîne | Deux transformations à la suite, la seconde utilisant le nom de la première | La seconde voit le résultat de la première | ➖ |
+| TRF-07 | V0.8 | Validation | Activer avec une transformation sans valeur A, ou un nom invalide (`1abc`) ou en double | Refus avec la raison dans le journal | ➖ |
+| TRF-08 | V0.8 | Valeurs piégées | Concaténer `=1+1` et `<script>alert(1)</script>` | Écrits tels quels comme texte, rien ne s'exécute | ➖ |
+| TRF-09 | V0.8 | Test à blanc | Cliquer Tester | La transformation affiche « Passé » ; la ligne d'effets du journal montre la valeur déjà calculée | ➖ |
+| TRF-10 | V0.8 | Suppression | Déclencheur « supprimée » avec `{Nom}` dans l'action | Erreur claire « pas de contenu de ligne » (limite connue, CDC §4.2) | ➖ |
+| TRF-11 | V0.8 | Accolades littérales | Action Archive.Motif = `{{Nom}}` | Écrit `{Nom}` | ➖ |
+
 ## Activation et sauvegarde
 
 | ID | Depuis | Scénario | Étapes | Attendu | Résultat |

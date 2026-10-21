@@ -4,6 +4,8 @@
 (function (root) {
   'use strict';
 
+  const UNARY = ['upper', 'lower', 'trim'];
+
   const TYPES = {
     trigger: {
       titleKey: 'node.trigger',
@@ -26,6 +28,19 @@
         { key: 'join', labelKey: 'cond.join', kind: 'choice', choices: [['and', 'join.and'], ['or', 'join.or']], disabledWhen: (config) => config.checks.length < 2 },
       ],
     },
+    // Une transformation calcule une valeur à partir de la ligne (ou d'une transformation précédente) et la met à disposition des nœuds suivants sous {nom}.
+    transform: {
+      titleKey: 'node.transform',
+      inputs: 1,
+      branches: ['then'],
+      defaults: { name: 'resultat', op: 'concat', a: '', b: '' },
+      fields: [
+        { key: 'name', labelKey: 'tf.name', kind: 'text' },
+        { key: 'op', labelKey: 'tf.op', kind: 'choice', choices: [['concat', 'tf.concat'], ['add', 'tf.add'], ['sub', 'tf.sub'], ['mul', 'tf.mul'], ['div', 'tf.div'], ['upper', 'tf.upper'], ['lower', 'tf.lower'], ['trim', 'tf.trim']] },
+        { key: 'a', labelKey: 'tf.a', kind: 'text' },
+        { key: 'b', labelKey: 'tf.b', kind: 'text', disabledWhen: (config) => UNARY.includes(config.op) },
+      ],
+    },
     action: {
       titleKey: 'node.action',
       inputs: 1,
@@ -44,7 +59,7 @@
   const OPERATORS = [['eq', 'op.eq'], ['neq', 'op.neq'], ['gt', 'op.gt'], ['lt', 'op.lt'], ['contains', 'op.contains'], ['empty', 'op.empty'], ['notEmpty', 'op.notEmpty']];
   const needsValue = (check) => check.operator !== 'empty' && check.operator !== 'notEmpty';
 
-  const api = { TYPES, OPERATORS, needsValue, ORDER: ['trigger', 'condition', 'action'] };
+  const api = { TYPES, OPERATORS, UNARY, needsValue, ORDER: ['trigger', 'condition', 'transform', 'action'] };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NodeTypes = api;
 })(typeof window !== 'undefined' ? window : globalThis);

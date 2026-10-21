@@ -156,3 +156,39 @@ test('GRAPH-15 lecture : condition sans vérification ou lien « sinon » sur un
   text.nodes[0].config.checks = [];
   assert.strictEqual(G.parse(JSON.stringify(text)), null);
 });
+
+test('GRAPH-16 validation d\'une transformation : nom valide et unique, valeurs présentes', () => {
+  const g = G.create();
+  const t = G.addNode(g, 'trigger', 0, 0);
+  const f = G.addNode(g, 'transform', 0, 0);
+  const a = G.addNode(g, 'action', 0, 0);
+  G.connect(g, t.id, f.id);
+  G.connect(g, f.id, a.id);
+  a.config.column = 'Motif';
+  const keys = () => G.validate(g).map((i) => i.key);
+  assert.deepStrictEqual(keys(), ['issue.transformOperand'], 'valeur A manquante');
+  f.config.a = '{Nom}';
+  assert.deepStrictEqual(keys(), ['issue.transformOperand'], 'valeur B manquante pour une opération à deux valeurs');
+  f.config.op = 'upper';
+  assert.deepStrictEqual(keys(), []);
+  f.config.name = '1abc';
+  assert.deepStrictEqual(keys(), ['issue.transformName']);
+  f.config.name = 'ok';
+  const second = G.addNode(g, 'transform', 0, 0);
+  second.config.name = 'ok';
+  second.config.a = 'x';
+  second.config.op = 'trim';
+  G.connect(g, f.id, second.id);
+  assert.ok(keys().includes('issue.transformName'), 'nom en double');
+});
+
+test('GRAPH-17 une transformation se relie comme un maillon (une entrée, une sortie) et se relit', () => {
+  const g = G.create();
+  const t = G.addNode(g, 'trigger', 0, 0);
+  const f = G.addNode(g, 'transform', 0, 0);
+  const a = G.addNode(g, 'action', 0, 0);
+  assert.strictEqual(G.connect(g, t.id, f.id).ok, true);
+  assert.strictEqual(G.connect(g, f.id, a.id).ok, true);
+  assert.strictEqual(G.connect(g, f.id, a.id, 'else').ok, false, 'pas de sortie « sinon »');
+  assert.deepStrictEqual(G.parse(JSON.stringify(g)).nodes[1].config, { name: 'resultat', op: 'concat', a: '', b: '' });
+});

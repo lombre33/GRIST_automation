@@ -132,11 +132,12 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 | CTR-01 à 03 | contrastes des jetons, clair et sombre | `tests/contrast.test.js` |
 | HYG-01 à 09 | aucun réseau, police, image ou style externe ; pas d'`innerHTML` ; pas d'emoji ; politique de sécurité ; pas de couleur en dur ; pas de compte personnel ; stockage limité | `tests/hygiene.test.js` |
 | STORE-01 à 10 | table `Automation` du document : colonnes, création avec repli sans formule, graphe par table (upsert), journal, cohabitation des deux types de lignes | `tests/store.test.js` |
+| TRF-01 à 06, VAL-04 à 06, DRY-05 | nœud Transformation (concaténation, calculs, formatage, chaîne, erreurs, code non exécuté), valeurs `{Colonne}` | `tests/engine.test.js` |
 | COND-09 à 11, ELSE-01 à 04 | vérifications multiples (ET, OU, erreur), branche « sinon » (vrai, faux, sans lien, chaînes de conditions) | `tests/engine.test.js` |
-| GRAPH-11 à 15 | vérifications non partagées, deux sorties, lien « sinon » réservé à la condition, migration v2 vers v3, lecture | `tests/graph.test.js` |
+| GRAPH-11 à 17 | vérifications non partagées, deux sorties, lien « sinon » réservé à la condition, migration v2 vers v3, lecture | `tests/graph.test.js` |
 | GRD-01 à 10 (echo) | écho des écritures du widget reconnu et consommé, modification mixte, expiration, filet « trop d'exécutions » | `tests/echo.test.js` |
 | MUL-01 à 09 | exécutant unique : prise, renouvellement, relais après délai, libération, prises simultanées, décalage d'horloge, un verrou par table | `tests/executor.test.js` |
-| E2E-01 à 18 | dans Chromium avec une API Grist simulée : construction du graphe (menu d'ajout, liens au clic et au glisser), écriture, dry-run avec état des nœuds, thème et langue, fenêtres et clavier, 700×400, hors Grist, activation refusée, suppression, déplacement et zoom, sauvegarde et rechargement, accord de création des tables, refus, relecture du graphe et du journal | `tests/e2e/smoke.mjs` (`npm run test:e2e`) |
+| E2E-01 à 20 | dans Chromium avec une API Grist simulée : construction du graphe (menu d'ajout, liens au clic et au glisser), écriture, dry-run avec état des nœuds, thème et langue, fenêtres et clavier, 700×400, hors Grist, activation refusée, suppression, déplacement et zoom, sauvegarde et rechargement, accord de création des tables, refus, relecture du graphe et du journal | `tests/e2e/smoke.mjs` (`npm run test:e2e`) |
 
 Les E2E ne remplacent pas les scénarios IT du Grist réel (`docs/GRIST_TEST_DOC.md`).
 

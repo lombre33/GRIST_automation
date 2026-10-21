@@ -255,3 +255,106 @@ test('ELSE-04 conditions en chaîne : chaque condition a son propre « sinon »'
   assert.deepStrictEqual(await apply({ Statut: 'Clos', Montant: 500, Nom: '' }), ['oui', 'z'], 'c vrai, c2 faux : « oui » de c et « sinon » de c2');
   assert.deepStrictEqual(await apply({ Statut: 'Ouvert', Montant: 500, Nom: '' }), ['non'], 'c faux : seul son « sinon », c2 n\'est pas atteinte');
 });
+
+// Graphe t -> transform(s) -> action, pour les tests de transformation et de valeurs {Colonne}.
+function withTransforms(transforms, actionValue) {
+  const nodes = [{ id: 't', type: 'trigger', config: { action: 'update', column: '' } }];
+  const edges = [];
+  let last = 't';
+  transforms.forEach((config, i) => {
+    nodes.push({ id: 'f' + i, type: 'transform', config });
+    edges.push({ from: last, to: 'f' + i });
+    last = 'f' + i;
+  });
+  nodes.push({ id: 'a', type: 'action', config: { type: 'AddRecord', table: 'Archive', column: 'Motif', value: actionValue } });
+  edges.push({ from: last, to: 'a' });
+  return { version: 3, active: true, nodes, edges };
+}
+const tf = (op, a, b, name) => ({ name: name || 'r', op, a, b: b === undefined ? '' : b });
+const written = async (graph, record) => {
+  const api = createFakeApi();
+  const result = await E.runWorkflow(graph, event(record), api, opts);
+  return { result, value: api.applied.length ? api.applied[0][3].Motif : undefined };
+};
+
+test('TRF-01 concaténation de colonnes et de texte, valeurs vides et nombres', async () => {
+  const g = withTransforms([tf('concat', '{Nom} - ', '{Statut}')], '{r}');
+  assert.strictEqual((await written(g, { Nom: 'Ada', Statut: 'Clos' })).value, 'Ada - Clos');
+  assert.strictEqual((await written(g, { Nom: 'Ada', Statut: null })).value, 'Ada - ');
+  assert.strictEqual((await written(g, { Nom: 12, Statut: 3 })).value, '12 - 3');
+});
+
+test('TRF-02 calcul : + − × ÷, flottants arrondis, division par zéro', async () => {
+  const calc = async (op, a, b) => (await written(withTransforms([tf(op, a, b)], '{r}'), { Montant: 10 })).value;
+  assert.strictEqual(await calc('add', '{Montant}', '5'), 15);
+  assert.strictEqual(await calc('sub', '{Montant}', '2.5'), 7.5);
+  assert.strictEqual(await calc('mul', '{Montant}', '3'), 30);
+  assert.strictEqual(await calc('div', '{Montant}', '4'), 2.5);
+  assert.strictEqual(await calc('add', '0.1', '0.2'), 0.3);
+  const zero = await written(withTransforms([tf('div', '{Montant}', '0')], '{r}'), { Montant: 10 });
+  assert.strictEqual(zero.result.status, 'error');
+  assert.match(zero.result.error, /Division par zéro/);
+  assert.strictEqual(zero.value, undefined, 'rien n\'est écrit');
+});
+
+test('TRF-03 formatage : majuscules, minuscules, espaces', async () => {
+  const fmt = async (op, a) => (await written(withTransforms([tf(op, a)], '{r}'), { Nom: '  Ada Lovelace ' })).value;
+  assert.strictEqual(await fmt('upper', '{Nom}'), '  ADA LOVELACE ');
+  assert.strictEqual(await fmt('lower', '{Nom}'), '  ada lovelace ');
+  assert.strictEqual(await fmt('trim', '{Nom}'), 'Ada Lovelace');
+});
+
+test('TRF-04 transformations en chaîne : la seconde utilise le résultat de la première', async () => {
+  const g = withTransforms([tf('trim', '{Nom}', '', 'propre'), tf('upper', '{propre}', '', 'cri')], 'Bonjour {cri} !');
+  assert.strictEqual((await written(g, { Nom: ' ada ' })).value, 'Bonjour ADA !');
+});
+
+test('TRF-05 valeur manquante ou non numérique : erreur explicite, aucune écriture', async () => {
+  const unknown = await written(withTransforms([tf('concat', '{Inconnue}', 'x')], '{r}'), { Nom: 'a' });
+  assert.strictEqual(unknown.result.status, 'error');
+  assert.match(unknown.result.error, /Valeur inconnue : \{Inconnue\}/);
+  const text = await written(withTransforms([tf('add', '{Nom}', '1')], '{r}'), { Nom: 'abc' });
+  assert.match(text.result.error, /non numérique/);
+  const empty = await written(withTransforms([tf('add', '{Nom}', '1')], '{r}'), { Nom: '' });
+  assert.match(empty.result.error, /non numérique/, 'pas de coercition silencieuse d\'une cellule vide');
+  assert.strictEqual(unknown.value, undefined);
+});
+
+test('TRF-06 aucune exécution de code : une formule en texte reste un texte', async () => {
+  const g = withTransforms([tf('concat', '=1+1', '{Nom}')], '{r}');
+  assert.strictEqual((await written(g, { Nom: '<script>alert(1)</script>' })).value, '=1+1<script>alert(1)</script>');
+  assert.ok(!/\beval\b|new Function/.test(require('fs').readFileSync(require('path').join(__dirname, '../js/engine.js'), 'utf8').replace(/\/\/.*$/gm, '')));
+});
+
+test('VAL-04 valeurs {Colonne} dans l\'action : type conservé pour une valeur seule, texte sinon, accolades échappées', async () => {
+  const value = async (template, record) => (await written(withTransforms([], template), record)).value;
+  assert.strictEqual(await value('{Montant}', { Montant: 42 }), 42);
+  assert.strictEqual(await value('{Montant} €', { Montant: 42 }), '42 €');
+  assert.strictEqual(await value('{{Montant}}', { Montant: 42 }), '{Montant}');
+  assert.deepStrictEqual(await value('{Tags}', { Tags: ['a', 'b'] }), ['a', 'b'], 'liste conservée telle quelle');
+  assert.strictEqual(await value('x {Tags}', { Tags: ['a', 'b'] }), 'x a, b');
+  assert.strictEqual(await value('7', {}), 7, 'sans accolades : comportement inchangé');
+});
+
+test('VAL-05 variable de transformation prioritaire sur une colonne du même nom', async () => {
+  const g = withTransforms([tf('upper', '{Nom}', '', 'Nom')], '{Nom}');
+  assert.strictEqual((await written(g, { Nom: 'ada' })).value, 'ADA');
+});
+
+test('VAL-06 suppression : {Colonne} impossible sans contenu de ligne, erreur claire', async () => {
+  const api = createFakeApi();
+  const g = withTransforms([], '{Nom}');
+  g.nodes[0].config = { action: 'delete', column: '' };
+  const result = await E.runWorkflow(g, { type: 'delete', rowId: 3 }, api, opts);
+  assert.strictEqual(result.status, 'error');
+  assert.match(result.error, /pas de contenu de ligne/);
+});
+
+test('DRY-05 le dry-run montre les valeurs déjà calculées, état « Passé » pour la transformation', async () => {
+  const g = withTransforms([tf('concat', '{Nom}', '!')], '{r}');
+  const api = createFakeApi();
+  const result = await E.runWorkflow(g, event({ Nom: 'Ada' }), api, { ...opts, dryRun: true });
+  assert.deepStrictEqual(result.effects[0].values, { Motif: 'Ada!' });
+  assert.strictEqual(result.trace.f0, 'passed');
+  assert.deepStrictEqual(api.applied, []);
+});

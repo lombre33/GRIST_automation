@@ -348,6 +348,48 @@ await scenario('E2E-18 condition à deux vérifications (OU) et branche « sinon
   assert.match(await page.locator('.node-condition .node-state').innerText(), /sinon/);
 });
 
+await scenario('E2E-19 nœud Transformation : concaténation utilisée dans l\'action avec {nom}', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await addNode(page, 'Transformation', 330, 120);
+  await addNode(page, 'Action', 620, 120);
+  await waitSchema(page);
+  await pick(page, 'trigger-1-column', 'statut');
+  assert.equal(await page.locator('#transform-1-b').isDisabled(), false);
+  await page.fill('#transform-1-name', 'titre');
+  await page.fill('#transform-1-a', '{Nom} / ');
+  await page.fill('#transform-1-b', '{Statut}');
+  await pick(page, 'transform-1-op', 'majuscules');
+  assert.equal(await page.locator('#transform-1-b').isDisabled(), true, 'valeur B grisée pour une opération à une valeur');
+  await pick(page, 'transform-1-op', 'accolé');
+  await pick(page, 'action-1-type', 'ajouter');
+  await pick(page, 'action-1-table', 'archive');
+  await pick(page, 'action-1-column', 'motif');
+  await page.fill('#action-1-value', 'Fiche {titre}');
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-transform .pin-in').click();
+  await page.locator('.node-transform .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+  await page.click('#toggle-active');
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'Ada', Statut: 'Nouveau' }]));
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'Ada', Statut: 'Clos' }]));
+  await page.waitForFunction(() => window.__stub.applied.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['AddRecord', 'Archive', null, { Motif: 'Fiche Ada / Clos' }]);
+});
+
+await scenario('E2E-20 transformation incomplète : activation refusée avec la raison', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await addNode(page, 'Transformation', 330, 120);
+  await addNode(page, 'Action', 620, 120);
+  await waitSchema(page);
+  await pick(page, 'action-1-column', 'motif');
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-transform .pin-in').click();
+  await page.locator('.node-transform .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+  await page.click('#toggle-active');
+  assert.match(await page.locator('#log-list').innerText(), /il manque une valeur/);
+});
+
 await browser.close();
 server.close();
 process.exit(failures ? 1 : 0);
