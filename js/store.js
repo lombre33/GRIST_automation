@@ -72,12 +72,13 @@
     }]]);
   }
 
-  // Les `count` dernières entrées de la table, de la plus ancienne à la plus récente.
-  async function recentLogs(api, tableId, count) {
-    return rows(await api.fetchTable(TABLE))
-      .filter((r) => r.Type === LOG && r.Table === tableId)
-      .sort((a, b) => a.Date - b.Date)
-      .slice(-count);
+  // Une page du journal d'une table de vue, de la plus récente à la plus ancienne. beforeId : ne prend que les lignes plus anciennes que celle-ci
+  // (curseur stable même si d'autres exécutions s'ajoutent entre deux pages). more : il reste des entrées plus anciennes.
+  async function logsPage(api, tableId, count, beforeId) {
+    const all = rows(await api.fetchTable(TABLE))
+      .filter((r) => r.Type === LOG && r.Table === tableId && (beforeId === null || beforeId === undefined || r.id < beforeId))
+      .sort((a, b) => b.id - a.id);
+    return { rows: all.slice(0, count), more: all.length > count };
   }
 
   // Verrou d'exécution : une ligne par table de vue. Plusieurs lignes possibles si deux onglets l'ont créée en même temps : la plus ancienne fait foi.
@@ -91,7 +92,7 @@
     await api.applyUserActions([rowId ? ['UpdateRecord', TABLE, rowId, values] : ['AddRecord', TABLE, null, values]]);
   }
 
-  const api = { TABLE, WORKFLOW, LOG, LOCK, readLock, writeLock, COLUMNS, isOwnTable, missingTables, ensureTables, loadGraph, saveGraph, appendLog, recentLogs };
+  const api = { TABLE, WORKFLOW, LOG, LOCK, readLock, writeLock, COLUMNS, isOwnTable, missingTables, ensureTables, loadGraph, saveGraph, appendLog, logsPage };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Store = api;
 })(typeof window !== 'undefined' ? window : globalThis);

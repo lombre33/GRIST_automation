@@ -10,6 +10,10 @@ function createTable(name, columns) { docTables[name] = { columns: columns.map((
 if (!window.__noTables && !window.__foreignLock) {
   createTable('Automation', ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
 }
+// window.__preloadLogs : nombre d'anciennes exécutions déjà dans le journal.
+if (window.__preloadLogs && docTables.Automation) {
+  for (let i = 1; i <= window.__preloadLogs; i += 1) docTables.Automation.rows.push({ id: docTables.Automation.nextId++, Type: 'Log', Table: 'Contacts', Date: 1700000000 + i, Evenement: 'update', Ligne: i, Resultat: 'success', Detail: '[]', Auteur: 'moi@exemple.fr' });
+}
 // window.__foreignLock : un autre onglet exécute déjà (verrou à jour, renouvelé chaque seconde).
 if (window.__foreignLock) {
   createTable('Automation', ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
@@ -23,6 +27,7 @@ window.grist = {
   ready() {},
   onOptions(cb) { cb(window.__stub.options); },
   setOption(key, value) { window.__stub.options[key] = value; return Promise.resolve(); },
+  onRecord(cb) { window.__stub.pushRecord = (record) => cb(record); },
   onRecords(cb) { window.__stub.pushRecords = (records) => cb(records); },
   selectedTable: { getTableId: () => Promise.resolve('Contacts') },
   docApi: {

@@ -87,28 +87,30 @@ test('STORE-07 configuration illisible dans la table : ignorée sans erreur', as
   assert.strictEqual(await S.loadGraph(doc, 'Contacts'), null);
 });
 
-test('STORE-08 journal : une ligne par exécution, les dernières entrées de la table', async () => {
+test('STORE-08 journal : une ligne par exécution, pages de la plus récente à la plus ancienne', async () => {
   const doc = createFakeDoc();
   await S.ensureTables(doc);
   for (let i = 1; i <= 5; i += 1) {
     await S.appendLog(doc, { date: i * 1000, table: i === 4 ? 'Services' : 'Contacts', event: 'update', row: i, result: 'success', detail: 'd' + i });
   }
-  const last = await S.recentLogs(doc, 'Contacts', 3);
-  assert.deepStrictEqual(last.map((r) => r.Ligne), [2, 3, 5]);
-  assert.strictEqual(last[0].Date, 2);
-  assert.ok(last.every((r) => r.Type === S.LOG));
+  const first = await S.logsPage(doc, 'Contacts', 3);
+  assert.deepStrictEqual(first.rows.map((r) => r.Ligne), [5, 3, 2]);
+  assert.strictEqual(first.rows[2].Date, 2);
+  assert.strictEqual(first.more, true);
+  assert.ok(first.rows.every((r) => r.Type === S.LOG));
+  const second = await S.logsPage(doc, 'Contacts', 3, first.rows[2].id);
+  assert.deepStrictEqual(second.rows.map((r) => r.Ligne), [1]);
+  assert.strictEqual(second.more, false);
 });
 
-test('STORE-11 workflows et journal cohabitent : chacun ne lit que ses lignes', async () => {
+test('STORE-12 une exécution ajoutée entre deux pages ne décale pas la page suivante (curseur)', async () => {
   const doc = createFakeDoc();
   await S.ensureTables(doc);
-  const g = flow();
-  await S.appendLog(doc, { date: 1000, table: 'Contacts', event: 'update', row: 1, result: 'success' });
-  await S.saveGraph(doc, g, 'Contacts', 'r');
-  await S.appendLog(doc, { date: 2000, table: 'Contacts', event: 'update', row: 2, result: 'error', detail: 'x' });
-  assert.deepStrictEqual(await S.loadGraph(doc, 'Contacts'), g);
-  assert.strictEqual((await S.recentLogs(doc, 'Contacts', 10)).length, 2);
-  assert.strictEqual(doc.tables.get(S.TABLE).rows.length, 3);
+  for (let i = 1; i <= 4; i += 1) await S.appendLog(doc, { date: i, table: 'Contacts', event: 'update', row: i, result: 'success' });
+  const first = await S.logsPage(doc, 'Contacts', 2);
+  await S.appendLog(doc, { date: 9, table: 'Contacts', event: 'update', row: 9, result: 'success' });
+  const second = await S.logsPage(doc, 'Contacts', 2, first.rows[1].id);
+  assert.deepStrictEqual(second.rows.map((r) => r.Ligne), [2, 1]);
 });
 
 test('STORE-09 les tables du widget sont reconnues pour être masquées', () => {

@@ -112,5 +112,5 @@ test('MUL-09 le verrou n\'est pas pris pour un workflow ou un journal : chaque t
   await Store.appendLog(doc, { table: 'Contacts', event: 'update', row: 1, result: 'success' });
   await instance(doc, 'A', clock).tick();
   assert.strictEqual(await Store.loadGraph(doc, 'Contacts'), null);
-  assert.strictEqual((await Store.recentLogs(doc, 'Contacts', 10)).length, 1);
+  assert.strictEqual((await Store.logsPage(doc, 'Contacts', 10)).rows.length, 1);
 });

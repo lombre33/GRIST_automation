@@ -12,6 +12,7 @@ let loaded = false;
 let tableId = null;
 let cache = null;
 let lastRecords = [];
+let cursorRecord = null;       // ligne sélectionnée dans Grist (pour « Tester »)
 const instanceId = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
 const echo = Echo.create();
 let executor = null;           // élection de l'exécutant entre onglets ; null tant que la table Automation n'existe pas
@@ -24,10 +25,12 @@ const columnsByTable = new Map();
 const gristApi = { fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
 const docApi = Object.assign({ listTables: () => grist.docApi.listTables() }, gristApi);
 
-function addLog(message, date = new Date()) {
+// append : entrée de l'historique relue du document (plus ancienne que celles déjà affichées) ; sinon la plus récente va en haut.
+function addLog(message, date = new Date(), append = false) {
   const li = document.createElement('li');
   li.textContent = `[${date.toLocaleString()}] ${message}`;
-  $('log-list').prepend(li);
+  if (append) $('log-list').append(li);
+  else $('log-list').prepend(li);
 }
 
 /* ---------- Schéma du document (colonnes et tables proposées dans les nœuds) ---------- */
@@ -109,12 +112,40 @@ async function initStore() {
     canvas.load(graph);
     refreshState();
   }
-  for (const entry of await Store.recentLogs(docApi, tableId, 20)) {
-    const status = t('result.' + entry.Resultat) + (entry.Auteur ? ` (${entry.Auteur})` : '');
-    addLog(t('log.event', { event: t('event.' + entry.Evenement), row: entry.Ligne, status }), new Date(entry.Date * 1000));
-  }
+  await loadOlderLogs();
   startExecutor();
   await electExecutor();
+}
+
+// Historique du document : une page à la fois, des plus récentes aux plus anciennes, ajoutée sous les lignes déjà affichées.
+const LOG_PAGE = 20;
+let oldestLogId = null;
+
+async function loadOlderLogs() {
+  try {
+    const page = await Store.logsPage(docApi, tableId, LOG_PAGE, oldestLogId);
+    for (const entry of page.rows) {
+      const author = entry.Auteur ? ` (${entry.Auteur})` : '';
+      const message = entry.Evenement === 'activate' || entry.Evenement === 'deactivate'
+        ? t(entry.Evenement === 'activate' ? 'log.activated' : 'log.deactivated') + author
+        : t('log.event', { event: t('event.' + entry.Evenement), row: entry.Ligne, status: t('result.' + entry.Resultat) + author });
+      addLog(message, new Date(entry.Date * 1000), true);
+      oldestLogId = entry.id;
+    }
+    $('logs-more').hidden = !page.more;
+  } catch (err) {
+    addLog(t('log.storeError', { error: err.message }));
+  }
+}
+
+// Activation et désactivation sont tracées dans le journal du document (CDC §3.5), avec l'auteur.
+async function recordToggle() {
+  if (!tablesAvailable) return;
+  try {
+    await Store.appendLog(docApi, { table: tableId, event: graph.active ? 'activate' : 'deactivate', row: null, result: 'success' });
+  } catch (err) {
+    addLog(t('log.storeError', { error: err.message }));
+  }
 }
 
 async function recordRun(result) {
@@ -226,7 +257,7 @@ async function onRecords(records) {
 
 // Simule sur la première ligne de la vue l'événement du premier déclencheur, sans rien écrire.
 async function dryRun() {
-  const record = lastRecords[0];
+  const record = cursorRecord || lastRecords[0];
   const trigger = graph.nodes.find((node) => node.type === 'trigger');
   if (!record) return addLog(t('log.dryNoRow'));
   if (!trigger) return addLog(t('log.cannotActivate', { issue: t('issue.noTrigger') }));
@@ -255,6 +286,7 @@ async function toggleActive() {
   refreshState();
   scheduleSave();
   addLog(t(graph.active ? 'log.activated' : 'log.deactivated'));
+  recordToggle();
   await electExecutor();
 }
 
@@ -363,6 +395,7 @@ function start() {
   $('toggle-active').addEventListener('click', toggleActive);
   $('test-workflow').addEventListener('click', dryRun);
   $('toggle-logs').addEventListener('click', toggleLogs);
+  $('logs-more').addEventListener('click', loadOlderLogs);
   window.addEventListener('beforeunload', (event) => {
     if (graph.active) {
       event.preventDefault();
@@ -382,6 +415,7 @@ function start() {
     refreshState();
   });
   grist.onRecords(onRecords, { includeColumns: 'all' });
+  grist.onRecord((record) => { cursorRecord = record; }, { includeColumns: 'all' });
   grist.selectedTable.getTableId().then(async (id) => {
     tableId = id;
     await initStore();

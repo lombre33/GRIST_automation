@@ -24,12 +24,13 @@ const API = 'https://docs.getgrist.com/grist-plugin-api.js';
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 let failures = 0;
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false } = {}) {
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0 } = {}) {
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   const page = await context.newPage();
   const problems = [];
   page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push(String(e)));
+  if (preloadLogs) await page.addInitScript((n) => { window.__preloadLogs = n; }, preloadLogs);
   if (foreignLock) await page.addInitScript(() => { window.__foreignLock = true; });
   if (noTables) await page.addInitScript(() => { window.__noTables = true; });
   await page.route(API, (route) => (grist
@@ -233,8 +234,10 @@ await scenario('E2E-12 tables du document : accord demandé au démarrage, graph
   await page.click('#toggle-active');
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type !== 'Lock').length === 2);
-  const log = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log'));
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  const log = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log' && r.Evenement === 'update'));
+  const toggle = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log' && r.Evenement === 'activate'));
+  assert.equal(toggle.Table, 'Contacts', 'l\'activation est tracée dans le journal');
   assert.deepEqual([log.Table, log.Evenement, log.Ligne, log.Resultat], ['Contacts', 'update', 1, 'success']);
 }, { noTables: true });
 
@@ -258,7 +261,7 @@ await scenario('E2E-14 le graphe du document est relu au démarrage, avec le jou
   await page.click('#toggle-active');
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type !== 'Lock').length === 2);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
   await page.waitForTimeout(400);
   const tables = await page.evaluate(() => JSON.stringify(window.__stub.docTables));
   const copy = await page.context().newPage();
@@ -489,6 +492,32 @@ await scenario('E2E-24 déclencheur sur une ligne précise : les autres lignes s
   await page.waitForTimeout(300);
   assert.equal(await page.evaluate(() => window.__stub.applied.length), 1, 'seule la ligne Ada déclenche');
 });
+
+await scenario('E2E-25 test à blanc sur la ligne sélectionnée dans Grist', async (page) => {
+  await buildFlow(page);
+  await page.evaluate(() => {
+    window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 2, Nom: 'B', Statut: 'Clos' }]);
+    window.__stub.pushRecord({ id: 2, Nom: 'B', Statut: 'Clos' });
+  });
+  await page.click('#test-workflow');
+  await page.click('#toggle-logs');
+  assert.match(await page.locator('#log-list li').first().innerText(), /Dry-run ligne 2 : réussi/, 'la ligne sélectionnée (2), pas la première');
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied), []);
+});
+
+await scenario('E2E-26 historique par pages : les plus récentes d\'abord, « plus anciennes » à la demande', async (page) => {
+  await page.click('#toggle-logs');
+  await page.waitForFunction(() => document.querySelectorAll('#log-list li').length >= 20);
+  const entries = () => page.locator('#log-list li', { hasText: 'modification ligne' });
+  assert.equal(await entries().count(), 20);
+  assert.match(await entries().first().innerText(), /ligne 25 : réussi \(moi@exemple.fr\)/, 'la plus récente en haut');
+  assert.equal(await page.locator('#logs-more').isVisible(), true);
+  await page.click('#logs-more');
+  await page.waitForFunction(() => document.querySelectorAll('#log-list li').length >= 25);
+  assert.equal(await entries().count(), 25);
+  assert.match(await entries().last().innerText(), /ligne 1 : réussi/, 'la plus ancienne en bas');
+  assert.equal(await page.locator('#logs-more').isVisible(), false, 'plus rien à charger');
+}, { preloadLogs: 25 });
 
 await browser.close();
 server.close();

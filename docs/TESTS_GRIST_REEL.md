@@ -75,8 +75,9 @@ Prérequis : table `Automation` créée, graphe de base activé.
 
 | ID | Depuis | Scénario | Étapes | Attendu | Résultat |
 |---|---|---|---|---|---|
-| DRY-01 | V0.5 | Aucun effet | Cliquer Tester avec le graphe de base | Aucune ligne écrite dans Archive ; chaque nœud affiche « Passé » ou « Action prévue » | ➖ |
+| DRY-01 | V0.11 (modifié) | Aucun effet | Cliquer Tester avec le graphe de base (la ligne testée est celle sélectionnée dans Grist, sinon la première de la vue ; son numéro figure dans le journal) | Aucune ligne écrite dans Archive ; chaque nœud affiche « Passé » ou « Action prévue » | ➖ |
 | DRY-02 | V0.5 | Branche bloquée (condition sans lien « Sinon ») | Mettre une valeur de condition différente de celle de la première ligne, Tester | La condition affiche « Bloqué par la condition », l'action n'affiche rien | ➖ |
+| DRY-05 | V0.11 | Ligne choisie | Sélectionner la ligne 3 dans la vue Grist, cliquer Tester, puis sélectionner la ligne 5 et recommencer | Le journal dit « Dry-run ligne 3 » puis « Dry-run ligne 5 » ; l'état des nœuds suit la ligne testée | ➖ |
 | DRY-03 | V0.5 | Sans ligne | Filtrer la vue pour qu'elle soit vide, Tester | Message « Dry-run impossible : aucune ligne dans la vue. » | ➖ |
 | DRY-04 | V0.5 | Workflow inactif | Désactiver, Tester | Le test fonctionne quand même | ➖ |
 
@@ -145,6 +146,17 @@ Prérequis : table `Services` (Nom, Seuil) du document de test. Le nœud Lecture
 | TGT-01 | V0.10 | Ligne précise | Déclencheur « modifiée », Ligne précise = colonne Cle, valeur `k2` | Seule la modification de la ligne dont Cle = k2 déclenche | ➖ |
 | TGT-02 | V0.10 | Grisé selon l'action | Passer le déclencheur à « créée » puis « supprimée » | « Ligne précise » et sa valeur sont grisées (pas masquées) ; Activer est refusé tant qu'une ligne précise est renseignée | ➖ |
 | TGT-03 | V0.10 | Clé en double | Deux lignes avec Cle = k2, modifier chacune | Les deux déclenchent (décision à valider par Antoine, le CDC parlait d'erreur) | ➖ |
+
+## Historique des exécutions
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| HIS-01 | V0.11 | Activation tracée | Activer puis désactiver, regarder `Automation` | Deux lignes `Log` (Evenement activate puis deactivate) avec Auteur = votre email | ➖ |
+| HIS-02 | V0.11 | Relecture | Recharger, ouvrir le panneau des logs | Les 20 dernières entrées, la plus récente en haut ; une activation s'affiche « Workflow activé. (email) » | ➖ |
+| HIS-03 | V0.11 | Pages | Avec plus de 20 entrées, cliquer « Exécutions plus anciennes » | 20 entrées plus anciennes sont ajoutées sous les autres ; le bouton disparaît quand il n'y en a plus | ➖ |
+| HIS-04 | V0.11 | Nouvelle exécution pendant la lecture | Déclencher une exécution puis cliquer « Exécutions plus anciennes » | Pas de doublon ni de trou dans la liste | ➖ |
+| HIS-05 | V0.11 | Une table par vue | Deux widgets sur deux tables de vue différentes | Chacun n'affiche que ses entrées | ➖ |
+| HIS-06 | V0.11 | Volume (limite connue) | Plus de 1 000 entrées dans `Automation` | Noter le temps de chargement ; le widget lit toute la table à chaque page (à optimiser si lent) | ➖ |
 
 ## Activation et sauvegarde
 
