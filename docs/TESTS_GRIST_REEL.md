@@ -185,6 +185,13 @@ Prérequis : document sans table `Automation` pour TAB-01 à TAB-03 ; les suivan
 | TAB-10 | V0.6 | Journal relu | Recharger la page, ouvrir le panneau des logs | Les 20 dernières exécutions apparaissent | ➖ |
 | TAB-11 | V0.6 | Table masquée du widget | Ouvrir la liste des tables d'une action | `Automation` n'y figure pas | ➖ |
 | TAB-12 | V0.6 | Droits insuffisants | Avec un compte qui ne peut pas créer de table, accepter la création | Message « Enregistrement dans le document impossible : … » dans le journal ; le widget continue de marcher | ➖ |
+| TAB-13 | V0.11.1 | Contenu illisible dans le document | Dans `Automation`, ouvrir la ligne `Workflow` de `Contacts`, remplacer `Config` par `{"version":4,"nodes":[],"edges":[]}`, recharger le widget | « Workflow conservé tel quel » prend la place du canevas, avec l'explication ; Ajouter, Tester et Activer sont grisés (pas masqués) ; le journal dit « Configuration illisible : elle est conservée telle quelle… ». Après quelques secondes, `Config` est inchangée et aucune ligne `Workflow`, `Lock` ou `Log` n'a été ajoutée | ➖ |
+| TAB-14 | V0.11.1 | Rien ne tourne à la place | Avoir activé un workflow avant TAB-13, puis après TAB-13 modifier le Statut d'une ligne de `Contacts` | Aucune écriture dans `Archive` par ce widget, pas de bandeau « onglet ouvert requis » | ➖ |
+| TAB-15 | V0.11.1 | Repartir de zéro | Après TAB-13, supprimer la ligne `Workflow` de `Contacts` dans `Automation`, recharger | L'explication a disparu et le widget est de nouveau modifiable (il repart du graphe de ses réglages, ou d'un canevas vide) | ➖ |
+| TAB-16 | V0.11.1 | Nom de table pris à la casse près | Dans un document sans `Automation`, créer une table nommée `AUTOMATION` (majuscules), ouvrir le widget | Aucune fenêtre de création ; le journal dit que le document a déjà une table « AUTOMATION » à renommer ; rien n'est créé ; le widget reste utilisable, son graphe est gardé dans ses réglages | ➖ |
+| TAB-17 | V0.11.1 | Colonne indispensable supprimée | Dans `Automation`, supprimer la colonne `Config`, recharger | Le journal dit que la table n'a pas les colonnes attendues (Config) ; rien n'est écrit dans la table ; le graphe reste dans les réglages de la vue | ➖ |
+| TAB-18 | V0.11.1 | Colonne facultative supprimée | Dans `Automation`, supprimer la colonne `Detail`, recharger, déclencher une exécution | L'exécution est journalisée dans la table (sans `Detail`), sans erreur | ➖ |
+| TAB-19 | V0.11.1 | Colonne supprimée en cours de route | Widget actif, supprimer la colonne `Detail`, déclencher une exécution puis une seconde | La première écriture dans le journal peut échouer (« Enregistrement dans le document impossible : … » : noter le message de Grist) ; la seconde passe, sans `Detail` | ➖ |
 
 ## Interface
 
@@ -196,3 +203,5 @@ Prérequis : document sans table `Automation` pour TAB-01 à TAB-03 ; les suivan
 | UI-04 | V0.5 | Clavier | Tab dans les nœuds ; Entrée sur une sortie puis sur une entrée ; Suppr sur un en-tête de nœud ; Échap dans une liste | Tout est atteignable ; le lien se crée au clavier ; Échap ferme la liste sans fermer la fenêtre | ➖ |
 | UI-05 | V0.5 | Crédits | Réglages | Auteur Grist Factory, site, licence GPL v3.0, version | ➖ |
 | UI-06 | V0.5 | Fenêtres | Ouvrir les Réglages, Tab en boucle, Échap | Le focus reste dans la fenêtre ; Échap la ferme et le focus revient au bouton Réglages | ➖ |
+| UI-07 | V0.11.1 | Couleur du test à blanc | Tester avec le graphe de base, en clair puis en sombre | L'action prévue est signalée en bleu d'accent (barre pleine à texte blanc), plus en vert ; lisible dans les deux thèmes | ➖ |
+| UI-08 | V0.11.1 | Superpositions | Ouvrir le journal, le menu d'ajout (clic droit sur le fond), les Réglages | Même ordre qu'en 0.11 : le menu d'ajout recouvre le journal, la fenêtre des Réglages recouvre tout | ➖ |

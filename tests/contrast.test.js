@@ -34,7 +34,6 @@ const TEXT_ON = [
   ['accent', ['surface']],
   ['accent-ink', ['accent-soft', 'surface-sunken']],
   ['danger-ink', ['bg', 'surface', 'surface-sunken', 'danger-soft']],
-  ['good', ['good-soft']],
   ['warn-ink', ['warn-soft']],
 ];
 

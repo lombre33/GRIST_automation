@@ -58,29 +58,79 @@ async function loadSchema() {
   await canvas.refreshSchema();
 }
 
+/* ---------- Contenu enregistré illisible (règle 3 de GFS) ---------- */
+
+let locked = false;   // le workflow enregistré vient d'une version plus récente ou est abîmé : on le laisse tel quel, rien n'est écrit à sa place
+
+// Grisé, jamais masqué : l'explication prend la place du canevas (vide) et les boutons qui modifieraient le graphe sont grisés.
+function setLocked(value) {
+  locked = value;
+  $('locked').hidden = !value;
+  $('canvas').inert = value;
+  for (const id of ['add-node', 'test-workflow', 'toggle-active']) $(id).disabled = value;
+}
+
+// Ce que le canevas montre et ce qui s'exécute : rien. Un graphe déjà lu ailleurs (les réglages de la vue) ne doit pas continuer de tourner à la place de l'illisible.
+function lockWorkflow() {
+  if (locked) return;
+  graph = Graph.create();
+  canvas.load(graph);
+  refreshState();
+  setLocked(true);
+  addLog(t('log.badConfig'));
+}
+
+// Message du journal pour une erreur ou un problème de la table du document (les codes viennent de js/store.js).
+function storeMessage(err) {
+  if (err.code === 'name-taken') return t('log.tableNameTaken', { table: err.table });
+  if (err.code === 'renamed') return t('log.tableRenamed', { table: err.table });
+  if (err.code === 'missing-columns') return t('log.tableColumns', { columns: err.columns.join(', ') });
+  if (err.code === 'unreadable-graph') return t('log.badConfig');
+  return t('log.storeError', { error: err.message });
+}
+
 /* ---------- Sauvegarde ---------- */
 
 let saveTimer = null;
 let savePending = false;
+let startupDone = false;   // le contenu déjà enregistré a été examiné : avant, on ne sait pas encore s'il faut le laisser intact
 
-// Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand la table existe.
-function scheduleSave() {
-  clearTimeout(saveTimer);
-  savePending = true;
-  saveTimer = setTimeout(async () => {
-    grist.setOption('workflow', JSON.stringify(graph));
+async function save() {
+  if (!startupDone) {
+    saveTimer = setTimeout(save, 300);
+    return;
+  }
+  if (!locked) {
     try {
       if (tablesAvailable) await Store.saveGraph(docApi, graph, tableId, Graph.summarize(graph, t));
     } catch (err) {
-      addLog(t('log.storeError', { error: err.message }));
+      addLog(storeMessage(err));
+      if (err.code === 'unreadable-graph') setLocked(true);   // un autre onglet vient d'y mettre un contenu que cette version ne lit pas
     }
-    savePending = false;
-  }, 300);
+  }
+  if (!locked) grist.setOption('workflow', JSON.stringify(graph));
+  savePending = false;
+}
+
+// Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand la table existe.
+function scheduleSave() {
+  if (locked) return;
+  clearTimeout(saveTimer);
+  savePending = true;
+  saveTimer = setTimeout(save, 300);
+}
+
+// Dit dans le journal pourquoi la table du document ne peut pas servir (nom déjà pris, colonnes absentes) ; true s'il y a un problème.
+async function storeProblem() {
+  const problem = await Store.problem(docApi);
+  if (problem) addLog(storeMessage(problem));
+  return Boolean(problem);
 }
 
 // Demande l'accord de créer la table ; true si elle existe à la fin. Un refus ne se retient pas : la question revient à l'activation (et aux enregistrements qui en ont besoin).
 async function ensureStore() {
   if (tablesAvailable) return true;
+  if (await storeProblem()) return false;
   const accepted = await Modal.confirm({
     title: t('consent.title'),
     message: t('consent.body'),
@@ -95,19 +145,23 @@ async function ensureStore() {
     startExecutor();
     scheduleSave();
   } catch (err) {
-    addLog(t('log.storeError', { error: err.message }));
+    addLog(storeMessage(err));
   }
   return tablesAvailable;
 }
 
 // Au démarrage : lit le graphe du document s'il y est, sinon pose la question une fois.
 async function initStore() {
-  tablesAvailable = (await Store.missingTables(docApi)).length === 0;
-  if (!tablesAvailable) await ensureStore();
+  const exists = (await Store.missingTables(docApi)).length === 0;
+  tablesAvailable = exists && !(await storeProblem());
+  if (!exists) await ensureStore();
   if (!tablesAvailable) return;
-  const saved = await Store.loadGraph(docApi, tableId);
-  if (saved) {
-    graph = saved;
+  const stored = await Store.readGraph(docApi, tableId);
+  if (stored.state === 'unreadable') {
+    lockWorkflow();
+  } else if (stored.state === 'ok') {
+    setLocked(false);   // le graphe du document passe avant celui des options, même si celui-ci était illisible
+    graph = stored.graph;
     loaded = true;
     canvas.load(graph);
     refreshState();
@@ -134,7 +188,7 @@ async function loadOlderLogs() {
     }
     $('logs-more').hidden = !page.more;
   } catch (err) {
-    addLog(t('log.storeError', { error: err.message }));
+    addLog(storeMessage(err));
   }
 }
 
@@ -144,7 +198,7 @@ async function recordToggle() {
   try {
     await Store.appendLog(docApi, { table: tableId, event: graph.active ? 'activate' : 'deactivate', row: null, result: 'success' });
   } catch (err) {
-    addLog(t('log.storeError', { error: err.message }));
+    addLog(storeMessage(err));
   }
 }
 
@@ -159,7 +213,7 @@ async function recordRun(result) {
       detail: result.error || JSON.stringify(result.effects),
     });
   } catch (err) {
-    addLog(t('log.storeError', { error: err.message }));
+    addLog(storeMessage(err));
   }
 }
 
@@ -197,7 +251,7 @@ async function elect() {
     if (graph.active) await executor.tick();
     else await executor.release();
   } catch (err) {
-    addLog(t('log.storeError', { error: err.message }));
+    addLog(storeMessage(err));
   }
 }
 
@@ -389,7 +443,10 @@ function start() {
   $('open-settings').addEventListener('click', openSettings);
   document.addEventListener('langchange', refreshState);
 
-  if (typeof grist === 'undefined') return showOutsideGrist();
+  if (typeof grist === 'undefined') {
+    startupDone = true;
+    return showOutsideGrist();
+  }
 
   $('add-node').addEventListener('click', () => canvas.openAddMenu());
   $('toggle-active').addEventListener('click', toggleActive);
@@ -406,9 +463,9 @@ function start() {
 
   grist.ready({ requiredAccess: 'full' });
   grist.onOptions((options) => {
-    if (loaded || !options || !options.workflow) return;
+    if (loaded || locked || !options || !options.workflow) return;
     const saved = Graph.parse(options.workflow);
-    if (!saved) return addLog(t('log.badConfig'));
+    if (!saved) return lockWorkflow();
     loaded = true;
     graph = saved;
     canvas.load(graph);
@@ -418,8 +475,15 @@ function start() {
   grist.onRecord((record) => { cursorRecord = record; }, { includeColumns: 'all' });
   grist.selectedTable.getTableId().then(async (id) => {
     tableId = id;
-    await initStore();
+    try {
+      await initStore();
+    } finally {
+      startupDone = true;
+    }
     await loadSchema();
+  }).catch((err) => {
+    startupDone = true;
+    throw err;
   });
 }
 

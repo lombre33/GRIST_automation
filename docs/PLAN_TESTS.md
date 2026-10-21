@@ -140,6 +140,9 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 | GRAPH-11 à 22 | vérifications non partagées, deux sorties, lien « sinon » réservé à la condition, migration v2 vers v3, lecture | `tests/graph.test.js` |
 | GRD-01 à 10 (echo) | écho des écritures du widget reconnu et consommé, modification mixte, expiration, filet « trop d'exécutions » | `tests/echo.test.js` |
 | MUL-01 à 09 | exécutant unique : prise, renouvellement, relais après délai, libération, prises simultanées, décalage d'horloge, un verrou par table | `tests/executor.test.js` |
+| GFS-01 à 13 | règles 3 et 4 du guide des apps de GFS : nom de table pris à la casse près, identifiant réel relu après `AddTable`, colonnes indispensables et facultatives, colonne supprimée en cours de route, colonnes inconnues tolérées ; graphe lisible qui garde l'inconnu, contenu illisible jamais réécrit (couvrent STO-04 et STO-06) | `tests/gfs.test.js` |
+| HYG-10, 11 | règle 12 : aucun `z-index` en dur (jetons `--z-*`), un seul bleu d'accent (pas de vert de succès) | `tests/hygiene.test.js` |
+| E2E-27 à 35 | règles 3, 4 et 12 dans Chromium : contenu illisible (réglages de la vue, table, modification pendant le démarrage, graphe actif ailleurs) conservé et verrouillé à l'écran, nom de table pris, colonnes absentes, couleur du test à blanc, ordre des couches | `tests/e2e/smoke.mjs` |
 | E2E-01 à 26 | dans Chromium avec une API Grist simulée : construction du graphe (menu d'ajout, liens au clic et au glisser), écriture, dry-run avec état des nœuds, thème et langue, fenêtres et clavier, 700×400, hors Grist, activation refusée, suppression, déplacement et zoom, sauvegarde et rechargement, accord de création des tables, refus, relecture du graphe et du journal | `tests/e2e/smoke.mjs` (`npm run test:e2e`) |
 
 Les E2E ne remplacent pas les scénarios IT du Grist réel (`docs/GRIST_TEST_DOC.md`).

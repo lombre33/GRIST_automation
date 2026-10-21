@@ -41,7 +41,7 @@ button.icon-only { width: 28px; padding: 0; }
 .ss-button { width: 100%; justify-content: space-between; text-align: left; }
 .ss-button .ss-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-button .ss-label.is-empty { color: var(--text-muted); }
-.ss-panel { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 30; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-float); padding: 4px; }
+.ss-panel { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: var(--z-panel); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-float); padding: 4px; }
 .ss-panel.up { top: auto; bottom: calc(100% + 2px); }
 .ss-options { list-style: none; margin: 4px 0 0; padding: 0; max-height: 150px; overflow: auto; }
 .ss-options li { padding: 4px 8px; border-radius: var(--radius); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -50,7 +50,11 @@ button.icon-only { width: 28px; padding: 0; }
 .ss-options li[aria-selected="true"] { color: var(--accent-ink); font-weight: 600; }
 .ss-options li.ss-none { color: var(--text-muted); cursor: default; }
 
-.logs { position: absolute; right: 10px; bottom: 10px; width: min(360px, calc(100% - 20px)); max-height: 45%; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-frame); box-shadow: var(--shadow-float); padding: 8px 12px; z-index: 40; }
+.locked { position: absolute; inset: 0; z-index: var(--z-lock); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 16px; text-align: center; background: var(--bg); color: var(--text-muted); }
+.locked h2 { font-size: 14px; color: var(--text); margin: 0; }
+.locked p { margin: 0; max-width: 460px; }
+
+.logs { position: absolute; right: 10px; bottom: 10px; width: min(360px, calc(100% - 20px)); max-height: 45%; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-frame); box-shadow: var(--shadow-float); padding: 8px 12px; z-index: var(--z-logs); }
 .log-list { list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--text-muted); overflow: auto; }
 .log-list li { padding: 3px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .logs button { margin-top: 6px; align-self: flex-start; font-size: 12px; }

@@ -64,3 +64,17 @@ test('HYG-09 le widget ne stocke que la langue et le thème dans le navigateur',
   assert.deepStrictEqual([...keys].sort(), ['STORAGE_KEY']);
   assert.deepStrictEqual(offenders(jsFiles, /sessionStorage|indexedDB|document\.cookie/), []);
 });
+
+test('HYG-10 aucun z-index en dur : les couches passent par les jetons --z-* de la charte (règle 12 de GFS)', () => {
+  assert.deepStrictEqual(offenders(cssFiles, /z-index:\s*(?!\s|var\(--z-[\w-]+\))/), []);
+  assert.deepStrictEqual(offenders(jsFiles, /zIndex|z-index/), []);
+  const tokens = read('css/tokens.css');
+  const used = new Set(cssFiles.flatMap((f) => [...read(f).matchAll(/z-index:\s*var\((--z-[\w-]+)\)/g)].map((m) => m[1])));
+  assert.ok(used.size >= 5, 'les couches existantes passent bien par des jetons');
+  assert.deepStrictEqual([...used].filter((name) => !new RegExp(`${name}:\\s*\\d+`).test(tokens)), [], 'chaque jeton utilisé est défini');
+});
+
+test('HYG-11 un seul bleu d\'accent : pas de vert de succès dans les jetons, le rouge et l\'ambre gardent leur sens (règle 12 de GFS)', () => {
+  assert.deepStrictEqual(offenders(everything, /--good|--success|--green/), []);
+  assert.deepStrictEqual(offenders(cssFiles, /\bgreen\b|\blime\b/i), []);
+});

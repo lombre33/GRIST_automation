@@ -24,7 +24,7 @@ const API = 'https://docs.getgrist.com/grist-plugin-api.js';
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 let failures = 0;
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0 } = {}) {
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null } = {}) {
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   const page = await context.newPage();
   const problems = [];
@@ -33,6 +33,7 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
   if (preloadLogs) await page.addInitScript((n) => { window.__preloadLogs = n; }, preloadLogs);
   if (foreignLock) await page.addInitScript(() => { window.__foreignLock = true; });
   if (noTables) await page.addInitScript(() => { window.__noTables = true; });
+  if (init) await page.addInitScript((values) => Object.assign(window, values), init);
   await page.route(API, (route) => (grist
     ? route.fulfill({ contentType: 'text/javascript', body: stubSource })
     : route.abort()));
@@ -518,6 +519,116 @@ await scenario('E2E-26 historique par pages : les plus récentes d\'abord, « pl
   assert.match(await entries().last().innerText(), /ligne 1 : réussi/, 'la plus ancienne en bas');
   assert.equal(await page.locator('#logs-more').isVisible(), false, 'plus rien à charger');
 }, { preloadLogs: 25 });
+
+// GFS (guide des apps, 1.1) : règle 3, un contenu que cette version ne lit pas reste intact ; règle 4, la table du document n'est créée ni utilisée de travers ; règle 12, charte.
+const newerGraph = JSON.stringify({ version: 4, active: true, nodes: [{ id: 'boucle-1', type: 'boucle', x: 0, y: 0, config: {} }], edges: [], vue: { zoom: 2 } });
+const readableGraph = JSON.stringify({ version: 3, active: false, nodes: [{ id: 'trigger-1', type: 'trigger', x: 40, y: 120, config: { action: 'update', column: 'Statut', targetColumn: '', targetValue: '' } }], edges: [] });
+
+await scenario('E2E-27 workflow d\'une version plus récente dans les réglages de la vue : conservé tel quel, rien n\'est écrit', async (page) => {
+  await page.waitForSelector('#locked:not([hidden])');
+  assert.match(await page.locator('#locked h2').innerText(), /Workflow conservé tel quel/);
+  for (const id of ['add-node', 'test-workflow', 'toggle-active']) assert.equal(await page.locator('#' + id).isDisabled(), true, `${id} est grisé, pas masqué`);
+  assert.equal(await page.locator('#canvas').evaluate((element) => element.inert), true, 'le canevas ne reçoit ni clic ni focus');
+  await page.click('#toggle-logs');
+  assert.match(await page.locator('#log-list').innerText(), /Configuration illisible : elle est conservée telle quelle/);
+  await page.waitForTimeout(700);
+  assert.equal(await page.evaluate(() => window.__stub.options.workflow), newerGraph, 'les réglages de la vue sont intacts');
+  assert.deepEqual(await page.evaluate(() => window.__stub.docTables.Automation.rows), [], 'rien n\'est écrit dans le document');
+}, { init: { __preloadOptions: { workflow: newerGraph } } });
+
+await scenario('E2E-28 workflow illisible dans la table Automation : conservé tel quel, la ligne n\'est pas touchée', async (page) => {
+  await page.waitForSelector('#locked:not([hidden])');
+  await page.click('#toggle-logs');
+  assert.match(await page.locator('#log-list').innerText(), /Configuration illisible/);
+  await page.waitForTimeout(700);
+  const rows = await page.evaluate(() => window.__stub.docTables.Automation.rows);
+  assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], 'même contenu, aucune ligne ajoutée (ni verrou)');
+  assert.equal(await page.evaluate(() => window.__stub.options.workflow), undefined, 'rien dans les réglages de la vue non plus');
+}, { init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+
+await scenario('E2E-29 le graphe du document passe avant des réglages de vue illisibles', async (page) => {
+  await page.waitForSelector('.node-trigger');
+  assert.equal(await page.locator('#locked').isVisible(), false);
+  assert.equal(await page.locator('#toggle-active').isDisabled(), false);
+  assert.equal(await page.locator('#canvas').evaluate((element) => element.inert), false);
+}, { init: { __preloadOptions: { workflow: newerGraph }, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Config: readableGraph }] } });
+
+await scenario('E2E-30 table dont le nom ne diffère que par la casse : aucune question, aucune création, la raison est dite', async (page) => {
+  await page.click('#toggle-logs');
+  await page.waitForFunction(() => /déjà une table « automation »/.test(document.querySelector('#log-list').innerText));
+  assert.equal(await page.locator('[role=dialog]').count(), 0, 'pas de question : la création est impossible');
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  assert.equal(await page.locator('[role=dialog]').count(), 0);
+  assert.match(await page.locator('#log-list').innerText(), /Non enregistré : la table du widget/);
+  await page.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).edges.length === 2);
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['automation'], 'rien n\'a été créé');
+}, { noTables: true, init: { __preloadTables: { automation: ['Nom'] } } });
+
+await scenario('E2E-31 table Automation sans les colonnes attendues : non utilisée, rien n\'y est écrit', async (page) => {
+  await page.click('#toggle-logs');
+  await page.waitForFunction(() => /n'a pas les colonnes attendues \(Config, Evenement, Resultat\)/.test(document.querySelector('#log-list').innerText));
+  assert.equal(await page.locator('[role=dialog]').count(), 0);
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).edges.length === 2);
+  assert.equal(await page.locator('#open-tab-warning').isVisible(), true, 'activé quand même : le graphe reste dans les réglages de la vue');
+  await page.waitForTimeout(500);
+  assert.deepEqual(await page.evaluate(() => window.__stub.docTables.Automation.rows), [], 'aucune écriture dans la table incomplète');
+}, { noTables: true, init: { __preloadTables: { Automation: ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Detail'] } } });
+
+await scenario('E2E-32 test à blanc : l\'action est signalée par l\'accent bleu de la charte, plus en vert', async (page) => {
+  await buildFlow(page);
+  await page.evaluate(() => {
+    window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]);
+    window.__stub.pushRecord({ id: 1, Nom: 'A', Statut: 'Clos' });
+  });
+  await page.click('#test-workflow');
+  await page.waitForSelector('.trace-action .node-state');
+  const colors = await page.evaluate(() => {
+    const state = getComputedStyle(document.querySelector('.trace-action .node-state'));
+    return { background: state.backgroundColor, color: state.color, border: getComputedStyle(document.querySelector('.trace-action')).borderTopColor };
+  });
+  assert.deepEqual(colors, { background: 'rgb(47, 111, 237)', color: 'rgb(255, 255, 255)', border: 'rgb(47, 111, 237)' });
+});
+
+await scenario('E2E-33 les couches gardent leur ordre grâce aux jetons --z-*', async (page) => {
+  await page.click('#toggle-logs');
+  await page.click('#open-settings');
+  await page.waitForSelector('.modal');
+  const z = (selector) => page.evaluate((s) => getComputedStyle(document.querySelector(s)).zIndex, selector);
+  assert.deepEqual([await z('.locked'), await z('.logs'), await z('.modal')], ['20', '40', '2000'], 'voile < journal < fenêtre');
+});
+
+await scenario('E2E-34 modification faite pendant le démarrage, avant la découverte d\'un contenu illisible : il n\'est pas écrasé', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await page.waitForSelector('#locked:not([hidden])');
+  await page.waitForTimeout(1500);
+  const rows = await page.evaluate(() => window.__stub.docTables.Automation.rows);
+  assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], 'la ligne illisible est intacte');
+  assert.equal(await page.evaluate(() => window.__stub.options.workflow), undefined, 'les réglages de la vue non plus ne sont pas écrasés');
+}, { init: { __fetchDelay: 400, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+
+await scenario('E2E-35 contenu du document illisible, graphe actif dans les réglages de la vue : rien ne s\'exécute à sa place', async (page) => {
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).active === true);
+  const saved = await page.evaluate(() => window.__stub.options.workflow);
+  const copy = await page.context().newPage();
+  await copy.addInitScript((init) => Object.assign(window, init), { __preloadOptions: { workflow: saved }, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] });
+  await copy.route(API, (route) => route.fulfill({ contentType: 'text/javascript', body: stubSource }));
+  await copy.goto(url);
+  await copy.waitForSelector('#locked:not([hidden])');
+  assert.equal(await copy.locator('.node').count(), 0, 'le graphe des réglages de la vue n\'est plus affiché');
+  assert.equal(await copy.locator('#open-tab-warning').isVisible(), false, 'rien n\'est actif');
+  const push = (status) => copy.evaluate((value) => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: value }]), status);
+  await push('Nouveau');
+  await push('Clos');
+  await copy.waitForTimeout(1500);
+  assert.deepEqual(await copy.evaluate(() => window.__stub.applied), [], 'aucune écriture dans Archive');
+  const rows = await copy.evaluate(() => window.__stub.docTables.Automation.rows);
+  assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], 'ni verrou ni journal ajoutés, la ligne illisible est intacte');
+});
 
 await browser.close();
 server.close();

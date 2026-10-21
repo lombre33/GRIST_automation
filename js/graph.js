@@ -118,7 +118,8 @@
     return data;
   }
 
-  // Lecture d'une configuration enregistrée : retourne un graphe valide ou null si illisible.
+  // Lecture d'une configuration enregistrée : retourne un graphe valide ou null si illisible (version ou type de nœud inconnus, JSON abîmé).
+  // Ce qui est inconnu dans un graphe lisible survit à l'enregistrement (règle 3 de GFS) : clés de la racine, attributs des nœuds, de leur config et des liens.
   function parse(text) {
     let data;
     try { data = JSON.parse(text); } catch (err) { return null; }
@@ -128,7 +129,8 @@
     const conditionsOk = data.nodes.every((node) => node.type !== 'condition' || (Array.isArray(node.config.checks) && node.config.checks.length > 0));
     if (!conditionsOk) return null;
     const edges = data.edges.filter((edge) => nodeById(data, edge.from) && nodeById(data, edge.to) && Types.TYPES[nodeById(data, edge.from).type].branches.includes(edge.branch || 'then'));
-    return { version: VERSION, active: Boolean(data.active), nodes: data.nodes, edges };
+    const unknown = Object.fromEntries(Object.entries(data).filter(([key]) => !['version', 'active', 'nodes', 'edges'].includes(key)));
+    return { version: VERSION, active: Boolean(data.active), nodes: data.nodes, edges, ...unknown };
   }
 
   // Résumé lisible d'un graphe (champ « Resume » de la table des workflows), une ligne par chemin déclencheur -> action.

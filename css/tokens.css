@@ -15,8 +15,6 @@
   --accent-soft: #e8f0fe;
   --accent-soft-border: #c7dbfd;
   --accent-ink: #2558c4;
-  --good: #146c48;
-  --good-soft: #e5f6ee;
   --danger: #d84343;
   --danger-soft: #fbe9e9;
   --danger-ink: #c53030;
@@ -27,6 +25,13 @@
   --radius-frame: 8px;
   --shadow-float: 0 6px 20px rgba(15, 23, 42, .18);
   --shadow-card: 0 1px 2px rgba(15, 23, 42, .08);
+  /* Couches, de la plus basse à la plus haute : aucun z-index en dur ailleurs (HYG-10). */
+  --z-node-top: 5;
+  --z-lock: 20;
+  --z-panel: 30;
+  --z-logs: 40;
+  --z-menu: 50;
+  --z-modal: 2000;
 }
 
 :root[data-theme="dark"] {
@@ -42,8 +47,6 @@
   --accent-soft: #24324b;
   --accent-soft-border: #35507d;
   --accent-ink: #74a3f7;
-  --good: #6fd3a3;
-  --good-soft: #163326;
   --danger: #f08a8a;
   --danger-soft: #3a2426;
   --danger-ink: #f08a8a;

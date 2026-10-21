@@ -1,5 +1,5 @@
 /* Base commune des fenêtres : voile, cadre, trois zones (titre fixe, contenu qui défile, boutons fixes), trois largeurs. */
-.modal { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: var(--scrim); }
+.modal { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; align-items: center; justify-content: center; background: var(--scrim); }
 .modal-box { display: flex; flex-direction: column; width: 400px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-frame); box-shadow: var(--shadow-float); }
 .modal-box.w-form { width: 480px; }
 .modal-box.w-large { width: 960px; }
