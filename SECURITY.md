@@ -5,10 +5,10 @@ Ce widget est destiné à être relu par la DINUM avant publication. Ce document
 ## Ce que fait le widget
 
 - S'exécute dans l'iframe d'un widget personnalisé Grist, avec l'accès complet au document (`requiredAccess: 'full'`), parce qu'il lit les tables et écrit les effets des automatisations.
-- Ne contacte aucun serveur : aucun `fetch`, `XMLHttpRequest`, `WebSocket`, image ou police externes (tests `HYG-*` et `SEC-*`).
+- Ne contacte aucun serveur : aucun `fetch`, `XMLHttpRequest`, `WebSocket`, image ou police externes (tests `HYG-01` et `HYG-02`).
 - Charge un seul script externe, `https://docs.getgrist.com/grist-plugin-api.js` (API officielle de Grist).
 - Ne garde aucune donnée hors du document Grist : la configuration, le journal et le verrou d'exécution sont dans une seule table, `Automation`, créée avec l'accord de la personne.
-- N'exécute jamais de code issu d'une configuration ou d'une valeur de cellule : conditions et transformations passent par des opérateurs nommés, sans `eval` ni `Function` (test `SEC-02`). Les valeurs affichées sont écrites avec `textContent`, jamais `innerHTML` (test `HYG-03`).
+- N'exécute jamais de code issu d'une configuration ou d'une valeur de cellule : conditions et transformations passent par des opérateurs nommés, sans `eval` ni `Function` (tests `HYG-01` et `SEC-02`). Les valeurs affichées sont écrites avec `textContent`, jamais `innerHTML` (test `HYG-04`).
 
 ## Politique de sécurité de la page (CSP)
 
