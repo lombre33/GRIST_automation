@@ -13,7 +13,7 @@ Vue nodale sur fond uni : on ajoute des nœuds (clic droit sur le fond, ou « Aj
 - **Action** : mettre à jour la ligne ou ajouter une ligne, dans la table courante ou une autre.
 - « Tester » simule sur la première ligne de la vue sans rien écrire et affiche l'état de chaque nœud ; « Activer » refuse tant que le graphe est incomplet.
 
-Le graphe est enregistré automatiquement dans les options du widget, et, avec l'accord de la personne, dans une seule table du document, `Automation` : une ligne `Workflow` par table surveillée (avec un résumé lisible) et une ligne `Log` par exécution. La colonne « Auteur » est une formule déclenchée `user.Email`. Sans les tables, le widget fonctionne mais ne garde ni le graphe dans le document ni le journal. Interface fr/en, thèmes clair et sombre, pensée pour un panneau de 700×400 px.
+Le graphe est enregistré automatiquement dans les options du widget, et, avec l'accord de la personne, dans une seule table du document, `Automation` : une ligne `Workflow` par table surveillée (avec un résumé lisible) et une ligne `Log` par exécution. La colonne « Auteur » est une formule déclenchée `user.Email`. Sans les tables, le widget fonctionne mais ne garde ni le graphe dans le document ni le journal. Un seul onglet exécute les workflows d'une table (verrou dans la table `Automation`, relais au bout de 20 s si l'exécutant disparaît) ; les écritures du widget ne le redéclenchent pas. Interface fr/en, thèmes clair et sombre, pensée pour un panneau de 700×400 px.
 
 ## Configuration
 

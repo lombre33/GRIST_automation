@@ -1,5 +1,5 @@
 // Stockage dans le document Grist : une seule table, `Automation`, qui contient à la fois les workflows (Type = Workflow, un graphe par table de vue)
-// et le journal des exécutions (Type = Log). Une seule table à autoriser, à auditer et à masquer.
+// le journal des exécutions (Type = Log) et le verrou d'exécution de chaque table de vue (Type = Lock, voir js/executor.js). Une seule table à autoriser, à auditer et à masquer.
 // api : { listTables(), fetchTable(nom), applyUserActions(actions) } (grist.docApi dans le widget, un faux document dans les tests).
 // La colonne « Auteur » est une colonne à formule déclenchée `user.Email` : Grist y met l'email de la personne qui crée la ligne.
 // Attention : c'est celle dont le navigateur exécute le widget, pas forcément celle qui a modifié la ligne d'origine.
@@ -10,6 +10,7 @@
   const TABLE = 'Automation';
   const WORKFLOW = 'Workflow';
   const LOG = 'Log';
+  const LOCK = 'Lock';
 
   const author = { id: 'Auteur', type: 'Text', isFormula: false, formula: 'user.Email', recalcWhen: 0 };
   const COLUMNS = [
@@ -79,7 +80,18 @@
       .slice(-count);
   }
 
-  const api = { TABLE, WORKFLOW, LOG, COLUMNS, isOwnTable, missingTables, ensureTables, loadGraph, saveGraph, appendLog, recentLogs };
+  // Verrou d'exécution : une ligne par table de vue. Plusieurs lignes possibles si deux onglets l'ont créée en même temps : la plus ancienne fait foi.
+  async function readLock(api, tableId) {
+    const row = rows(await api.fetchTable(TABLE)).filter((r) => r.Type === LOCK && r.Table === tableId).sort((a, b) => a.id - b.id)[0];
+    return row ? { id: row.id, owner: row.Config || '', date: row.Date } : null;
+  }
+
+  async function writeLock(api, tableId, owner, date, rowId) {
+    const values = { Type: LOCK, Table: tableId, Config: owner, Date: date };
+    await api.applyUserActions([rowId ? ['UpdateRecord', TABLE, rowId, values] : ['AddRecord', TABLE, null, values]]);
+  }
+
+  const api = { TABLE, WORKFLOW, LOG, LOCK, readLock, writeLock, COLUMNS, isOwnTable, missingTables, ensureTables, loadGraph, saveGraph, appendLog, recentLogs };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Store = api;
 })(typeof window !== 'undefined' ? window : globalThis);

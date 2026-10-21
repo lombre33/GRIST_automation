@@ -48,13 +48,28 @@ Pour RUN-01 à RUN-09, construire d'abord : Déclencheur « modifiée », colonn
 | RUN-03 | V0.5 | Autre colonne modifiée | Modifier Nom avec la colonne surveillée = Statut | Aucun déclenchement | ➖ |
 | RUN-04 | V0.5 | Création | Déclencheur « créée », condition Montant supérieur à 100, action Ajouter dans Archive. Ajouter un contact à 50 puis un à 500 | Seul le contact à 500 écrit dans Archive | ➖ |
 | RUN-05 | V0.5 | Suppression | Déclencheur « supprimée » sans condition, action Ajouter dans Archive. Supprimer un contact | Une ligne dans Archive. Avec une condition ajoutée : erreur claire « Condition impossible sans contenu de ligne » (le contenu d'une ligne supprimée n'est pas connu) | ➖ |
-| RUN-06 | V0.5 | Mise à jour de la ligne | Action « Mettre à jour la ligne » (table courante), colonne Source = « auto » | La ligne modifiée reçoit Source = auto ; l'écriture ne relance pas le workflow en boucle | ➖ |
+| RUN-06 | V0.6.2 (modifié) | Mise à jour de la ligne, sans boucle | Action « Mettre à jour la ligne » (table courante), colonne Statut = « Clos », déclencheur « modifiée » sur Statut. Passer le Statut à En cours | La ligne passe à Clos, UNE seule exécution dans le journal (l'écriture du widget ne se relance pas) | ➖ |
 | RUN-07 | V0.5 | Vue filtrée (limite connue) | Filtrer la vue sur Statut = En cours, puis passer un contact à Clos | Limite connue : le contact sort de la vue ; noter si un faux événement « suppression » ou « création » se déclenche | ➖ |
-| RUN-08 | V0.5 | Deux onglets (limite connue) | Ouvrir le document dans deux onglets avec le widget actif, modifier un Statut | Limite connue : noter si la ligne est écrite deux fois dans Archive | ➖ |
+| RUN-08 | V0.6.2 (modifié) | Deux onglets | Ouvrir le document dans deux onglets avec le widget actif (tables créées), modifier un Statut | Une seule ligne écrite dans Archive ; un onglet affiche le bandeau « un autre onglet l'exécute » (voir EXE-*) | ➖ |
 | RUN-09 | V0.5 | Table cible disparue | Supprimer ou renommer la table Archive, modifier un Statut | Message d'erreur lisible dans le journal, pas de plantage | ➖ |
 | RUN-10 | V0.5 | Type incompatible | Action qui écrit « abc » dans une colonne numérique (Montant) | Comportement de Grist noté ; le widget n'affiche pas « réussi » si Grist refuse | ➖ |
 | RUN-11 | V0.5 | Valeurs piégées | Écrire `<script>alert(1)</script>` puis `=1+1` depuis une action | Les valeurs sont écrites comme texte, rien ne s'exécute dans l'interface | ➖ |
 | RUN-12 | V0.5 | Droits d'écriture | Compte sans droit d'écriture sur Archive, déclencher | Erreur lisible dans le journal | ➖ |
+
+## Exécution unique et anti-boucle
+
+Prérequis : table `Automation` créée, graphe de base activé.
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| EXE-01 | V0.6.2 | Un seul exécutant | Ouvrir le document dans deux onglets, activer le workflow dans le premier, recharger le second | Le second affiche « Automation active : un autre onglet l'exécute pour le moment… » ; une ligne `Lock` apparaît dans `Automation` pour `Contacts` | ➖ |
+| EXE-02 | V0.6.2 | Pas de doublon | Dans le document, passer un Statut à Clos | Une seule ligne dans Archive et une seule ligne `Log` | ➖ |
+| EXE-03 | V0.6.2 | Relais à la fermeture | Fermer l'onglet exécutant (fermer vraiment, pas juste changer d'onglet), attendre jusqu'à 25 s, modifier un Statut | Le second onglet affiche « Cet onglet exécute maintenant l'automation » et écrit dans Archive. Noter le délai observé | ➖ |
+| EXE-04 | V0.6.2 | Libération à la désactivation | Désactiver dans l'onglet exécutant | La ligne `Lock` a un propriétaire vide ; le second onglet reste désactivé (« désactivée depuis un autre onglet ») au lieu de reprendre | ➖ |
+| EXE-05 | V0.6.2 | Perte pendant le relais (limite connue) | Fermer l'onglet exécutant, modifier un Statut tout de suite | Limite connue : cette modification n'est exécutée par personne (au plus 20 s) ; noter ce qui est observé | ➖ |
+| EXE-06 | V0.6.2 | Sans table, sans verrou | Refuser la création de la table, activer dans deux onglets | Limite connue : les deux onglets exécutent (doublon) ; noter | ➖ |
+| LOOP-01 | V0.6.2 | Une modification de personne juste après une écriture du widget | Avec RUN-06, juste après le déclenchement, modifier à la main le Statut d'une autre ligne | Cette seconde modification est bien traitée (avant 0.6.2, le lot suivant était ignoré) | ➖ |
+| LOOP-02 | V0.6.2 | Boucle réelle arrêtée | Déclencheur « modifiée » sur Montant, action « Mettre à jour la ligne » qui écrit Montant = 5 puis un second workflow ou une formule qui le remodifie | Au plus 5 exécutions sur la ligne en 10 s, puis « trop d'exécutions rapprochées, arrêtée pour éviter une boucle » | ➖ |
 
 ## Test à blanc (dry-run)
 

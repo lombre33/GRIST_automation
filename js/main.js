@@ -12,7 +12,11 @@ let loaded = false;
 let tableId = null;
 let cache = null;
 let lastRecords = [];
-let suppressNext = false;
+const instanceId = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
+const echo = Echo.create();
+let executor = null;           // élection de l'exécutant entre onglets ; null tant que la table Automation n'existe pas
+let heartbeat = null;
+const HEARTBEAT_MS = 6000;
 let tables = [];
 let tablesAvailable = false;   // la table Automation existe dans le document
 const columnsByTable = new Map();
@@ -54,18 +58,20 @@ async function loadSchema() {
 /* ---------- Sauvegarde ---------- */
 
 let saveTimer = null;
+let savePending = false;
 
 // Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand la table existe.
 function scheduleSave() {
   clearTimeout(saveTimer);
+  savePending = true;
   saveTimer = setTimeout(async () => {
     grist.setOption('workflow', JSON.stringify(graph));
-    if (!tablesAvailable) return;
     try {
-      await Store.saveGraph(docApi, graph, tableId, Graph.summarize(graph, t));
+      if (tablesAvailable) await Store.saveGraph(docApi, graph, tableId, Graph.summarize(graph, t));
     } catch (err) {
       addLog(t('log.storeError', { error: err.message }));
     }
+    savePending = false;
   }, 300);
 }
 
@@ -83,6 +89,7 @@ async function ensureStore() {
     await Store.ensureTables(docApi);
     tablesAvailable = true;
     addLog(t('log.tablesCreated'));
+    startExecutor();
     scheduleSave();
   } catch (err) {
     addLog(t('log.storeError', { error: err.message }));
@@ -106,6 +113,8 @@ async function initStore() {
     const status = t('result.' + entry.Resultat) + (entry.Auteur ? ` (${entry.Auteur})` : '');
     addLog(t('log.event', { event: t('event.' + entry.Evenement), row: entry.Ligne, status }), new Date(entry.Date * 1000));
   }
+  startExecutor();
+  await electExecutor();
 }
 
 async function recordRun(result) {
@@ -123,11 +132,58 @@ async function recordRun(result) {
   }
 }
 
+// Sans table Automation il n'y a pas de verrou partagé : cet onglet exécute seul (risque de doublon si le document est ouvert ailleurs).
+const canExecute = () => !executor || executor.isExecutor();
+
+function onExecutorChange(isExecutor) {
+  if (graph.active) addLog(t(isExecutor ? 'executor.active' : 'executor.standby'));
+  refreshState();
+}
+
+// Une autre personne a désactivé le workflow dans le document : cet onglet ne doit pas reprendre l'exécution à sa place.
+async function deactivatedElsewhere() {
+  const saved = await Store.loadGraph(docApi, tableId);
+  if (!saved || saved.active) return false;
+  graph.active = false;
+  refreshState();
+  addLog(t('log.deactivatedElsewhere'));
+  await executor.release();
+  return true;
+}
+
+// Les événements reçus pendant une élection attendent son résultat au lieu d'être perdus.
+let electing = null;
+
+function electExecutor() {
+  if (!executor) return Promise.resolve();
+  electing = elect().finally(() => { electing = null; });
+  return electing;
+}
+
+async function elect() {
+  try {
+    if (graph.active && !savePending && await deactivatedElsewhere()) return;
+    if (graph.active) await executor.tick();
+    else await executor.release();
+  } catch (err) {
+    addLog(t('log.storeError', { error: err.message }));
+  }
+}
+
+function startExecutor() {
+  if (!tablesAvailable || executor) return;
+  executor = Executor.create(docApi, tableId, instanceId, { onChange: onExecutorChange });
+  heartbeat = setInterval(electExecutor, HEARTBEAT_MS);
+}
+
 function refreshState() {
   const active = graph.active;
   $('toggle-active').textContent = t(active ? 'toggle.deactivate' : 'toggle.activate');
   $('toggle-active').setAttribute('aria-pressed', String(active));
+  const standby = active && executor && !executor.isExecutor() && executor.holder() !== '';
   $('open-tab-warning').hidden = !active;
+  $('open-tab-warning').dataset.i18n = standby ? 'app.otherTab' : 'app.openTab';
+  $('open-tab-warning').textContent = t(standby ? 'app.otherTab' : 'app.openTab');
   canvas.setActive(active);
 }
 
@@ -139,9 +195,17 @@ function onGraphChange() {
 
 async function handleEvents(events) {
   for (const event of events) {
-    const result = await Engine.runWorkflow(graph, event, gristApi, { currentTable: tableId });
+    if (!echo.allowRun(event.rowId)) {
+      addLog(t('log.loopStopped', { row: event.rowId }));
+      continue;
+    }
+    let expected = null;
+    const result = await Engine.runWorkflow(graph, event, gristApi, {
+      currentTable: tableId,
+      beforeApply: (effects) => { expected = echo.expect(effects.filter((effect) => effect.table === tableId)); },
+    });
+    if (result.status === 'error' && expected !== null) echo.cancel(expected);
     if (result.status === 'skipped' || result.status === 'condition-false') continue;
-    if (result.status === 'success' && result.effects.some((effect) => effect.table === tableId)) suppressNext = true;
     const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : '');
     addLog(t('log.event', { event: t('event.' + result.event), row: result.rowId, status }));
     await recordRun(result);
@@ -152,14 +216,12 @@ async function onRecords(records) {
   lastRecords = records;
   const { events, next } = Engine.diff(cache, records);
   cache = next;
-  // Garde-fou anti-boucle du POC : le lot provoqué par nos propres écritures est ignoré.
-  // Approximatif (GRD-01 du plan de tests) : à remplacer par un marquage précis.
-  if (suppressNext) {
-    suppressNext = false;
-    return;
-  }
-  if (!graph.active || events.length === 0) return;
-  await handleEvents(events);
+  // Les modifications qui ne sont que l'écho de nos propres écritures ne redéclenchent rien (js/echo.js).
+  const own = echo.filter(events);
+  if (!graph.active || own.length === 0) return;
+  if (electing) await electing;
+  if (!canExecute()) return;
+  await handleEvents(own);
 }
 
 // Simule sur la première ligne de la vue l'événement du premier déclencheur, sans rien écrire.
@@ -193,6 +255,7 @@ async function toggleActive() {
   refreshState();
   scheduleSave();
   addLog(t(graph.active ? 'log.activated' : 'log.deactivated'));
+  await electExecutor();
 }
 
 function toggleLogs() {
@@ -305,6 +368,7 @@ function start() {
       event.preventDefault();
       event.returnValue = '';
     }
+    if (executor) executor.release();   // au mieux : sinon l'autre onglet attend l'expiration du verrou
   });
 
   grist.ready({ requiredAccess: 'full' });

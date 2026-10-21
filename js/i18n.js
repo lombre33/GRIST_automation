@@ -6,6 +6,11 @@
   const DICT = {
     fr: {
       'app.title': 'Grist Automation Builder',
+      'app.otherTab': 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.',
+      'log.deactivatedElsewhere': 'Automation désactivée depuis un autre onglet : elle est désactivée ici aussi.',
+      'executor.active': 'Cet onglet exécute maintenant l\'automation.',
+      'executor.standby': 'Un autre onglet exécute l\'automation : celui-ci reste en veille.',
+      'log.loopStopped': 'Ligne {row} : trop d\'exécutions rapprochées, arrêtée pour éviter une boucle.',
       'app.openTab': 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur.',
       'settings.open': 'Réglages',
       'settings.title': 'Réglages',
@@ -101,6 +106,11 @@
     },
     en: {
       'app.title': 'Grist Automation Builder',
+      'app.otherTab': 'Automation is on: another tab is running it for now, this one takes over if it closes.',
+      'log.deactivatedElsewhere': 'Automation turned off from another tab: it is off here too.',
+      'executor.active': 'This tab is now running the automation.',
+      'executor.standby': 'Another tab is running the automation: this one stays on standby.',
+      'log.loopStopped': 'Row {row}: too many runs in a short time, stopped to avoid a loop.',
       'app.openTab': 'Automation is on: it only runs while this view stays open in your browser.',
       'settings.open': 'Settings',
       'settings.title': 'Settings',

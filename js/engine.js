@@ -131,7 +131,10 @@
         result.status = 'condition-false';
         return result;
       }
-      if (!dryRun) await api.applyUserActions(result.effects.map(toUserAction));
+      if (!dryRun) {
+        if (options.beforeApply) options.beforeApply(result.effects);
+        await api.applyUserActions(result.effects.map(toUserAction));
+      }
       result.status = 'success';
     } catch (err) {
       result.status = 'error';

@@ -24,12 +24,13 @@ const API = 'https://docs.getgrist.com/grist-plugin-api.js';
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 let failures = 0;
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false } = {}) {
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false } = {}) {
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   const page = await context.newPage();
   const problems = [];
   page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push(String(e)));
+  if (foreignLock) await page.addInitScript(() => { window.__foreignLock = true; });
   if (noTables) await page.addInitScript(() => { window.__noTables = true; });
   await page.route(API, (route) => (grist
     ? route.fulfill({ contentType: 'text/javascript', body: stubSource })
@@ -224,15 +225,15 @@ await scenario('E2E-12 tables du document : accord demandé au démarrage, graph
   await page.getByRole('button', { name: 'Créer la table' }).click();
   assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['Automation']);
   await buildFlow(page);
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.length === 1 && JSON.parse(window.__stub.docTables.Automation.rows[0].Config).edges.length === 2);
-  const row = await page.evaluate(() => window.__stub.docTables.Automation.rows[0]);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((r) => r.Type === 'Workflow') && JSON.parse(window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Workflow').Config).edges.length === 2);
+  const row = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Workflow'));
   assert.equal(row.Type, 'Workflow');
   assert.equal(row.Table, 'Contacts');
   assert.match(row.Resume, /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action/);
   await page.click('#toggle-active');
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.length === 2);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type !== 'Lock').length === 2);
   const log = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log'));
   assert.deepEqual([log.Table, log.Evenement, log.Ligne, log.Resultat], ['Contacts', 'update', 1, 'success']);
 }, { noTables: true });
@@ -257,7 +258,7 @@ await scenario('E2E-14 le graphe du document est relu au démarrage, avec le jou
   await page.click('#toggle-active');
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.length === 2);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type !== 'Lock').length === 2);
   await page.waitForTimeout(400);
   const tables = await page.evaluate(() => JSON.stringify(window.__stub.docTables));
   const copy = await page.context().newPage();
@@ -270,6 +271,53 @@ await scenario('E2E-14 le graphe du document est relu au démarrage, avec le jou
   await copy.click('#toggle-logs');
   assert.match(await copy.locator('#log-list').innerText(), /modification ligne 1 : réussi/);
 });
+
+async function buildSelfUpdate(page) {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await addNode(page, 'Action', 400, 120);
+  await waitSchema(page);
+  await pick(page, 'trigger-1-column', 'statut');
+  await pick(page, 'action-1-column', 'statut');
+  await page.fill('#action-1-value', 'Clos');
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+}
+
+await scenario('E2E-15 anti-boucle précis : notre propre écriture ne redéclenche pas, la modification d\'une personne oui', async (page) => {
+  await buildSelfUpdate(page);
+  await page.click('#toggle-active');
+  const pushStatus = (value) => page.evaluate((v) => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: v }]), value);
+  await pushStatus('Nouveau');
+  await pushStatus('En cours');
+  await page.waitForFunction(() => window.__stub.applied.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['UpdateRecord', 'Contacts', 1, { Statut: 'Clos' }]);
+  await pushStatus('Clos');
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.__stub.applied.length), 1, 'l\'écho de notre écriture est ignoré');
+  await pushStatus('Nouveau');
+  await page.waitForFunction(() => window.__stub.applied.length === 2);
+}, { });
+
+await scenario('E2E-16 exécution unique : l\'onglet prend le verrou, le libère à la désactivation', async (page) => {
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  const lock = () => page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Lock'));
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((r) => r.Type === 'Lock' && r.Config));
+  assert.equal(await page.locator('#open-tab-warning').innerText().then((x) => /un autre onglet/.test(x)), false);
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((r) => r.Type === 'Lock' && r.Config === ''));
+  assert.equal((await lock()).Config, '');
+});
+
+await scenario('E2E-17 un autre onglet exécute déjà : celui-ci reste en veille et n\'écrit rien', async (page) => {
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => /un autre onglet/.test(document.getElementById('open-tab-warning').textContent), null, { timeout: 8000 });
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
+  await page.waitForTimeout(500);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied), []);
+}, { foreignLock: true });
 
 await browser.close();
 server.close();

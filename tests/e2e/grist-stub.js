@@ -7,8 +7,16 @@ const FIXED = {
 };
 const docTables = {};
 function createTable(name, columns) { docTables[name] = { columns: columns.map((c) => c.id), rows: [], nextId: 1 }; }
-if (!window.__noTables) {
+if (!window.__noTables && !window.__foreignLock) {
   createTable('Automation', ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
+}
+// window.__foreignLock : un autre onglet exécute déjà (verrou à jour, renouvelé chaque seconde).
+if (window.__foreignLock) {
+  createTable('Automation', ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
+  const lock = { id: 1, Type: 'Lock', Table: 'Contacts', Config: 'autre-onglet', Date: 1 };
+  docTables.Automation.rows.push(lock);
+  docTables.Automation.nextId = 2;
+  setInterval(() => { lock.Date += 1; }, 1000);
 }
 window.__stub = { applied: [], options: window.__preloadOptions || {}, pushRecords: null, docTables };
 window.grist = {

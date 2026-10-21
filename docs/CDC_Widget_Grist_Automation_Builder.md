@@ -141,6 +141,8 @@ Le widget suit la charte UI/UX **Grist Factory** et le **guide de contribution G
 - **Ce que ces règles changent au CDC** :
   - §4.1 : la bibliothèque nodale (Drawflow) est remplacée par un canevas maison, plus simple à auditer et sans dépendance (à confirmer à la phase de la vue nodale).
   - §3.5 : les écritures de la table `Automation` demandent d'abord l'accord de la personne et le redemandent à chaque action en cas de refus.
+  - Risque multi-exécutions (v0.6.2) : exécutant unique par table de vue, élu par un verrou (ligne `Lock` de la table `Automation`) renouvelé toutes les 6 s ; relais après 20 s sans renouvellement, comparé sur des dates vues par chaque onglet (insensible aux horloges). Limite : les modifications faites pendant le relais ne sont exécutées par personne. Sans la table, pas de verrou (doublon possible).
+  - Anti-boucle (v0.6.2) : les écritures du widget sont attendues puis reconnues à leur retour (js/echo.js) au lieu d'ignorer le lot suivant ; filet : 5 exécutions maximum par ligne en 10 s.
   - §6 point 1 (fraîcheur de Drawflow) : sans objet si le canevas maison est retenu.
   - Le chargement de `grist-plugin-api.js` depuis docs.getgrist.com est validé par la DINUM.
   - Politique de sécurité (CSP) de `index.html` : `default-src 'none'`, scripts du widget et de l'API Grist uniquement. `'unsafe-eval'` y figure **à cause du bundle `grist-plugin-api.js` lui-même**, qui évalue ses modules par `eval()` (constaté le 2026-10-12 : sans lui, `grist` n'existe pas et le widget ne demande pas l'accès au document). Le code du widget n'utilise ni `eval` ni `Function` (test HYG-01). Point à signaler à l'audit DINUM.
