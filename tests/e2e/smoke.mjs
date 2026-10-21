@@ -219,20 +219,21 @@ await scenario('E2E-11 sauvegarde automatique et rechargement du graphe', async 
 
 await scenario('E2E-12 tables du document : accord demandé au démarrage, graphe et journal enregistrés', async (page) => {
   await page.waitForSelector('[role=dialog]');
-  assert.match(await page.locator('.modal-title').innerText(), /Créer les tables du widget/);
-  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Créer les tables', 'le focus est sur l\'action');
-  await page.getByRole('button', { name: 'Créer les tables' }).click();
-  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['Automation_Workflows', 'Automation_Logs']);
+  assert.match(await page.locator('.modal-title').innerText(), /Créer la table du widget/);
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Créer la table', 'le focus est sur l\'action');
+  await page.getByRole('button', { name: 'Créer la table' }).click();
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['Automation']);
   await buildFlow(page);
-  await page.waitForFunction(() => window.__stub.docTables.Automation_Workflows.rows.length === 1 && JSON.parse(window.__stub.docTables.Automation_Workflows.rows[0].Config).edges.length === 2);
-  const row = await page.evaluate(() => window.__stub.docTables.Automation_Workflows.rows[0]);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.length === 1 && JSON.parse(window.__stub.docTables.Automation.rows[0].Config).edges.length === 2);
+  const row = await page.evaluate(() => window.__stub.docTables.Automation.rows[0]);
+  assert.equal(row.Type, 'Workflow');
   assert.equal(row.Table, 'Contacts');
   assert.match(row.Resume, /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action/);
   await page.click('#toggle-active');
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation_Logs.rows.length === 1);
-  const log = await page.evaluate(() => window.__stub.docTables.Automation_Logs.rows[0]);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.length === 2);
+  const log = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log'));
   assert.deepEqual([log.Table, log.Evenement, log.Ligne, log.Resultat], ['Contacts', 'update', 1, 'success']);
 }, { noTables: true });
 
@@ -247,7 +248,7 @@ await scenario('E2E-13 accord refusé : le widget marche sans tables, la questio
   await page.getByRole('button', { name: 'Ne pas créer' }).click();
   assert.equal(await page.locator('#open-tab-warning').isVisible(), true, 'activé malgré le refus');
   await page.click('#toggle-logs');
-  assert.match(await page.locator('#log-list').innerText(), /Non enregistré : les tables du widget/);
+  assert.match(await page.locator('#log-list').innerText(), /Non enregistré : la table du widget/);
   assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), []);
 }, { noTables: true });
 
@@ -256,7 +257,7 @@ await scenario('E2E-14 le graphe du document est relu au démarrage, avec le jou
   await page.click('#toggle-active');
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
   await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation_Logs.rows.length === 1 && window.__stub.docTables.Automation_Workflows.rows.length === 1);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.length === 2);
   await page.waitForTimeout(400);
   const tables = await page.evaluate(() => JSON.stringify(window.__stub.docTables));
   const copy = await page.context().newPage();

@@ -72,25 +72,25 @@ Pour RUN-01 à RUN-09, construire d'abord : Déclencheur « modifiée », colonn
 | ACT-01 | V0.5 | Activation refusée | Avec un graphe incomplet (action sans colonne, nœud isolé), cliquer Activer | Refus ; le panneau des logs s'ouvre avec la raison pour chaque problème | ➖ |
 | ACT-02 | V0.5 | Bandeau et fermeture | Activer un graphe valide, puis recharger ou fermer l'onglet | Bandeau « onglet ouvert requis » affiché ; le navigateur demande confirmation avant de fermer. À noter : Chrome, Firefox, Edge | ➖ |
 | SAVE-01 | V0.5 | Sauvegarde automatique | Construire un graphe, attendre une seconde, recharger la page | Nœuds, liens, valeurs et état actif retrouvés ; les listes se remplissent | ➖ |
-| SAVE-02 | V0.6 (modifié) | Une configuration par table | Ajouter un second widget sur une autre page, même table | Il retrouve le même graphe, lu dans `Automation_Workflows` (une ligne par table surveillée). Si les tables n'existent pas, il démarre vide (options du widget seulement) | ➖ |
+| SAVE-02 | V0.6 (modifié) | Une configuration par table | Ajouter un second widget sur une autre page, même table | Il retrouve le même graphe, lu dans `Automation` (une ligne `Workflow` par table surveillée). Si les tables n'existent pas, il démarre vide (options du widget seulement) | ➖ |
 
-## Tables du document, accord et journal
+## Table du document, accord et journal
 
-Prérequis : document sans table `Automation_*` pour TAB-01 à TAB-03 ; les suivants se jouent ensuite, tables créées.
+Prérequis : document sans table `Automation` pour TAB-01 à TAB-03 ; les suivants se jouent ensuite, tables créées.
 
 | ID | Depuis | Scénario | Étapes | Attendu | Résultat |
 |---|---|---|---|---|---|
-| TAB-01 | V0.6 | Accord demandé | Ouvrir le widget dans un document sans tables `Automation_*` | Une fenêtre « Créer les tables du widget dans ce document ? » ; le focus est sur « Créer les tables » ; cliquer à côté ne la ferme pas | ➖ |
-| TAB-02 | V0.6 | Création acceptée | Cliquer « Créer les tables » | `Automation_Workflows` et `Automation_Logs` apparaissent dans la liste des pages de Grist ; le journal du widget dit « Tables du widget créées. » | ➖ |
-| TAB-03 | V0.6 | Colonne Auteur | Dans la table `Automation_Logs`, regarder le type de la colonne Auteur | C'est une colonne à formule déclenchée `user.Email` ; sinon (Grist a refusé) la colonne existe, vide : noter l'écart | ➖ |
+| TAB-01 | V0.6 | Accord demandé | Ouvrir le widget dans un document sans table `Automation` | Une fenêtre « Créer la table du widget dans ce document ? » ; le focus est sur « Créer la table » ; cliquer à côté ne la ferme pas | ➖ |
+| TAB-02 | V0.6 | Création acceptée | Cliquer « Créer la table » | Une seule table `Automation` apparaît dans la liste des pages de Grist ; le journal du widget dit « Table du widget créée. » | ➖ |
+| TAB-03 | V0.6 | Colonne Auteur | Dans la table `Automation`, regarder le type de la colonne Auteur | C'est une colonne à formule déclenchée `user.Email` ; sinon (Grist a refusé) la colonne existe, vide : noter l'écart | ➖ |
 | TAB-04 | V0.6 | Accord refusé | Dans un document sans tables, répondre « Ne pas créer » (ou Échap) | Le widget reste utilisable (graphe, Tester) ; aucune table créée | ➖ |
-| TAB-05 | V0.6 | Redemandé à l'activation | Après TAB-04, construire un graphe valide, cliquer Activer | La fenêtre revient ; refuser encore : le workflow s'active quand même, le journal dit « Non enregistré : les tables du widget n'ont pas été créées dans ce document. » | ➖ |
-| TAB-06 | V0.6 | Graphe enregistré | Construire le graphe de base, attendre une seconde, regarder `Automation_Workflows` | Une ligne pour la table `Contacts` : Actif, Version, Résumé lisible (« Déclencheur : … → Condition : … → Action … »), Config en JSON | ➖ |
+| TAB-05 | V0.6 | Redemandé à l'activation | Après TAB-04, construire un graphe valide, cliquer Activer | La fenêtre revient ; refuser encore : le workflow s'active quand même, le journal dit « Non enregistré : la table du widget n'a pas été créée dans ce document. » | ➖ |
+| TAB-06 | V0.6 | Graphe enregistré | Construire le graphe de base, attendre une seconde, regarder `Automation` | Une ligne de Type `Workflow` pour la table `Contacts` : Actif, Version, Résumé lisible (« Déclencheur : … → Condition : … → Action … »), Config en JSON | ➖ |
 | TAB-07 | V0.6 | Mise à jour sans doublon | Modifier une valeur de condition, attendre, regarder la table | La même ligne est modifiée (pas de seconde ligne pour `Contacts`) | ➖ |
 | TAB-08 | V0.6 | Relecture au démarrage | Recharger la page du widget, ou l'ouvrir depuis un autre navigateur | Le graphe et l'état actif sont retrouvés depuis le document | ➖ |
-| TAB-09 | V0.6 | Journal des exécutions | Activer, modifier le Statut d'une ligne pour déclencher | Une ligne dans `Automation_Logs` : date, table, événement (update), numéro de ligne, résultat (success), détail, Auteur = votre email | ➖ |
+| TAB-09 | V0.6 | Journal des exécutions | Activer, modifier le Statut d'une ligne pour déclencher | Une ligne de Type `Log` dans `Automation` : date, table, événement (update), numéro de ligne, résultat (success), détail, Auteur = votre email | ➖ |
 | TAB-10 | V0.6 | Journal relu | Recharger la page, ouvrir le panneau des logs | Les 20 dernières exécutions apparaissent | ➖ |
-| TAB-11 | V0.6 | Tables masquées du widget | Ouvrir la liste des tables d'une action | `Automation_Workflows` et `Automation_Logs` n'y figurent pas | ➖ |
+| TAB-11 | V0.6 | Table masquée du widget | Ouvrir la liste des tables d'une action | `Automation` n'y figure pas | ➖ |
 | TAB-12 | V0.6 | Droits insuffisants | Avec un compte qui ne peut pas créer de table, accepter la création | Message « Enregistrement dans le document impossible : … » dans le journal ; le widget continue de marcher | ➖ |
 
 ## Interface

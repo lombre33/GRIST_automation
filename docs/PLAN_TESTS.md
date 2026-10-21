@@ -91,7 +91,7 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - STO-02 champ `version` présent ; migration d'une ancienne version vers la courante.
 - STO-03 `resume_humain` généré et cohérent avec la configuration.
 - STO-04 JSON corrompu ou inconnu : le workflow est désactivé et signalé, le reste du widget fonctionne.
-- STO-05 création automatique des tables `Automation_*` absentes ; réutilisation si présentes.
+- STO-05 création automatique des tables `Automation` absente ; réutilisation si présentes.
 - STO-06 tables supprimées ou colonnes modifiées à la main : détection et message clair.
 - STO-07 modification simultanée du même workflow par deux utilisateurs.
 
@@ -131,7 +131,7 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 | SRCH-01 à 04 | recherche par mots (ordre libre, accents, ponctuation) | `tests/search-select.test.js` |
 | CTR-01 à 03 | contrastes des jetons, clair et sombre | `tests/contrast.test.js` |
 | HYG-01 à 09 | aucun réseau, police, image ou style externe ; pas d'`innerHTML` ; pas d'emoji ; politique de sécurité ; pas de couleur en dur ; pas de compte personnel ; stockage limité | `tests/hygiene.test.js` |
-| STORE-01 à 10 | tables du document : colonnes, création avec repli sans formule, graphe par table (upsert), journal, refus de l'API | `tests/store.test.js` |
+| STORE-01 à 10 | table `Automation` du document : colonnes, création avec repli sans formule, graphe par table (upsert), journal, cohabitation des deux types de lignes | `tests/store.test.js` |
 | E2E-01 à 14 | dans Chromium avec une API Grist simulée : construction du graphe (menu d'ajout, liens au clic et au glisser), écriture, dry-run avec état des nœuds, thème et langue, fenêtres et clavier, 700×400, hors Grist, activation refusée, suppression, déplacement et zoom, sauvegarde et rechargement, accord de création des tables, refus, relecture du graphe et du journal | `tests/e2e/smoke.mjs` (`npm run test:e2e`) |
 
 Les E2E ne remplacent pas les scénarios IT du Grist réel (`docs/GRIST_TEST_DOC.md`).
@@ -140,7 +140,7 @@ Les E2E ne remplacent pas les scénarios IT du Grist réel (`docs/GRIST_TEST_DOC
 
 - **MODAL** : largeurs, trois zones, fenêtre empilée au-dessus, voile qui ne ferme rien, retour du focus.
 - **A11Y** : navigation clavier complète, noms accessibles, `aria-expanded` sur les listes, contrastes mesurés sur les éléments réels.
-- **CONSENT** : création des tables `Automation_*` demandée d'abord, redemandée à chaque action en cas de refus.
+- **CONSENT** : création des table `Automation` demandée d'abord, redemandée à chaque action en cas de refus.
 - **BOOT** : fenêtres de démarrage (réseau bloqué, chargement long, erreur) en plus du cas « hors de Grist ».
 
 ## 4. Intégration (Grist réel)

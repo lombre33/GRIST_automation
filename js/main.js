@@ -1,5 +1,5 @@
 // Couche Grist du widget : branche le canevas (js/canvas.js), le graphe (js/graph.js) et le moteur (js/engine.js) sur l'API Grist.
-// Le graphe est stocké dans les options du widget (grist.setOption) ; les tables _Automation_* du CDC arriveront après le POC.
+// Le graphe est stocké dans les options du widget (grist.setOption) et, avec l'accord de la personne, dans la table Automation du document.
 'use strict';
 
 const $ = (id) => document.getElementById(id);
@@ -14,7 +14,7 @@ let cache = null;
 let lastRecords = [];
 let suppressNext = false;
 let tables = [];
-let tablesAvailable = false;   // les tables Automation_* existent dans le document
+let tablesAvailable = false;   // la table Automation existe dans le document
 const columnsByTable = new Map();
 
 const gristApi = { applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
@@ -55,7 +55,7 @@ async function loadSchema() {
 
 let saveTimer = null;
 
-// Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand les tables existent.
+// Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand la table existe.
 function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
@@ -69,7 +69,7 @@ function scheduleSave() {
   }, 300);
 }
 
-// Demande l'accord de créer les tables ; true si elles existent à la fin. Un refus ne se retient pas : la question revient à l'activation (et aux enregistrements qui en ont besoin).
+// Demande l'accord de créer la table ; true si elle existe à la fin. Un refus ne se retient pas : la question revient à l'activation (et aux enregistrements qui en ont besoin).
 async function ensureStore() {
   if (tablesAvailable) return true;
   const accepted = await Modal.confirm({

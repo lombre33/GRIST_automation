@@ -24,36 +24,36 @@ function flow() {
   return g;
 }
 
-test('STORE-01 tables absentes détectées, puis créées une seule fois', async () => {
+test('STORE-01 table absente détectée, puis créée une seule fois (une seule table)', async () => {
   const doc = createFakeDoc({ Contacts: ['Nom'] });
-  assert.deepStrictEqual(await S.missingTables(doc), [S.WORKFLOWS, S.LOGS]);
+  assert.deepStrictEqual(await S.missingTables(doc), [S.TABLE]);
   assert.strictEqual(await S.ensureTables(doc), true);
   assert.deepStrictEqual(await S.missingTables(doc), []);
   assert.strictEqual(await S.ensureTables(doc), false);
 });
 
-test('STORE-02 seule la table manquante est créée', async () => {
-  const doc = createFakeDoc({ [S.WORKFLOWS]: ['Table', 'Config'] });
+test('STORE-02 la table n\'est créée que seule, et rien d\'autre n\'est ajouté au document', async () => {
+  const doc = createFakeDoc({ Contacts: ['Nom'] });
   await S.ensureTables(doc);
-  assert.deepStrictEqual(doc.tables.get(S.WORKFLOWS).columns, ['Table', 'Config']);
-  assert.ok(doc.tables.has(S.LOGS));
+  assert.deepStrictEqual([...doc.tables.keys()], ['Contacts', S.TABLE]);
+  const existing = createFakeDoc({ [S.TABLE]: ['Type', 'Config'] });
+  assert.strictEqual(await S.ensureTables(existing), false);
+  assert.deepStrictEqual(existing.tables.get(S.TABLE).columns, ['Type', 'Config']);
 });
 
 test('STORE-03 la colonne Auteur est une formule déclenchée user.Email', async () => {
   const doc = createFakeDoc();
   await S.ensureTables(doc);
-  for (const name of [S.WORKFLOWS, S.LOGS]) {
-    const column = doc.tables.get(name).spec.find((c) => c.id === 'Auteur');
-    assert.strictEqual(column.formula, 'user.Email');
-    assert.strictEqual(column.isFormula, false);
-  }
+  const column = doc.tables.get(S.TABLE).spec.find((c) => c.id === 'Auteur');
+  assert.strictEqual(column.formula, 'user.Email');
+  assert.strictEqual(column.isFormula, false);
 });
 
 test('STORE-04 si Grist refuse la formule d\'auteur, les tables sont créées sans', async () => {
   const doc = createFakeDoc({}, { rejectFormulaColumns: true });
   await S.ensureTables(doc);
   assert.deepStrictEqual(await S.missingTables(doc), []);
-  assert.ok(doc.tables.get(S.LOGS).spec.every((c) => !c.formula));
+  assert.ok(doc.tables.get(S.TABLE).spec.every((c) => !c.formula));
 });
 
 test('STORE-05 enregistrer un graphe : une ligne par table de vue, mise à jour ensuite', async () => {
@@ -63,8 +63,9 @@ test('STORE-05 enregistrer un graphe : une ligne par table de vue, mise à jour 
   await S.saveGraph(doc, g, 'Contacts', 'résumé');
   await S.saveGraph(doc, { ...g, active: true }, 'Contacts', 'résumé 2');
   await S.saveGraph(doc, g, 'Services', 'autre');
-  const rows = doc.tables.get(S.WORKFLOWS).rows;
+  const rows = doc.tables.get(S.TABLE).rows;
   assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[0].Type, S.WORKFLOW);
   assert.strictEqual(rows[0].Actif, true);
   assert.strictEqual(rows[0].Resume, 'résumé 2');
 });
@@ -82,7 +83,7 @@ test('STORE-06 relire le graphe de la bonne table, aller-retour sans perte', asy
 test('STORE-07 configuration illisible dans la table : ignorée sans erreur', async () => {
   const doc = createFakeDoc();
   await S.ensureTables(doc);
-  await doc.applyUserActions([['AddRecord', S.WORKFLOWS, null, { Table: 'Contacts', Config: '{pas du json' }]]);
+  await doc.applyUserActions([['AddRecord', S.TABLE, null, { Type: S.WORKFLOW, Table: 'Contacts', Config: '{pas du json' }]]);
   assert.strictEqual(await S.loadGraph(doc, 'Contacts'), null);
 });
 
@@ -95,10 +96,25 @@ test('STORE-08 journal : une ligne par exécution, les dernières entrées de la
   const last = await S.recentLogs(doc, 'Contacts', 3);
   assert.deepStrictEqual(last.map((r) => r.Ligne), [2, 3, 5]);
   assert.strictEqual(last[0].Date, 2);
+  assert.ok(last.every((r) => r.Type === S.LOG));
+});
+
+test('STORE-11 workflows et journal cohabitent : chacun ne lit que ses lignes', async () => {
+  const doc = createFakeDoc();
+  await S.ensureTables(doc);
+  const g = flow();
+  await S.appendLog(doc, { date: 1000, table: 'Contacts', event: 'update', row: 1, result: 'success' });
+  await S.saveGraph(doc, g, 'Contacts', 'r');
+  await S.appendLog(doc, { date: 2000, table: 'Contacts', event: 'update', row: 2, result: 'error', detail: 'x' });
+  assert.deepStrictEqual(await S.loadGraph(doc, 'Contacts'), g);
+  assert.strictEqual((await S.recentLogs(doc, 'Contacts', 10)).length, 2);
+  assert.strictEqual(doc.tables.get(S.TABLE).rows.length, 3);
 });
 
 test('STORE-09 les tables du widget sont reconnues pour être masquées', () => {
-  assert.ok(S.isOwnTable('Automation_Logs'));
+  assert.ok(S.isOwnTable('Automation'));
+  assert.ok(S.isOwnTable('Automation_Logs'), 'les anciennes tables de la 0.6.0 restent masquées');
+  assert.ok(!S.isOwnTable('Automations_clients'));
   assert.ok(!S.isOwnTable('Contacts'));
 });
 

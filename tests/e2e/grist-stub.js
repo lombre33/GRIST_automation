@@ -1,6 +1,6 @@
 // Simulateur de l'API de widgets Grist pour les tests de bout en bout : sert à la place de grist-plugin-api.js.
-// Contacts et Archive sont fixes ; les tables Automation_* se créent par AddTable et gardent leurs lignes (window.__stub.docTables).
-// window.__noTables : le document démarre sans tables Automation_*. `applied` ne liste que les écritures hors tables Automation_*.
+// Contacts et Archive sont fixes ; la table Automation se crée par AddTable et gardent leurs lignes (window.__stub.docTables).
+// window.__noTables : le document démarre sans la table Automation. `applied` ne liste que les écritures hors table Automation.
 const FIXED = {
   Contacts: { id: [1], manualSort: [1], Nom: ['A'], Statut: ['Nouveau'], Montant: [10], gristHelper_Display: [''] },
   Archive: { id: [], manualSort: [], Motif: [], Source: [] },
@@ -8,8 +8,7 @@ const FIXED = {
 const docTables = {};
 function createTable(name, columns) { docTables[name] = { columns: columns.map((c) => c.id), rows: [], nextId: 1 }; }
 if (!window.__noTables) {
-  createTable('Automation_Workflows', ['Table', 'Actif', 'Version', 'Resume', 'Config', 'Auteur'].map((id) => ({ id })));
-  createTable('Automation_Logs', ['Date', 'Table', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
+  createTable('Automation', ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
 }
 window.__stub = { applied: [], options: window.__preloadOptions || {}, pushRecords: null, docTables };
 window.grist = {
