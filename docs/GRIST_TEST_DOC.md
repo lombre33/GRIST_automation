@@ -43,24 +43,14 @@ Tables techniques `_Automation_Workflows` et `_Automation_Logs` : créées par l
 - 3 services dont un avec seuil vide.
 - Une vue filtrée sur `Statut = En cours` pour le cas DIFF-07.
 
-## 4. Scénarios d'intégration
+## 4. Scénarios
 
-- IT-01 modification d'un statut déclenche l'ajout d'une ligne dans Archive.
-- IT-02 création d'un contact avec condition sur Montant > Seuil du service (lookup).
-- IT-03 suppression d'un contact : détection par `rowId`, log sans contenu.
-- IT-04 vue filtrée : une ligne qui sort du filtre ne déclenche pas de suppression.
-- IT-05 deux onglets (deux utilisateurs si possible) : une seule exécution par événement.
-- IT-06 fermeture de l'onglet exécutant : reprise par l'autre.
-- IT-07 utilisateur en lecture seule : erreur propre.
-- IT-08 table cible renommée ou supprimée : erreur propre.
-- IT-09 boucle volontaire A→B→A : arrêt par le garde-fou.
-- IT-10 dry-run : aucune ligne écrite dans Archive.
-- IT-11 valeurs d'injection : rien d'exécuté dans l'interface ni dans les cellules écrites.
+Les scénarios à jouer dans ce document sont dans `docs/TESTS_GRIST_REEL.md` (liste vivante, enrichie à chaque fonctionnalité, avec un journal des campagnes). Les anciens IT-01 à IT-11 y ont été repris et adaptés à la vue nodale.
 
 ## 5. Économie de crédits
 
 - Les modules du moteur se testent sous Node sans Grist ; l'intégration ne se lance que pour une feature terminée.
-- Chaque session d'intégration part de ce document et de cette liste, sans réexploration.
+- Chaque session d'intégration part de ce document et de `docs/TESTS_GRIST_REEL.md`, sans réexploration.
 - Un fil dédié aux tests d'intégration n'est utile que si l'historique du fil principal devient long ; à décider à ce moment-là.
 
 ## 6. Points à fournir par Antoine

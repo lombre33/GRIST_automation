@@ -144,7 +144,7 @@ Les E2E ne remplacent pas les scénarios IT du Grist réel (`docs/GRIST_TEST_DOC
 
 ## 4. Intégration (Grist réel)
 
-Scénarios IT-01 à IT-nn dans `docs/GRIST_TEST_DOC.md` : création / modification / suppression réelles, filtre de vue actif, deux onglets ouverts, droits restreints, table cible absente.
+Liste de scénarios manuels dans `docs/TESTS_GRIST_REEL.md`, jouée par Antoine sur son Grist et enrichie à chaque fonctionnalité (voir sa règle de maintenance). Le document de test est décrit dans `docs/GRIST_TEST_DOC.md`.
 
 ## 5. Quand lancer quoi
 
@@ -154,3 +154,4 @@ Scénarios IT-01 à IT-nn dans `docs/GRIST_TEST_DOC.md` : création / modificati
 | Nouvelle feature | modules touchés + `GRD` + `MUL` + intégration |
 | Avant chaque livraison / audit | tout |
 | Bug corrigé | ajouter un test dans le module concerné, puis le module |
+| Fonctionnalité livrée | Ajouter ses scénarios dans `docs/TESTS_GRIST_REEL.md`, et renvoyer vers les nouveaux ou modifiés dans le message de livraison |
