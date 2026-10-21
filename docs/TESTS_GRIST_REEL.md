@@ -128,6 +128,24 @@ Une action « Mettre à jour la ligne » sur une autre table doit dire quelle li
 | KEY-07 | V0.9 | Même table, autre ligne | Action sur « Table courante », repérée par Cle = k2 | La ligne dont Cle = k2 est modifiée, pas celle qui a déclenché | ➖ |
 | KEY-08 | V0.9 | Test à blanc | Cliquer Tester | Les effets annoncés portent le numéro de la ligne trouvée ; rien n'est écrit | ➖ |
 
+## Lecture d'une autre table et ligne précise
+
+Prérequis : table `Services` (Nom, Seuil) du document de test. Le nœud Lecture met une cellule d'une autre table à disposition sous `{nom}` ; une condition peut comparer à `{nom}` ou à `{Colonne}` (pour une accolade littérale : `{{`).
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| LKP-01 | V0.10 | Nœud Lecture | Ajouter un nœud Lecture | Champs Nom, Table lue (« — Table courante — » par défaut), Ligne repérée par, Valeur clé, Colonne lue, Si introuvable ; les listes de colonnes suivent la table lue | ➖ |
+| LKP-02 | V0.10 | Seuil lu ailleurs | Lecture « seuil » = Services.Seuil où Nom = `{Service}` ; condition Montant supérieur à `{seuil}` ; action Archive | Déclenche seulement si le montant dépasse le seuil du service du contact | ➖ |
+| LKP-03 | V0.10 | Service absent | Contact dont le service n'existe pas dans Services | Erreur « Ligne introuvable dans Services … » ; avec « Si introuvable : Valeur vide », pas d'erreur | ➖ |
+| LKP-04 | V0.10 | Service en double | Deux lignes Services de même nom | Erreur « Plusieurs lignes dans Services … » dans les deux modes | ➖ |
+| LKP-05 | V0.10 | Seuil vide | Service dont le Seuil est vide | Comportement noté (comparaison avec une valeur vide : faux) | ➖ |
+| LKP-06 | V0.10 | Validation | Activer avec une Lecture sans colonne clé, sans valeur clé ou sans colonne lue ; deux nœuds avec le même nom | Refus avec la raison dans le journal | ➖ |
+| LKP-07 | V0.10 | Condition avec `{Colonne}` | Condition Montant supérieur à `{Plafond}` (colonne de la ligne) | Comparaison avec la valeur de la colonne Plafond de la même ligne | ➖ |
+| LKP-08 | V0.10 | Valeur littérale avec accolades | Condition Nom égal à `{{x}}` ; contact dont le nom est `{x}` | La condition est vraie | ➖ |
+| TGT-01 | V0.10 | Ligne précise | Déclencheur « modifiée », Ligne précise = colonne Cle, valeur `k2` | Seule la modification de la ligne dont Cle = k2 déclenche | ➖ |
+| TGT-02 | V0.10 | Grisé selon l'action | Passer le déclencheur à « créée » puis « supprimée » | « Ligne précise » et sa valeur sont grisées (pas masquées) ; Activer est refusé tant qu'une ligne précise est renseignée | ➖ |
+| TGT-03 | V0.10 | Clé en double | Deux lignes avec Cle = k2, modifier chacune | Les deux déclenchent (décision à valider par Antoine, le CDC parlait d'erreur) | ➖ |
+
 ## Activation et sauvegarde
 
 | ID | Depuis | Scénario | Étapes | Attendu | Résultat |

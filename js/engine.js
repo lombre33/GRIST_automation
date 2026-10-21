@@ -58,24 +58,28 @@
     return { events, next };
   }
 
+  const looselyEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b) || (typeof a !== 'object' && typeof b !== 'object' && a !== null && b !== null && a !== undefined && b !== undefined && String(a) === String(b));
+
   function parseValue(text) {
     return text !== '' && text !== null && text !== undefined && !isNaN(Number(text)) ? Number(text) : text;
   }
 
+  // Cible optionnelle (modification seulement) : la ligne modifiée doit avoir targetValue dans la colonne targetColumn.
   function matchesTrigger(trigger, event) {
     if (!trigger || trigger.action !== event.type) return false;
+    if (trigger.targetColumn && (event.type !== 'update' || !event.record || !looselyEqual(event.record[trigger.targetColumn], parseValue(trigger.targetValue)))) return false;
     if (event.type === 'update' && trigger.column) {
       return Object.prototype.hasOwnProperty.call(event.changed, trigger.column);
     }
     return true;
   }
 
-  function evalCondition(cond, event) {
+  function evalCondition(cond, event, vars) {
     if (!cond || !cond.column) throw new Error('Condition incomplète : aucune colonne');
     const op = OPERATORS[cond.operator];
     if (!op) throw new Error('Opérateur inconnu : ' + cond.operator);
     if (!event.record) throw new Error('Condition impossible sans contenu de ligne');
-    return op(event.record[cond.column], parseValue(cond.value));
+    return op(event.record[cond.column], resolveTemplate(cond.value, event, vars || {}));
   }
 
   // Valeurs {Colonne} d'un texte : colonnes de la ligne ou variables des nœuds Transformation (qui priment). {{ et }} donnent des accolades littérales.
@@ -125,10 +129,10 @@
   }
 
   // Toutes les vérifications d'un nœud condition, reliées par ET (défaut) ou OU.
-  function evalChecks(config, event) {
+  function evalChecks(config, event, vars) {
     const checks = config && config.checks;
     if (!checks || !checks.length) throw new Error('Condition incomplète : aucune vérification');
-    const run = (check) => evalCondition(check, event);
+    const run = (check) => evalCondition(check, event, vars);
     return config.join === 'or' ? checks.some(run) : checks.every(run);
   }
 
@@ -150,23 +154,45 @@
     throw new Error('Action inconnue : ' + config.type);
   }
 
-  const looselyEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b) || (typeof a !== 'object' && typeof b !== 'object' && a !== null && b !== null && a !== undefined && b !== undefined && String(a) === String(b));
 
-  // Cherche l'identifiant des lignes repérées par une clé (lecture seule, aussi en test à blanc) : exactement une ligne attendue.
-  async function resolveTargets(effects, api) {
-    const tables = new Map();
+  // Lecture d'une table (une seule fois par exécution) et recherche de l'unique ligne dont `column` vaut `value`.
+  async function readTable(ctx, table) {
+    if (!ctx.api.fetchTable) throw new Error('Lecture de la table impossible');
+    if (!ctx.tables.has(table)) ctx.tables.set(table, await ctx.api.fetchTable(table));
+    return ctx.tables.get(table);
+  }
+
+  function findRows(data, table, column, value) {
+    if (!Object.prototype.hasOwnProperty.call(data, column)) throw new Error('Colonne inconnue dans ' + table + ' : ' + column);
+    return (data.id || []).map((id, index) => index).filter((index) => looselyEqual(data[column][index], value));
+  }
+
+  function findOne(data, table, column, value) {
+    const found = findRows(data, table, column, value);
+    if (found.length === 0) throw new Error('Ligne introuvable dans ' + table + ' : ' + column + ' = ' + display(value));
+    if (found.length > 1) throw new Error('Plusieurs lignes dans ' + table + ' pour ' + column + ' = ' + display(value));
+    return found[0];
+  }
+
+  // Cherche l'identifiant des lignes repérées par une clé (lecture seule, aussi en test à blanc).
+  async function resolveTargets(effects, ctx) {
     for (const effect of effects) {
       if (!effect.match) continue;
-      const { column, value } = effect.match;
-      if (!api.fetchTable) throw new Error('Lecture de la table impossible');
-      if (!tables.has(effect.table)) tables.set(effect.table, await api.fetchTable(effect.table));
-      const data = tables.get(effect.table);
-      if (!Object.prototype.hasOwnProperty.call(data, column)) throw new Error('Colonne inconnue dans ' + effect.table + ' : ' + column);
-      const ids = (data.id || []).filter((id, index) => looselyEqual(data[column][index], value));
-      if (ids.length === 0) throw new Error('Ligne introuvable dans ' + effect.table + ' : ' + column + ' = ' + display(value));
-      if (ids.length > 1) throw new Error('Plusieurs lignes dans ' + effect.table + ' pour ' + column + ' = ' + display(value));
-      effect.rowId = ids[0];
+      const data = await readTable(ctx, effect.table);
+      effect.rowId = data.id[findOne(data, effect.table, effect.match.column, effect.match.value)];
     }
+  }
+
+  // Valeur lue par un nœud Lecture : une cellule d'une autre table, repérée par une clé.
+  async function applyLookup(config, event, vars, currentTable, ctx) {
+    const table = config.table || currentTable;
+    const data = await readTable(ctx, table);
+    const key = resolveTemplate(config.matchValue, event, vars);
+    const found = findRows(data, table, config.matchColumn, key);
+    if (found.length === 0 && config.onMissing === 'empty') return '';
+    const index = findOne(data, table, config.matchColumn, key);
+    if (!Object.prototype.hasOwnProperty.call(data, config.column)) throw new Error('Colonne inconnue dans ' + table + ' : ' + config.column);
+    return data[config.column][index];
   }
 
   function toUserAction(plan) {
@@ -178,21 +204,25 @@
   // Parcourt le graphe depuis un déclencheur. Une condition suit sa sortie « oui » quand elle est vraie, sa sortie « sinon » sinon.
   // trace : état de chaque nœud atteint ('passed', 'else', 'blocked', 'action'), pour l'affichage du dry-run.
   // 'blocked' : condition fausse sans lien « sinon » ; 'else' : condition fausse, la branche « sinon » est suivie.
-  function walk(graph, node, event, currentTable, trace, plan, branch, vars) {
+  // ctx : { api, tables, currentTable, trace, plan } ; vars : variables des nœuds Lecture et Transformation en amont.
+  async function walk(graph, node, event, ctx, branch, vars) {
     for (const edge of graph.edges) {
       if (edge.from !== node.id || (edge.branch || 'then') !== (branch || 'then')) continue;
       const next = graph.nodes.find((candidate) => candidate.id === edge.to);
       if (next.type === 'condition') {
-        const passed = evalChecks(next.config, event);
+        const passed = evalChecks(next.config, event, vars);
         const hasElse = graph.edges.some((other) => other.from === next.id && other.branch === 'else');
-        trace[next.id] = passed ? 'passed' : (hasElse ? 'else' : 'blocked');
-        walk(graph, next, event, currentTable, trace, plan, passed ? 'then' : 'else', vars);
+        ctx.trace[next.id] = passed ? 'passed' : (hasElse ? 'else' : 'blocked');
+        await walk(graph, next, event, ctx, passed ? 'then' : 'else', vars);
       } else if (next.type === 'transform') {
-        trace[next.id] = 'passed';
-        walk(graph, next, event, currentTable, trace, plan, 'then', Object.assign({}, vars, { [next.config.name]: applyTransform(next.config, event, vars) }));
+        ctx.trace[next.id] = 'passed';
+        await walk(graph, next, event, ctx, 'then', Object.assign({}, vars, { [next.config.name]: applyTransform(next.config, event, vars) }));
+      } else if (next.type === 'lookup') {
+        ctx.trace[next.id] = 'passed';
+        await walk(graph, next, event, ctx, 'then', Object.assign({}, vars, { [next.config.name]: await applyLookup(next.config, event, vars, ctx.currentTable, ctx) }));
       } else if (next.type === 'action') {
-        plan.push(planAction(next.config, event, currentTable, vars));
-        trace[next.id] = 'action';
+        ctx.plan.push(planAction(next.config, event, ctx.currentTable, vars));
+        ctx.trace[next.id] = 'action';
       } else {
         throw new Error('Nœud inattendu : ' + next.type);
       }
@@ -209,15 +239,16 @@
       if (!graph.active && !dryRun) return result;
       const triggers = graph.nodes.filter((node) => node.type === 'trigger' && matchesTrigger(node.config, event));
       if (!triggers.length) return result;
+      const ctx = { api, tables: new Map(), currentTable: options.currentTable, trace: result.trace, plan: result.effects };
       for (const trigger of triggers) {
         result.trace[trigger.id] = 'passed';
-        walk(graph, trigger, event, options.currentTable, result.trace, result.effects, 'then', {});
+        await walk(graph, trigger, event, ctx, 'then', {});
       }
       if (!result.effects.length) {
         result.status = 'condition-false';
         return result;
       }
-      await resolveTargets(result.effects, api);
+      await resolveTargets(result.effects, ctx);
       if (!dryRun) {
         if (options.beforeApply) options.beforeApply(result.effects);
         await api.applyUserActions(result.effects.map(toUserAction));

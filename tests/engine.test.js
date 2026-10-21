@@ -420,3 +420,93 @@ test('ACT-15 autre ligne de la table courante repérée par clé : permis', asyn
   assert.strictEqual(result.status, 'success');
   assert.deepStrictEqual(api.applied, [['UpdateRecord', 'Contacts', 2, { Statut: 'vu' }]]);
 });
+
+// Lecture d'une cellule d'une autre table, puis condition ou action qui s'en sert.
+function lookupGraph(over) {
+  const cfg = Object.assign({ name: 'seuil', table: 'Archive', matchColumn: 'Motif', matchValue: '{Nom}', column: 'Source', onMissing: 'error' }, over);
+  return { version: 3, active: true, nodes: [
+    { id: 't', type: 'trigger', config: { action: 'update', column: '' } },
+    { id: 'l', type: 'lookup', config: cfg },
+    { id: 'c', type: 'condition', config: { join: 'and', checks: [{ column: 'Montant', operator: 'gt', value: '{seuil}' }] } },
+    { id: 'a', type: 'action', config: { type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'dépassé : {seuil}' } },
+  ], edges: [{ from: 't', to: 'l' }, { from: 'l', to: 'c' }, { from: 'c', to: 'a' }] };
+}
+const thresholds = { Archive: { id: [1, 2, 3], Motif: ['a', 'b', 'b'], Source: [100, 200, 300] } };
+const runLookup = (cfg, record) => { const api = createFakeApi({ tables: thresholds }); return E.runWorkflow(lookupGraph(cfg), event(record), api, opts).then((result) => ({ result, applied: api.applied })); };
+
+test('LKP-01 lecture d\'une autre table : la valeur lue sert de seuil à une condition', async () => {
+  const above = await runLookup({}, { Nom: 'a', Montant: 150 });
+  assert.strictEqual(above.result.status, 'success');
+  assert.deepStrictEqual(above.applied, [['AddRecord', 'Archive', null, { Motif: 'dépassé : 100' }]]);
+  const below = await runLookup({}, { Nom: 'a', Montant: 50 });
+  assert.strictEqual(below.result.status, 'condition-false');
+  assert.strictEqual(below.result.trace.l, 'passed');
+});
+
+test('LKP-02 ligne absente : erreur claire, ou valeur vide au choix', async () => {
+  const missing = await runLookup({}, { Nom: 'zzz', Montant: 150 });
+  assert.strictEqual(missing.result.status, 'error');
+  assert.match(missing.result.error, /Ligne introuvable dans Archive : Motif = zzz/);
+  const empty = await runLookup({ onMissing: 'empty' }, { Nom: 'zzz', Montant: 150 });
+  assert.notStrictEqual(empty.result.status, 'error', 'la valeur vide ne fait pas échouer la lecture');
+  assert.deepStrictEqual(missing.applied, []);
+});
+
+test('LKP-03 lignes multiples : erreur (même avec « valeur vide », qui ne couvre que l\'absence)', async () => {
+  for (const onMissing of ['error', 'empty']) {
+    const twice = await runLookup({ onMissing }, { Nom: 'b', Montant: 500 });
+    assert.strictEqual(twice.result.status, 'error');
+    assert.match(twice.result.error, /Plusieurs lignes dans Archive/);
+  }
+});
+
+test('LKP-04 colonne lue inconnue ou lecture impossible : erreur explicite', async () => {
+  const unknown = await runLookup({ column: 'Nope' }, { Nom: 'a', Montant: 1 });
+  assert.match(unknown.result.error, /Colonne inconnue dans Archive : Nope/);
+  const unreadable = await E.runWorkflow(lookupGraph({}), event({ Nom: 'a', Montant: 1 }), { applyUserActions: async () => {} }, opts);
+  assert.match(unreadable.error, /Lecture de la table impossible/);
+});
+
+test('LKP-05 table vide dans la lecture : la table courante est lue', async () => {
+  const api = createFakeApi({ tables: { Contacts: { id: [1], Nom: ['a'], Seuil: [10] } } });
+  const g = lookupGraph({ table: '', matchColumn: 'Nom', matchValue: 'a', column: 'Seuil' });
+  const result = await E.runWorkflow(g, event({ Nom: 'x', Montant: 99 }), api, opts);
+  assert.strictEqual(result.status, 'success');
+});
+
+test('LKP-06 une condition compare à {Colonne} de la ligne, et les accolades littérales restent possibles', async () => {
+  const cond = (value) => ({ version: 3, active: true, nodes: [
+    { id: 't', type: 'trigger', config: { action: 'update', column: '' } },
+    { id: 'c', type: 'condition', config: { join: 'and', checks: [{ column: 'Montant', operator: 'gt', value }] } },
+    { id: 'a', type: 'action', config: { type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'ok' } },
+  ], edges: [{ from: 't', to: 'c' }, { from: 'c', to: 'a' }] });
+  const run = (value, record) => E.runWorkflow(cond(value), event(record), createFakeApi(), opts).then((r) => r.status);
+  assert.strictEqual(await run('{Plafond}', { Montant: 10, Plafond: 5 }), 'success');
+  assert.strictEqual(await run('{Plafond}', { Montant: 1, Plafond: 5 }), 'condition-false');
+  assert.strictEqual(await run('{Inconnue}', { Montant: 1 }), 'error');
+  const braces = { version: 3, active: true, nodes: [
+    { id: 't', type: 'trigger', config: { action: 'update', column: '' } },
+    { id: 'c', type: 'condition', config: { join: 'and', checks: [{ column: 'Nom', operator: 'eq', value: '{{x}}' }] } },
+    { id: 'a', type: 'action', config: { type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'ok' } },
+  ], edges: [{ from: 't', to: 'c' }, { from: 'c', to: 'a' }] };
+  assert.strictEqual((await E.runWorkflow(braces, event({ Nom: '{x}' }), createFakeApi(), opts)).status, 'success');
+});
+
+test('TRG-08 ligne précise (modification) : seule la ligne dont la colonne clé a la valeur déclenche', () => {
+  const trigger = { action: 'update', column: '', targetColumn: 'Cle', targetValue: 'k2' };
+  const upd = (record) => ({ type: 'update', rowId: 1, record, changed: { Nom: { from: 'a', to: 'b' } } });
+  assert.strictEqual(E.matchesTrigger(trigger, upd({ id: 1, Cle: 'k2' })), true);
+  assert.strictEqual(E.matchesTrigger(trigger, upd({ id: 1, Cle: 'k1' })), false);
+  assert.strictEqual(E.matchesTrigger({ ...trigger, targetValue: '5' }, upd({ id: 1, Cle: 5 })), true, 'texte et nombre');
+  assert.strictEqual(E.matchesTrigger({ action: 'update', column: '', targetColumn: '', targetValue: '' }, upd({ id: 1, Cle: 'zz' })), true, 'sans cible : toute ligne');
+});
+
+test('TRG-09 une cible n\'est jamais satisfaite pour une création ou une suppression', () => {
+  const target = { targetColumn: 'Cle', targetValue: 'k2' };
+  assert.strictEqual(E.matchesTrigger({ action: 'create', column: '', ...target }, { type: 'create', rowId: 1, record: { id: 1, Cle: 'k2' } }), false);
+  assert.strictEqual(E.matchesTrigger({ action: 'delete', column: '', ...target }, { type: 'delete', rowId: 1 }), false);
+});
+
+test('TRG-10 anciens graphes sans cible : comportement inchangé', () => {
+  assert.strictEqual(E.matchesTrigger({ action: 'update', column: 'Statut' }, { type: 'update', rowId: 1, record: { id: 1 }, changed: { Statut: { from: 1, to: 2 } } }), true);
+});

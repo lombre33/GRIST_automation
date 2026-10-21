@@ -222,3 +222,54 @@ test('GRAPH-19 un graphe enregistré avant la clé de ligne reste valable (champ
   delete a.config.matchValue;
   assert.deepStrictEqual(G.validate(G.parse(JSON.stringify(g)), { currentTable: 'Contacts' }), []);
 });
+
+test('GRAPH-20 validation d\'une lecture : colonne clé, valeur clé, colonne lue, nom valide et unique (partagé avec les transformations)', () => {
+  const g = G.create();
+  const t = G.addNode(g, 'trigger', 0, 0);
+  const l = G.addNode(g, 'lookup', 0, 0);
+  const a = G.addNode(g, 'action', 0, 0);
+  G.connect(g, t.id, l.id);
+  G.connect(g, l.id, a.id);
+  a.config.column = 'Motif';
+  const keys = () => G.validate(g).map((i) => i.key);
+  assert.deepStrictEqual(keys(), ['issue.lookupIncomplete']);
+  Object.assign(l.config, { table: 'Services', matchColumn: 'Nom', matchValue: '{Nom}', column: 'Seuil' });
+  assert.deepStrictEqual(keys(), []);
+  const f = G.addNode(g, 'transform', 0, 0);
+  f.config.name = l.config.name;
+  f.config.a = 'x';
+  f.config.op = 'trim';
+  G.connect(g, l.id, f.id);
+  assert.ok(keys().includes('issue.transformName'), 'même nom qu\'une lecture');
+});
+
+test('GRAPH-21 déclencheur à ligne précise : réservé à la modification, valeur clé exigée', () => {
+  const g = G.create();
+  const t = G.addNode(g, 'trigger', 0, 0);
+  const a = G.addNode(g, 'action', 0, 0);
+  G.connect(g, t.id, a.id);
+  a.config.column = 'Motif';
+  const keys = () => G.validate(g).map((i) => i.key);
+  t.config.targetColumn = 'Cle';
+  assert.deepStrictEqual(keys(), ['issue.triggerTargetValue']);
+  t.config.targetValue = 'k1';
+  assert.deepStrictEqual(keys(), []);
+  t.config.action = 'create';
+  assert.deepStrictEqual(keys(), ['issue.triggerTarget']);
+  t.config.action = 'delete';
+  assert.deepStrictEqual(keys(), ['issue.triggerTarget']);
+});
+
+test('GRAPH-22 résumé lisible : lecture et ligne précise', () => {
+  const g = G.create();
+  const t = G.addNode(g, 'trigger', 0, 0);
+  const l = G.addNode(g, 'lookup', 0, 0);
+  const a = G.addNode(g, 'action', 0, 0);
+  Object.assign(t.config, { targetColumn: 'Cle', targetValue: 'k1' });
+  Object.assign(l.config, { table: 'Services', matchColumn: 'Nom', matchValue: '{Nom}', column: 'Seuil' });
+  G.connect(g, t.id, l.id);
+  G.connect(g, l.id, a.id);
+  const text = G.summarize(g, (k, p) => require('../js/i18n.js').translate(k, p, 'fr'));
+  assert.match(text, /où Cle = k1/);
+  assert.match(text, /Lecture : \{valeur\} = Services\.Seuil \(où Nom = \{Nom\}\)/);
+});

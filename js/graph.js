@@ -84,11 +84,20 @@
       }
     }
     const names = new Set();
-    for (const node of graph.nodes.filter((candidate) => candidate.type === 'transform')) {
-      const { name, op, a, b } = node.config;
+    for (const node of graph.nodes.filter((candidate) => candidate.type === 'transform' || candidate.type === 'lookup')) {
+      const { name } = node.config;
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || names.has(name)) issues.push({ key: 'issue.transformName', node: node.id });
       names.add(name);
-      if (String(a).trim() === '' || (!Types.UNARY.includes(op) && String(b).trim() === '')) issues.push({ key: 'issue.transformOperand', node: node.id });
+      if (node.type === 'transform') {
+        const { op, a, b } = node.config;
+        if (String(a).trim() === '' || (!Types.UNARY.includes(op) && String(b).trim() === '')) issues.push({ key: 'issue.transformOperand', node: node.id });
+      } else if (!node.config.matchColumn || !node.config.column || String(node.config.matchValue).trim() === '') {
+        issues.push({ key: 'issue.lookupIncomplete', node: node.id });
+      }
+    }
+    for (const node of triggers) {
+      if (node.config.targetColumn && node.config.action !== 'update') issues.push({ key: 'issue.triggerTarget', node: node.id });
+      if (node.config.targetColumn && node.config.action === 'update' && String(node.config.targetValue).trim() === '') issues.push({ key: 'issue.triggerTargetValue', node: node.id });
     }
     if (triggers.length && !graph.nodes.some((node) => node.type === 'action' && triggers.some((t) => reaches(graph, t.id, node.id)))) {
       if (graph.nodes.some((node) => node.type === 'action')) issues.push({ key: 'issue.noPath' });
@@ -127,7 +136,8 @@
   function summarize(graph, t) {
     const describe = (node) => {
       const c = node.config;
-      if (node.type === 'trigger') return `${t('node.trigger')} : ${t('trigger.' + c.action)}${c.column ? ' (' + c.column + ')' : ''}`;
+      if (node.type === 'trigger') return `${t('node.trigger')} : ${t('trigger.' + c.action)}${c.column ? ' (' + c.column + ')' : ''}${c.targetColumn ? ` ${t('sum.where')} ${c.targetColumn} = ${c.targetValue}` : ''}`;
+      if (node.type === 'lookup') return `${t('node.lookup')} : {${c.name}} = ${c.table || '—'}.${c.column || '—'} (${t('sum.where')} ${c.matchColumn || '—'} = ${c.matchValue})`;
       if (node.type === 'transform') return `${t('node.transform')} : {${c.name}} = ${Types.UNARY.includes(c.op) ? `${t('tf.' + c.op)} (${c.a})` : `${c.a} ${t('tf.' + c.op)} ${c.b}`}`;
       if (node.type === 'condition') {
         const checks = c.checks.map((check) => `${check.column || '—'} ${t('op.' + check.operator)}${Types.needsValue(check) && check.value !== '' ? ' ' + check.value : ''}`);

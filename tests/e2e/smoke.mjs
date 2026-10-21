@@ -428,6 +428,68 @@ await scenario('E2E-22 mise à jour d\'une autre table sans clé : activation re
   assert.match(await page.locator('#log-list').innerText(), /colonne qui repère la ligne/);
 });
 
+await scenario('E2E-23 nœud Lecture : un seuil lu dans une autre table sert dans la condition', async (page) => {
+  await addNode(page, 'Déclencheur', 20, 100);
+  await addNode(page, 'Lecture', 290, 100);
+  await addNode(page, 'Condition', 560, 100);
+  await addNode(page, 'Action', 830, 100);
+  await waitSchema(page);
+  await pick(page, 'trigger-1-column', 'statut');
+  await page.fill('#lookup-1-name', 'seuil');
+  await pick(page, 'lookup-1-table', 'archive');
+  await pick(page, 'lookup-1-matchColumn', 'motif');
+  await page.fill('#lookup-1-matchValue', '{Nom}');
+  await pick(page, 'lookup-1-column', 'source');
+  await pick(page, 'condition-1-column', 'montant');
+  await pick(page, 'condition-1-operator', 'supérieur');
+  await page.fill('#condition-1-value', '{seuil}');
+  await pick(page, 'action-1-type', 'ajouter');
+  await pick(page, 'action-1-table', 'archive');
+  await pick(page, 'action-1-column', 'motif');
+  await page.fill('#action-1-value', 'dépassé {seuil}');
+  for (const [from, to] of [['trigger', 'lookup'], ['lookup', 'condition'], ['condition', 'action']]) {
+    await page.locator(`.node-${from} .pin-out[data-branch=then]`).click();
+    await page.locator(`.node-${to} .pin-in`).click();
+  }
+  await page.click('#toggle-active');
+  const push = (record) => page.evaluate((r) => window.__stub.pushRecords([r]), record);
+  await push({ id: 1, Nom: 'a', Statut: 'Nouveau', Montant: 20 });
+  await push({ id: 1, Nom: 'a', Statut: 'Clos', Montant: 20 });
+  await page.waitForFunction(() => window.__stub.applied.length === 1);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['AddRecord', 'Archive', null, { Motif: 'dépassé 10' }]);
+  await push({ id: 1, Nom: 'b', Statut: 'Nouveau', Montant: 20 });
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => window.__stub.applied.length), 1, 'seuil de b = 500 : 20 ne le dépasse pas');
+}, { viewport: { width: 1400, height: 800 } });
+
+await scenario('E2E-24 déclencheur sur une ligne précise : les autres lignes sont ignorées', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 100);
+  await addNode(page, 'Action', 400, 100);
+  await waitSchema(page);
+  await pick(page, 'trigger-1-column', 'statut');
+  assert.equal(await page.locator('#trigger-1-targetValue').isDisabled(), true, 'valeur clé grisée sans colonne clé');
+  await pick(page, 'trigger-1-targetColumn', 'nom');
+  await page.fill('#trigger-1-targetValue', 'Ada');
+  await pick(page, 'action-1-type', 'ajouter');
+  await pick(page, 'action-1-table', 'archive');
+  await pick(page, 'action-1-column', 'motif');
+  await page.fill('#action-1-value', 'vu');
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+  await pick(page, 'trigger-1-action', 'créée');
+  assert.equal(await page.locator('#trigger-1-targetColumn').isDisabled(), true, 'ligne précise grisée pour une création');
+  await page.click('#toggle-active');
+  assert.match(await page.locator('#log-list').innerText(), /ne s'applique qu'à une modification/);
+  await pick(page, 'trigger-1-action', 'modifiée');
+  await page.click('#toggle-active');
+  const push = (records) => page.evaluate((r) => window.__stub.pushRecords(r), records);
+  await push([{ id: 1, Nom: 'Ada', Statut: 'a' }, { id: 2, Nom: 'Bob', Statut: 'a' }]);
+  await push([{ id: 1, Nom: 'Ada', Statut: 'b' }, { id: 2, Nom: 'Bob', Statut: 'b' }]);
+  await page.waitForFunction(() => window.__stub.applied.length >= 1);
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.__stub.applied.length), 1, 'seule la ligne Ada déclenche');
+});
+
 await browser.close();
 server.close();
 process.exit(failures ? 1 : 0);

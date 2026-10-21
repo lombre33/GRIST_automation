@@ -11,10 +11,13 @@
       titleKey: 'node.trigger',
       inputs: 0,
       branches: ['then'],
-      defaults: { action: 'update', column: '' },
+      defaults: { action: 'update', column: '', targetColumn: '', targetValue: '' },
       fields: [
         { key: 'action', labelKey: 'trigger.when', kind: 'choice', choices: [['update', 'trigger.update'], ['create', 'trigger.create'], ['delete', 'trigger.delete']] },
         { key: 'column', labelKey: 'trigger.column', kind: 'column', emptyKey: 'list.none' },
+        // Cible : seulement pour une modification (une ligne créée est nouvelle, une ligne supprimée n'a plus de contenu à comparer).
+        { key: 'targetColumn', labelKey: 'trigger.targetColumn', kind: 'column', emptyKey: 'list.anyRow', disabledWhen: (config) => config.action !== 'update' },
+        { key: 'targetValue', labelKey: 'trigger.targetValue', kind: 'text', disabledWhen: (config) => config.action !== 'update' || !config.targetColumn },
       ],
     },
     // Une condition porte une ou plusieurs vérifications reliées par ET ou OU, et deux sorties : « oui » (condition vraie) et « sinon ».
@@ -41,6 +44,21 @@
         { key: 'b', labelKey: 'tf.b', kind: 'text', disabledWhen: (config) => UNARY.includes(config.op) },
       ],
     },
+    // Une lecture va chercher une cellule d'une autre table (ligne repérée par une clé) et la met à disposition des nœuds suivants sous {nom}.
+    lookup: {
+      titleKey: 'node.lookup',
+      inputs: 1,
+      branches: ['then'],
+      defaults: { name: 'valeur', table: '', matchColumn: '', matchValue: '', column: '', onMissing: 'error' },
+      fields: [
+        { key: 'name', labelKey: 'tf.name', kind: 'text' },
+        { key: 'table', labelKey: 'lookup.table', kind: 'table', emptyKey: 'list.currentTable' },
+        { key: 'matchColumn', labelKey: 'lookup.matchColumn', kind: 'targetColumn', emptyKey: 'list.choose' },
+        { key: 'matchValue', labelKey: 'lookup.matchValue', kind: 'text' },
+        { key: 'column', labelKey: 'lookup.column', kind: 'targetColumn', emptyKey: 'list.choose' },
+        { key: 'onMissing', labelKey: 'lookup.onMissing', kind: 'choice', choices: [['error', 'lookup.error'], ['empty', 'lookup.empty']] },
+      ],
+    },
     action: {
       titleKey: 'node.action',
       inputs: 1,
@@ -61,7 +79,7 @@
   const OPERATORS = [['eq', 'op.eq'], ['neq', 'op.neq'], ['gt', 'op.gt'], ['lt', 'op.lt'], ['contains', 'op.contains'], ['empty', 'op.empty'], ['notEmpty', 'op.notEmpty']];
   const needsValue = (check) => check.operator !== 'empty' && check.operator !== 'notEmpty';
 
-  const api = { TYPES, OPERATORS, UNARY, needsValue, ORDER: ['trigger', 'condition', 'transform', 'action'] };
+  const api = { TYPES, OPERATORS, UNARY, needsValue, ORDER: ['trigger', 'condition', 'lookup', 'transform', 'action'] };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NodeTypes = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -315,12 +315,12 @@
       }
     }
 
-    // Colonnes de la table cible de l'action, pour les listes « Ligne repérée par » et « Colonne ».
+    // Colonnes de la table cible d'une action ou d'une lecture, pour les listes « Ligne repérée par » et « Colonne ».
     async function refreshTargetColumns(entry) {
-      if (entry.node.type !== 'action') return;
+      if (entry.node.type !== 'action' && entry.node.type !== 'lookup') return;
       const table = entry.node.config.table || schema.currentTable();
       const names = table ? await schema.columns(table) : [];
-      for (const spec of NodeTypes.TYPES.action.fields) {
+      for (const spec of NodeTypes.TYPES[entry.node.type].fields) {
         const select = spec.kind === 'targetColumn' && entry.selects[spec.key];
         if (!select) continue;
         fillSelect(select, names.map((name) => [name, name]), spec.emptyKey);
