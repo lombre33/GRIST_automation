@@ -35,7 +35,7 @@ Objectif : disposer d'un document Grist de test **reproductible** et d'un scéna
 | Motif | Texte |
 | Source | Texte |
 
-Tables techniques `_Automation_Workflows` et `_Automation_Logs` : créées par le widget lui-même (cas STO-05).
+Tables techniques `Automation_Workflows` et `Automation_Logs` : créées par le widget lui-même, après accord de la personne (scénarios TAB-*). Elles n'apparaissent pas dans les listes de tables du widget.
 
 ## 3. Jeu de données
 

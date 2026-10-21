@@ -89,7 +89,27 @@
     return { version: VERSION, active: Boolean(data.active), nodes: data.nodes, edges: data.edges.filter((edge) => nodeById(data, edge.from) && nodeById(data, edge.to)) };
   }
 
-  const api = { VERSION, create, nodeById, addNode, removeNode, connect, disconnect, validate, parse };
+  // Résumé lisible d'un graphe (champ « Resume » de la table des workflows), une ligne par chemin déclencheur -> action.
+  // t : fonction de traduction (clé, paramètres) : le texte écrit dans le document suit la langue de l'interface.
+  function summarize(graph, t) {
+    const describe = (node) => {
+      const c = node.config;
+      if (node.type === 'trigger') return `${t('node.trigger')} : ${t('trigger.' + c.action)}${c.column ? ' (' + c.column + ')' : ''}`;
+      if (node.type === 'condition') return `${t('node.condition')} : ${c.column || '—'} ${t('op.' + c.operator)}${c.value !== '' && c.operator !== 'empty' && c.operator !== 'notEmpty' ? ' ' + c.value : ''}`;
+      return `${t('node.action')} : ${t(c.type === 'UpdateRecord' ? 'act.update' : 'act.add')} ${c.table || '—'}.${c.column || '—'} = ${c.value}`;
+    };
+    const paths = [];
+    const walk = (node, trail) => {
+      const next = graph.edges.filter((edge) => edge.from === node.id).map((edge) => nodeById(graph, edge.to));
+      const here = trail.concat(describe(node));
+      if (!next.length) paths.push(here.join(' → '));
+      for (const child of next) walk(child, here);
+    };
+    graph.nodes.filter((node) => node.type === 'trigger').forEach((node) => walk(node, []));
+    return paths.join('\n');
+  }
+
+  const api = { VERSION, create, summarize, nodeById, addNode, removeNode, connect, disconnect, validate, parse };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Graph = api;
 })(typeof window !== 'undefined' ? window : globalThis);

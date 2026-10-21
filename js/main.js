@@ -14,13 +14,15 @@ let cache = null;
 let lastRecords = [];
 let suppressNext = false;
 let tables = [];
+let tablesAvailable = false;   // les tables Automation_* existent dans le document
 const columnsByTable = new Map();
 
 const gristApi = { applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
+const docApi = { listTables: () => grist.docApi.listTables(), fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: gristApi.applyUserActions };
 
-function addLog(message) {
+function addLog(message, date = new Date()) {
   const li = document.createElement('li');
-  li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  li.textContent = `[${date.toLocaleString()}] ${message}`;
   $('log-list').prepend(li);
 }
 
@@ -45,7 +47,7 @@ async function loadColumns(table) {
 const schema = { currentTable: () => tableId, tables: () => tables, columns: loadColumns };
 
 async function loadSchema() {
-  tables = (await grist.docApi.listTables()).filter((name) => !name.startsWith('_Automation_'));
+  tables = (await grist.docApi.listTables()).filter((name) => !Store.isOwnTable(name));
   await canvas.refreshSchema();
 }
 
@@ -53,9 +55,72 @@ async function loadSchema() {
 
 let saveTimer = null;
 
+// Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand les tables existent.
 function scheduleSave() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => grist.setOption('workflow', JSON.stringify(graph)), 300);
+  saveTimer = setTimeout(async () => {
+    grist.setOption('workflow', JSON.stringify(graph));
+    if (!tablesAvailable) return;
+    try {
+      await Store.saveGraph(docApi, graph, tableId, Graph.summarize(graph, t));
+    } catch (err) {
+      addLog(t('log.storeError', { error: err.message }));
+    }
+  }, 300);
+}
+
+// Demande l'accord de créer les tables ; true si elles existent à la fin. Un refus ne se retient pas : la question revient à l'activation (et aux enregistrements qui en ont besoin).
+async function ensureStore() {
+  if (tablesAvailable) return true;
+  const accepted = await Modal.confirm({
+    title: t('consent.title'),
+    message: t('consent.body'),
+    confirmLabel: t('consent.create'),
+    cancelLabel: t('consent.decline'),
+  });
+  if (!accepted) return false;
+  try {
+    await Store.ensureTables(docApi);
+    tablesAvailable = true;
+    addLog(t('log.tablesCreated'));
+    scheduleSave();
+  } catch (err) {
+    addLog(t('log.storeError', { error: err.message }));
+  }
+  return tablesAvailable;
+}
+
+// Au démarrage : lit le graphe du document s'il y est, sinon pose la question une fois.
+async function initStore() {
+  tablesAvailable = (await Store.missingTables(docApi)).length === 0;
+  if (!tablesAvailable) await ensureStore();
+  if (!tablesAvailable) return;
+  const saved = await Store.loadGraph(docApi, tableId);
+  if (saved) {
+    graph = saved;
+    loaded = true;
+    canvas.load(graph);
+    refreshState();
+  }
+  for (const entry of await Store.recentLogs(docApi, tableId, 20)) {
+    const status = t('result.' + entry.Resultat) + (entry.Auteur ? ` (${entry.Auteur})` : '');
+    addLog(t('log.event', { event: t('event.' + entry.Evenement), row: entry.Ligne, status }), new Date(entry.Date * 1000));
+  }
+}
+
+async function recordRun(result) {
+  if (!tablesAvailable) return;
+  try {
+    await Store.appendLog(docApi, {
+      table: tableId,
+      event: result.event,
+      row: result.rowId,
+      result: result.status,
+      detail: result.error || JSON.stringify(result.effects),
+    });
+  } catch (err) {
+    addLog(t('log.storeError', { error: err.message }));
+  }
 }
 
 function refreshState() {
@@ -79,6 +144,7 @@ async function handleEvents(events) {
     if (result.status === 'success' && result.effects.some((effect) => effect.table === tableId)) suppressNext = true;
     const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : '');
     addLog(t('log.event', { event: t('event.' + result.event), row: result.rowId, status }));
+    await recordRun(result);
   }
 }
 
@@ -112,7 +178,7 @@ async function dryRun() {
   addLog(t('log.dryRun', { row: record.id, status, n: result.effects.length }) + ' ' + JSON.stringify(result.effects));
 }
 
-function toggleActive() {
+async function toggleActive() {
   if (!graph.active) {
     const issues = Graph.validate(graph);
     if (issues.length) {
@@ -121,6 +187,7 @@ function toggleActive() {
       for (const issue of issues) addLog(t('log.cannotActivate', { issue: t(issue.key, { node: issue.node ? canvas.nodeLabel(issue.node) : '' }) }));
       return;
     }
+    if (!(await ensureStore())) addLog(t('log.noTables'));
   }
   graph.active = !graph.active;
   refreshState();
@@ -251,9 +318,10 @@ function start() {
     refreshState();
   });
   grist.onRecords(onRecords, { includeColumns: 'all' });
-  grist.selectedTable.getTableId().then((id) => {
+  grist.selectedTable.getTableId().then(async (id) => {
     tableId = id;
-    return loadSchema();
+    await initStore();
+    await loadSchema();
   });
 }
 

@@ -24,7 +24,7 @@ Dernière colonne : où la règle est appliquée ou vérifiée dans ce dépôt.
 | Fonction indisponible : grisée, jamais masquée | `syncDisabled` (`js/canvas.js`) |
 | Panneau de référence 700×400 | E2E-06 |
 | Widget qui ne démarre pas : une fenêtre qui dit quoi faire | `showOutsideGrist`, E2E-07 (les trois autres cas : à faire) |
-| Tables du widget : demander d'abord, redemander à chaque action si refus | à faire avec les tables `_Automation_*` |
+| Tables du widget : demander d'abord, redemander à chaque action si refus | fait en 0.6.0 (fenêtre de consentement, `Modal.confirm`) |
 | Non-régression : on ajoute de l'UI, on ne modifie pas l'existant sans l'accord d'Antoine | règle de travail |
 | Pas de framework ni de build ; dépendances tierces au cas par cas | tout le code |
 

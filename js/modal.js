@@ -31,7 +31,7 @@
 
   // width : 'narrow' (400 px, questions), 'form' (480 px, formulaires) ou 'large' (960 px plafonnés au panneau).
   // body : nœud DOM ; buttons : [{ label, primary, onClick }] — « Fermer » est ajouté si la liste est vide.
-  function create({ title, width = 'narrow', body, buttons = [] }) {
+  function create({ title, width = 'narrow', body, buttons = [], onClose }) {
     const opener = document.activeElement;
     const overlay = document.createElement('div');
     overlay.className = 'modal';
@@ -69,7 +69,7 @@
     document.body.append(overlay);
     stack.push(win);
     if (stack.length === 1) document.addEventListener('keydown', onKeydown);
-    (focusables(box)[0] || box).focus();
+    (box.querySelector('button.primary') || focusables(box)[0] || box).focus();
 
     function close() {
       const index = stack.indexOf(win);
@@ -77,10 +77,25 @@
       stack.splice(index, 1);
       if (!stack.length) document.removeEventListener('keydown', onKeydown);
       overlay.remove();
+      if (onClose) onClose();
       if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
     }
     return { close, box };
   }
 
-  root.Modal = { create };
+  // Question à deux boutons (Annuler, puis l'action) : rend une promesse qui vaut true pour l'action, false pour Annuler ou Échap.
+  // Le focus est sur l'action, sauf pour une question destructrice (danger) où il est sur Annuler.
+  function confirm({ title, message, confirmLabel, cancelLabel, danger }) {
+    return new Promise((resolve) => {
+      const body = document.createElement('p');
+      body.textContent = message;
+      const buttons = [
+        { label: cancelLabel, onClick: () => resolve(false) },
+        { label: confirmLabel, primary: !danger, onClick: () => resolve(true) },
+      ];
+      create({ title, body, buttons, onClose: () => resolve(false) });
+    });
+  }
+
+  root.Modal = { create, confirm };
 })(window);

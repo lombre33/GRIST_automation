@@ -98,7 +98,7 @@ Widget custom pour Grist (instance DINUM), distribué via GitHub Pages, permetta
 - Le contenu complet de la ligne supprimée n'est pas récupérable en V1. Une piste V2 : permettre à l'utilisateur de désigner une colonne clé dont la valeur serait mise en cache au moment de la construction du workflow.
 
 ### 4.3 Stockage des workflows
-- Persistance exclusivement dans des tables Grist dédiées, utilisées comme base de données applicative (ex : `_Automation_Workflows`, `_Automation_Logs`).
+- Persistance exclusivement dans des tables Grist dédiées, utilisées comme base de données applicative (`Automation_Workflows`, `Automation_Logs` ; sans tiret bas initial, car Grist n'accepte pas un identifiant de table commençant par `_`).
 - Configuration de chaque workflow stockée en JSON structuré (clés explicites, versionné via un champ `version`), non destiné à être lu tel quel par un humain mais accompagné d'un champ `resume_humain` en clair pour lisibilité minimale lors d'un audit.
 - Historique détaillé et logs stockés dans une table dédiée, avec horodatage, auteur (email), workflow concerné, statut.
 
@@ -140,7 +140,7 @@ Le widget suit la charte UI/UX **Grist Factory** et le **guide de contribution G
 - **Qualité (guide Grist.Gouv)** : périmètre étroit, code lisible et concis, README, tests unitaires et d'intégration, aucune dépendance inutile, aucune requête externe non documentée, aucune donnée utilisateur hors de Grist. Le code généré avec l'aide d'une IA doit être relu et compris par Antoine avant soumission.
 - **Ce que ces règles changent au CDC** :
   - §4.1 : la bibliothèque nodale (Drawflow) est remplacée par un canevas maison, plus simple à auditer et sans dépendance (à confirmer à la phase de la vue nodale).
-  - §3.5 : les écritures de tables `_Automation_*` demandent d'abord l'accord de la personne et le redemandent à chaque action en cas de refus.
+  - §3.5 : les écritures de tables `Automation_*` demandent d'abord l'accord de la personne et le redemandent à chaque action en cas de refus.
   - §6 point 1 (fraîcheur de Drawflow) : sans objet si le canevas maison est retenu.
   - Le chargement de `grist-plugin-api.js` depuis docs.getgrist.com est validé par la DINUM.
   - Politique de sécurité (CSP) de `index.html` : `default-src 'none'`, scripts du widget et de l'API Grist uniquement. `'unsafe-eval'` y figure **à cause du bundle `grist-plugin-api.js` lui-même**, qui évalue ses modules par `eval()` (constaté le 2026-10-12 : sans lui, `grist` n'existe pas et le widget ne demande pas l'accès au document). Le code du widget n'utilise ni `eval` ni `Function` (test HYG-01). Point à signaler à l'audit DINUM.

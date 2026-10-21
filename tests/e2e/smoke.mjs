@@ -24,12 +24,13 @@ const API = 'https://docs.getgrist.com/grist-plugin-api.js';
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 let failures = 0;
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 } } = {}) {
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false } = {}) {
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   const page = await context.newPage();
   const problems = [];
   page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) problems.push(m.text()); });
   page.on('pageerror', (e) => problems.push(String(e)));
+  if (noTables) await page.addInitScript(() => { window.__noTables = true; });
   await page.route(API, (route) => (grist
     ? route.fulfill({ contentType: 'text/javascript', body: stubSource })
     : route.abort()));
@@ -214,6 +215,59 @@ await scenario('E2E-11 sauvegarde automatique et rechargement du graphe', async 
   assert.equal(await copy.locator('.wire-group').count(), 2);
   await copy.waitForFunction(() => document.querySelector('#action-1-column') && document.querySelector('#action-1-column').value === 'Motif');
   assert.equal(await copy.locator('#action-1-value').inputValue(), 'clos');
+});
+
+await scenario('E2E-12 tables du document : accord demandé au démarrage, graphe et journal enregistrés', async (page) => {
+  await page.waitForSelector('[role=dialog]');
+  assert.match(await page.locator('.modal-title').innerText(), /Créer les tables du widget/);
+  assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Créer les tables', 'le focus est sur l\'action');
+  await page.getByRole('button', { name: 'Créer les tables' }).click();
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['Automation_Workflows', 'Automation_Logs']);
+  await buildFlow(page);
+  await page.waitForFunction(() => window.__stub.docTables.Automation_Workflows.rows.length === 1 && JSON.parse(window.__stub.docTables.Automation_Workflows.rows[0].Config).edges.length === 2);
+  const row = await page.evaluate(() => window.__stub.docTables.Automation_Workflows.rows[0]);
+  assert.equal(row.Table, 'Contacts');
+  assert.match(row.Resume, /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action/);
+  await page.click('#toggle-active');
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
+  await page.waitForFunction(() => window.__stub.docTables.Automation_Logs.rows.length === 1);
+  const log = await page.evaluate(() => window.__stub.docTables.Automation_Logs.rows[0]);
+  assert.deepEqual([log.Table, log.Evenement, log.Ligne, log.Resultat], ['Contacts', 'update', 1, 'success']);
+}, { noTables: true });
+
+await scenario('E2E-13 accord refusé : le widget marche sans tables, la question revient à l\'activation', async (page) => {
+  await page.waitForSelector('[role=dialog]');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('[role=dialog]').count(), 0);
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), []);
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  await page.waitForSelector('[role=dialog]');
+  await page.getByRole('button', { name: 'Ne pas créer' }).click();
+  assert.equal(await page.locator('#open-tab-warning').isVisible(), true, 'activé malgré le refus');
+  await page.click('#toggle-logs');
+  assert.match(await page.locator('#log-list').innerText(), /Non enregistré : les tables du widget/);
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), []);
+}, { noTables: true });
+
+await scenario('E2E-14 le graphe du document est relu au démarrage, avec le journal', async (page) => {
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
+  await page.waitForFunction(() => window.__stub.docTables.Automation_Logs.rows.length === 1 && window.__stub.docTables.Automation_Workflows.rows.length === 1);
+  await page.waitForTimeout(400);
+  const tables = await page.evaluate(() => JSON.stringify(window.__stub.docTables));
+  const copy = await page.context().newPage();
+  await copy.addInitScript((saved) => { window.__restore = JSON.parse(saved); }, tables);
+  await copy.route(API, (route) => route.fulfill({ contentType: 'text/javascript', body: stubSource.replace('window.__stub = {', 'Object.assign(docTables, window.__restore || {}); window.__stub = {') }));
+  await copy.goto(url);
+  await copy.waitForSelector('.node-action');
+  assert.equal(await copy.locator('.node').count(), 3);
+  assert.equal(await copy.locator('#toggle-active').innerText(), 'Désactiver', 'état actif relu');
+  await copy.click('#toggle-logs');
+  assert.match(await copy.locator('#log-list').innerText(), /modification ligne 1 : réussi/);
 });
 
 await browser.close();

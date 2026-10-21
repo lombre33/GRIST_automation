@@ -28,7 +28,7 @@ test('HYG-03 la police de l\'interface commence par system-ui', () => {
 });
 
 test('HYG-04 pas de prompt() ni confirm() natifs, pas d\'innerHTML ni d\'attribut style', () => {
-  assert.deepStrictEqual(offenders(jsFiles, /\b(prompt|confirm)\s*\(|innerHTML|outerHTML|insertAdjacentHTML|document\.write/), []);
+  assert.deepStrictEqual(offenders(jsFiles, /window\.(prompt|confirm)|(?<![\w.])(?<!function )(prompt|confirm)\s*\(|innerHTML|outerHTML|insertAdjacentHTML|document\.write/), []);
   assert.doesNotMatch(read('index.html'), /\sstyle="/);
   assert.deepStrictEqual(offenders(jsFiles, /setAttribute\(\s*['"]style['"]|cssText/), []);
 });
