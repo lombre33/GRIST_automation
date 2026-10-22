@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-10-21, au commit `6eb0165` (le dernier commit de code que cette page décrit).
+Mis à jour le 2026-10-22, au commit `6eb0165` (le dernier commit de code que cette page décrit).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -11,6 +11,7 @@ Mis à jour le 2026-10-21, au commit `6eb0165` (le dernier commit de code que ce
   - pour mémoire, règle 5 respectée : `document.referrer` n'est jamais lu ; une seule fonction, `widgetAddress()` (`js/main.js`), lit l'adresse de la page, pour l'afficher quand le widget est ouvert hors de Grist
   - ligne « Automation+ » du guide, relevé à `f5e4100` : juste, sauf « Premier client du kit » (colonne « Premier pas »), périmé depuis le 16/10 : c'est Form+ (cahier 4.5), Automation+ vient après Publipostage+ ; précision : `Auteur` est une formule déclenchée (à la création de la ligne), avec repli sans formule si Grist la refuse
 - 002 · faite · `e356021` · `LICENSE` ajouté, texte officiel de la GPL 3.0, SHA-256 `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986`
+- 003 · lue · la barre de GFS recouvre « Ajouter » (barre en haut) et le début du journal (barre en bas) ; rien ne change avant le lot qui prend le lien avec GFS du kit (guide 1.2, point 4) : `GfsLink.onBar` écartera alors la barre d'outils (haut) et le journal (bas), puis les menus et fenêtres se caleront sur la zone libre, jamais écrite en dur
 
 ## Changements qui touchent GFS
 - 2026-10-21 · `6eb0165` · règles 3, 4 et 12 du guide corrigées (0.11.1), même table `Automation` et mêmes colonnes :
