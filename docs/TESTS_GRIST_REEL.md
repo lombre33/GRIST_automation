@@ -20,6 +20,7 @@ Liste de scénarios manuels, à jouer par Antoine sur son Grist (instance Grist.
 | START-02 | V0.5 | Page ouverte hors de Grist | Ouvrir l'adresse du widget directement dans un onglet | Fenêtre « Ouvrez ce widget depuis Grist » avec l'adresse et un bouton Copier | ➖ |
 | START-03 | V0.5 | Politique de sécurité | Ouvrir la console et l'onglet Réseau, recharger | Aucune erreur de politique de sécurité ; seule requête hors du widget : `docs.getgrist.com/grist-plugin-api.js` | ➖ |
 | START-04 | V0.5 | Lecture seule | Avec un compte en lecture seule sur le document, ouvrir le widget | Le widget s'ouvre ; modifier le graphe ne plante pas ; aucune écriture dans le document | ➖ |
+| START-05 | V0.11.1 | Site en ligne à jour | Ouvrir `https://lombre33.github.io/GRIST_automation/js/version.js` dans un onglet (attendre 10 minutes après un envoi : cache de GitHub Pages), puis comparer à Réglages > Crédits d'un widget ouvert par son adresse | Le numéro est celui de `package.json` (0.11.1 pour l'instant), partout le même ; s'il est plus ancien, la publication a échoué (onglet Actions du dépôt, « pages build and deployment ») | ➖ |
 
 ## Construire le graphe
 

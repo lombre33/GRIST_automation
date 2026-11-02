@@ -78,3 +78,10 @@ test('HYG-11 un seul bleu d\'accent : pas de vert de succès dans les jetons, le
   assert.deepStrictEqual(offenders(everything, /--good|--success|--green/), []);
   assert.deepStrictEqual(offenders(cssFiles, /\bgreen\b|\blime\b/i), []);
 });
+
+test('HYG-12 le site en ligne est publié tel quel : .nojekyll et index.html à la racine (consigne 005 de GFS)', () => {
+  // Sans .nojekyll, GitHub Pages passe les fichiers .md dans Jekyll, qui refuse un « {{ » non fermé : la publication échoue
+  // et le site reste sur l'ancienne version sans qu'aucun test ne le voie (c'était le cas du 21/10 au 02/11, version 0.9.0 servie).
+  assert.ok(fs.existsSync(path.join(root, '.nojekyll')), '.nojekyll à la racine');
+  assert.ok(fs.existsSync(path.join(root, 'index.html')), 'l\'entrée de l\'app dans le manifeste de GFS est index.html, à la racine');
+});
