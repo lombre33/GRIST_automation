@@ -13,7 +13,8 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const server = http.createServer((req, res) => {
   const file = path.join(root, req.url === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]));
   if (!file.startsWith(root) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream' });
+  // Comme GitHub Pages : le cadre isolé de GFS (origine opaque) ne charge un module que si le site l'autorise.
+  res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream', 'access-control-allow-origin': '*' });
   res.end(fs.readFileSync(file));
 });
 await new Promise((resolve) => server.listen(0, resolve));
@@ -24,7 +25,12 @@ const API = 'https://docs.getgrist.com/grist-plugin-api.js';
 
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 let failures = 0;
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null } = {}) {
+// host : { context, fallback } joue l'app dans un faux GFS (tests/e2e/gfs-host.html), un cadre isolé comme chez GFS, qui rend `context` à l'appel `contexte` ; run(page, app) reçoit alors aussi le cadre de l'app
+//   (`app`), dans lequel on lit et on clique (`page` reste la page de l'hôte : souris, clavier, captures). Sans host, `app` est la page. `fallback` garde le garde-fou de 2 s de l'attente de l'ambiance.
+// blocked : adresses (globs) dont la requête échoue ; tolerated : messages de la console attendus dans ce scénario.
+// E2E_ONLY=<expression régulière> ne joue que les scénarios dont le nom lui correspond (E2E_ONLY='E2E-3[6-9]|E2E-4').
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [] } = {}) {
+  if (process.env.E2E_ONLY && !new RegExp(process.env.E2E_ONLY).test(name)) return;
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   const page = await context.newPage();
   const problems = [];
@@ -34,19 +40,41 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
   if (foreignLock) await page.addInitScript(() => { window.__foreignLock = true; });
   if (noTables) await page.addInitScript(() => { window.__noTables = true; });
   if (init) await page.addInitScript((values) => Object.assign(window, values), init);
+  if (host) await page.addInitScript((value) => { window.__context = value; }, host.context ?? {});
+  if (host && !host.fallback) {
+    // Le garde-fou de 2 s de js/theme.js est coupé : si l'ambiance ne levait pas l'attente, la page resterait cachée et l'essai échouerait, au lieu de passer grâce au garde-fou.
+    await page.addInitScript(() => {
+      const set = window.setTimeout.bind(window);
+      window.setTimeout = (fn, ms, ...args) => (ms === 2000 ? 0 : set(fn, ms, ...args));
+    });
+  }
+  for (const glob of blocked) await page.route(glob, (route) => route.abort());
   await page.route(API, (route) => (grist
     ? route.fulfill({ contentType: 'text/javascript', body: stubSource })
     : route.abort()));
   try {
-    await page.goto(url);
-    await run(page);
-    assert.deepEqual(problems.filter((p) => !/Failed to load resource/.test(p)), [], 'erreurs console ou violations de la politique de sécurité');
+    await page.goto(host ? `${url}tests/e2e/gfs-host.html` : url);
+    let app = page;
+    if (host) {
+      app = await (await page.waitForSelector('#app')).contentFrame();
+      await app.waitForSelector('#add-node');
+    }
+    await run(page, app);
+    assert.deepEqual(problems.filter((p) => !/Failed to load resource/.test(p) && !tolerated.some((t) => t.test(p))), [], 'erreurs console ou violations de la politique de sécurité');
     console.log('ok   ', name);
   } catch (err) {
     failures += 1;
     console.log('FAIL ', name, '\n', err.message);
+    await shot(page, `echec-${name.slice(0, 6)}`).catch(() => {});
   }
   await context.close();
+}
+
+// E2E_SHOTS=<dossier> : range des captures d'écran des scénarios dans un GFS simulé, à regarder à la main (rien n'est écrit sans cette variable).
+async function shot(page, name) {
+  if (!process.env.E2E_SHOTS) return;
+  fs.mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+  await page.screenshot({ path: path.join(process.env.E2E_SHOTS, `${name}.png`) });
 }
 
 // Ajoute un nœud par le clic droit sur le fond, à (x, y) dans la fenêtre.
@@ -629,6 +657,238 @@ await scenario('E2E-35 contenu du document illisible, graphe actif dans les rég
   const rows = await copy.evaluate(() => window.__stub.docTables.Automation.rows);
   assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], 'ni verrou ni journal ajoutés, la ligne illisible est intacte');
 });
+
+/* ---------- App hébergée par GFS (consignes 003 et 006) ----------
+   Un faux GFS (tests/e2e/gfs-host.html) ouvre l'app dans un cadre isolé comme chez GFS, lui rend le contexte et lui envoie des événements, comme le ferait GFS. */
+const POP = JSON.parse(fs.readFileSync(path.join(root, 'kit/test/ambiance-exemple.json'), 'utf8'));   // l'ambiance Pop, message d'exemple du kit
+const SMALL = { width: 700, height: 400 };
+// La barre telle que GFS la mesure à 700 × 400 (consigne 003) : 124 × 34 à 4 px du bord et centrée, la zone en ajoute 4 autour.
+const BARS = {
+  haut: { bord: 'haut', epaisseur: 42, zone: { x: 284, y: 0, largeur: 132, hauteur: 42 } },
+  bas: { bord: 'bas', epaisseur: 42, zone: { x: 284, y: 358, largeur: 132, hauteur: 42 } },
+  gauche: { bord: 'gauche', epaisseur: 42, zone: { x: 0, y: 134, largeur: 42, hauteur: 132 } },
+  droite: { bord: 'droite', epaisseur: 42, zone: { x: 658, y: 134, largeur: 42, hauteur: 132 } },
+};
+const send = (page, nom, data) => page.evaluate((message) => window.hote.event(message.nom, message.data), { nom, data });
+// Deux images passées : la mesure de keep-clear.js (une image après le changement du DOM) est faite.
+const settled = (app) => app.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+// Ce que l'app doit laisser libre : la barre d'outils, le journal, les menus et listes, les bulles, les fenêtres, l'avertissement.
+const KEPT_CLEAR = '.app-header h1, .app-header button, .logs, .add-menu, .ss-panel, .canvas-connect-hint, .modal-box, .warning';
+const covering = (app, zone) => app.evaluate(({ zone, selector }) => {
+  const hits = [];
+  for (const element of document.querySelectorAll(selector)) {
+    const box = element.getBoundingClientRect();
+    if (!box.width || !box.height || getComputedStyle(element).visibility === 'hidden') continue;
+    // Un recouvrement de moins d'un demi-pixel n'en est pas un (arrondis du navigateur).
+    if (box.left < zone.x + zone.largeur - 0.5 && zone.x + 0.5 < box.right && box.top < zone.y + zone.hauteur - 0.5 && zone.y + 0.5 < box.bottom) hits.push(element.id || element.className || element.tagName);
+  }
+  return hits;
+}, { zone, selector: KEPT_CLEAR });
+const insideFrame = (app, selector) => app.evaluate((s) => {
+  const box = document.querySelector(s).getBoundingClientRect();
+  return box.left >= 0 && box.top >= 0 && box.right <= document.documentElement.clientWidth && box.bottom <= document.documentElement.clientHeight;
+}, selector);
+const look = (app) => app.evaluate(() => {
+  const style = (selector) => getComputedStyle(document.querySelector(selector));
+  return {
+    page: style('body').backgroundColor, wash: style('body').backgroundImage !== 'none',
+    card: style('.node').backgroundColor, cardHead: style('.node-head').backgroundColor,
+    nodeBorder: style('.node').borderTopColor, nodeRadius: style('.node').borderTopLeftRadius,
+    activate: style('#toggle-active').backgroundImage, activateText: style('#toggle-active').color,
+  };
+});
+
+// Les textes visibles dont le contraste avec leur fond est sous 4,5:1 (le fond : celui de l'élément, ou des parents composés jusqu'à un fond plein ; un dégradé, chacune de ses couleurs).
+const unreadable = (app) => app.evaluate(() => {
+  const parse = (value) => { const m = value.match(/rgba?\(([^)]+)\)/); if (!m) return null; const [r, g, b, a = 1] = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return { r, g, b, a }; };
+  const over = (top, bottom) => ({ r: top.r * top.a + bottom.r * (1 - top.a), g: top.g * top.a + bottom.g * (1 - top.a), b: top.b * top.a + bottom.b * (1 - top.a), a: 1 });
+  const luminance = ({ r, g, b }) => { const f = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const ratio = (a, b) => { const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (high + 0.05) / (low + 0.05); };
+  const weak = [];
+  for (const element of document.querySelectorAll('body *')) {
+    const text = [...element.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join('');
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    if (!text || !box.width || !box.height || style.visibility === 'hidden') continue;
+    let back = { r: 255, g: 255, b: 255, a: 1 };
+    let stops = null;
+    const chain = [];
+    for (let n = element; n; n = n.parentElement) chain.unshift(n);
+    for (const n of chain) {
+      const s = getComputedStyle(n);
+      const color = parse(s.backgroundColor);
+      if (color && color.a > 0) back = over(color, back);
+      if (n !== document.documentElement && n !== document.body && /gradient/.test(s.backgroundImage)) stops = [...s.backgroundImage.matchAll(/rgba?\([^)]+\)/g)].map((m) => over(parse(m[0]), back));
+    }
+    const lowest = Math.min(...(stops || [back]).map((b) => ratio(over(parse(style.color), b), b)));
+    if (lowest < 4.5) weak.push(`${element.tagName.toLowerCase()} « ${text.slice(0, 24)} » ${lowest.toFixed(2)}`);
+  }
+  return weak;
+});
+
+await scenario('E2E-36 hébergée par GFS sans ambiance ni barre : l\'app a demandé le contexte et garde ses couleurs et sa disposition', async (page, app) => {
+  // Tout ce que l'app dit à GFS : la demande du contexte, rien d'autre (SECURITY.md : aucune donnée du document ne part par ce lien).
+  const said = await page.evaluate(() => window.hote.received().map((m) => `${m.type}:${m.nom}`));
+  assert.deepEqual(said, ['appel:contexte']);
+  assert.equal(await app.evaluate(() => document.documentElement.hasAttribute('data-gfs-pending')), false, 'l\'attente est levée');
+  assert.equal(await app.evaluate(() => 'gfsBar' in document.documentElement.dataset), false, 'pas de barre');
+  await addNode(page, 'Déclencheur', 40, 120);
+  await app.waitForSelector('.node');
+  assert.deepEqual(await look(app), {
+    page: 'rgb(244, 246, 250)', wash: false, card: 'rgb(255, 255, 255)', cardHead: 'rgb(232, 240, 254)', nodeBorder: 'rgb(195, 202, 214)', nodeRadius: '8px',
+    activate: 'none', activateText: 'rgb(255, 255, 255)',
+  });
+  assert.equal(await app.evaluate(() => getComputedStyle(document.querySelector('#toggle-active')).backgroundColor), 'rgb(47, 111, 237)', 'le bouton principal garde l\'accent bleu de la charte');
+  await shot(page, 'seule-700x400');
+}, { host: { context: { langue: 'fr', barre: null, ambiance: null } }, viewport: SMALL });
+
+await scenario('E2E-37 ambiance Pop de GFS (message d\'exemple du kit) : les feuilles suivent les jetons, clair puis sombre ; null rend les couleurs de l\'app', async (page, app) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await app.waitForSelector('.node');
+  assert.deepEqual(await look(app), {
+    page: 'rgb(234, 233, 255)', wash: true, card: 'rgb(255, 255, 255)', cardHead: 'rgb(238, 237, 255)', nodeBorder: 'rgb(197, 195, 237)', nodeRadius: '14px',
+    activate: 'linear-gradient(135deg, rgb(109, 79, 214), rgb(185, 38, 125))', activateText: 'rgb(255, 255, 255)',
+  }, 'Pop clair');
+  await shot(page, 'pop-clair');
+  assert.deepEqual(await unreadable(app), [], 'Pop clair : chaque texte garde 4,5:1');
+  await app.evaluate(() => Theme.set('dark'));
+  await app.waitForFunction(() => getComputedStyle(document.body).backgroundColor === 'rgb(22, 19, 42)');
+  const dark = await look(app);
+  assert.deepEqual([dark.page, dark.card, dark.cardHead, dark.nodeBorder], ['rgb(22, 19, 42)', 'rgb(34, 31, 57)', 'rgb(50, 44, 86)', 'rgb(83, 77, 129)'], 'Pop sombre : le fond, une carte, son bandeau, son trait');
+  await shot(page, 'pop-sombre');
+  assert.deepEqual(await unreadable(app), [], 'Pop sombre : chaque texte garde 4,5:1');
+  await app.click('#open-settings');
+  await app.waitForSelector('.modal-box');
+  assert.deepEqual(await unreadable(app), [], 'Pop sombre, fenêtre des réglages : chaque texte garde 4,5:1');
+  await page.keyboard.press('Escape');
+  await app.waitForSelector('.modal', { state: 'detached' });
+  await send(page, 'ambiance', { ambiance: null });
+  await app.waitForFunction(() => getComputedStyle(document.body).backgroundColor === 'rgb(23, 27, 35)');
+  assert.deepEqual(await look(app), {
+    page: 'rgb(23, 27, 35)', wash: false, card: 'rgb(30, 36, 48)', cardHead: 'rgb(36, 50, 75)', nodeBorder: 'rgb(70, 81, 102)', nodeRadius: '8px', activate: 'none', activateText: 'rgb(255, 255, 255)',
+  }, 'ambiance retirée : les couleurs sombres de l\'app');
+  await app.evaluate(() => Theme.set('light'));
+  await app.waitForFunction(() => getComputedStyle(document.body).backgroundColor === 'rgb(244, 246, 250)');
+  await send(page, 'ambiance', { ambiance: POP });
+  await app.waitForFunction(() => getComputedStyle(document.body).backgroundColor === 'rgb(234, 233, 255)');
+}, { host: { context: { langue: 'fr', barre: null, ambiance: POP } }, viewport: SMALL });
+
+await scenario('E2E-38 barre en haut : la barre d\'outils se partage autour de la zone, rien ne la recouvre ni ne déborde, en français et en anglais', async (page, app) => {
+  assert.equal(await app.evaluate(() => document.documentElement.dataset.gfsBar), 'haut');
+  for (const language of ['fr', 'en']) {
+    await app.evaluate((value) => I18n.set(value), language);
+    await settled(app);
+    assert.deepEqual(await covering(app, BARS.haut.zone), [], `rien ne recouvre la zone (${language})`);
+    assert.equal(await app.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, `pas de défilement horizontal (${language})`);
+    for (const id of ['add-node', 'test-workflow', 'toggle-active', 'toggle-logs', 'open-settings']) assert.equal(await insideFrame(app, `#${id}`), true, `#${id} reste dans le cadre (${language})`);
+    await shot(page, `haut-${language}`);
+  }
+}, { host: { context: { langue: 'fr', barre: BARS.haut, ambiance: POP } }, viewport: SMALL });
+
+await scenario('E2E-39 barre en bas : le journal ouvert quitte la zone vers le haut et reste dans le cadre', async (page, app) => {
+  await app.click('#toggle-logs');
+  await app.waitForSelector('#logs:not([hidden])');
+  await settled(app);
+  assert.deepEqual(await covering(app, BARS.bas.zone), []);
+  assert.equal(await insideFrame(app, '#logs'), true, 'le journal reste dans le cadre');
+  await shot(page, 'bas-journal');
+  await app.click('#toggle-logs');
+  await app.waitForSelector('#logs', { state: 'hidden' });
+  await settled(app);
+  assert.equal(await app.evaluate(() => document.querySelector('#logs').style.translate), '', 'refermé, plus rien n\'est décalé');
+}, { host: { context: { langue: 'fr', barre: BARS.bas, ambiance: POP } }, viewport: SMALL });
+
+for (const [edge, point] of Object.entries({ haut: [300, 80], bas: [300, 340], gauche: [10, 200], droite: [690, 200] })) {
+  await scenario(`E2E-40 barre ${edge === 'haut' || edge === 'bas' ? 'en ' : 'à '}${edge} : le menu d'ajout et la fenêtre des réglages se posent dans la zone libre`, async (page, app) => {
+    const { zone } = BARS[edge];
+    await page.mouse.click(point[0], point[1], { button: 'right' });
+    await app.waitForSelector('.ss-panel');
+    await settled(app);
+    assert.deepEqual(await covering(app, zone), [], 'le menu d\'ajout');
+    assert.equal(await insideFrame(app, '.ss-panel'), true, 'le menu reste dans le cadre');
+    await shot(page, `${edge}-menu`);
+    await page.keyboard.press('Escape');
+    await app.click('#open-settings');
+    await app.waitForSelector('.modal-box');
+    await settled(app);
+    assert.deepEqual(await covering(app, zone), [], 'la fenêtre des réglages');
+    assert.equal(await insideFrame(app, '.modal-box'), true, 'la fenêtre reste dans le cadre');
+    await shot(page, `${edge}-reglages`);
+  }, { host: { context: { langue: 'fr', barre: BARS[edge], ambiance: POP } }, viewport: SMALL });
+}
+
+await scenario('E2E-41 la barre change en cours de route (haut, bas, plus rien) : l\'app suit sans se recharger', async (page, app) => {
+  const header = () => app.evaluate(() => document.querySelector('.app-header').getBoundingClientRect().height);
+  const alone = await header();
+  await send(page, 'barre', { barre: BARS.haut });
+  await app.waitForFunction(() => document.documentElement.dataset.gfsBar === 'haut');
+  await send(page, 'barre', { barre: BARS.bas });
+  await app.waitForFunction(() => document.documentElement.dataset.gfsBar === 'bas');
+  await app.click('#toggle-logs');
+  await settled(app);
+  assert.deepEqual(await covering(app, BARS.bas.zone), [], 'barre en bas, journal ouvert');
+  await send(page, 'barre', { barre: BARS.gauche });
+  await app.waitForFunction(() => document.documentElement.dataset.gfsBar === 'gauche');
+  await settled(app);
+  assert.deepEqual(await covering(app, BARS.gauche.zone), [], 'barre à gauche');
+  await send(page, 'barre', { barre: null });
+  await app.waitForFunction(() => !('gfsBar' in document.documentElement.dataset));
+  await settled(app);
+  assert.equal(await header(), alone, 'la barre d\'outils reprend sa place');
+  assert.equal(await app.evaluate(() => document.querySelector('#logs').style.translate), '', 'le journal aussi');
+  assert.equal(await app.evaluate(() => document.documentElement.style.getPropertyValue('--gfs-zone-x')), '', 'rien ne reste posé sur <html>');
+}, { host: { context: { langue: 'fr', barre: null, ambiance: null } }, viewport: SMALL });
+
+for (const edge of ['haut', 'bas']) {
+  // Un cadre bas (700 × 300) : la fenêtre des réglages, centrée, recouvrirait la zone ; elle se place dans le reste du cadre.
+  const bar = { bord: edge, epaisseur: 42, zone: { x: 284, y: edge === 'haut' ? 0 : 258, largeur: 132, hauteur: 42 } };
+  await scenario(`E2E-42 barre ${edge === 'haut' ? 'en haut' : 'en bas'}, cadre de 700 × 300 : la fenêtre des réglages, trop haute pour tenir à côté de la zone, se réduit et se place dans le reste du cadre`, async (page, app) => {
+    await app.click('#open-settings');
+    await app.waitForSelector('.modal-box');
+    await settled(app);
+    assert.deepEqual(await covering(app, bar.zone), [], 'la fenêtre ne recouvre pas la zone');
+    assert.equal(await insideFrame(app, '.modal-box'), true, 'la fenêtre reste dans le cadre');
+    assert.equal(await app.evaluate((side) => document.querySelector('.modal').style.getPropertyValue(`--gfs-pad-${side}`), edge === 'haut' ? 'top' : 'bottom'), '42px', 'le voile laisse la place de la barre de son côté');
+    await shot(page, `${edge}-reglages-bas`);
+    await page.keyboard.press('Escape');
+    await app.waitForSelector('.modal', { state: 'detached' });
+    await app.click('#open-settings');
+    await app.waitForSelector('.modal-box');
+    assert.equal(await app.evaluate(() => document.documentElement.clientHeight), 300);
+  }, { host: { context: { langue: 'fr', barre: bar, ambiance: null } }, viewport: { width: 700, height: 300 } });
+}
+
+await scenario('E2E-43 barre à gauche, canevas dézoomé : la liste d\'un nœud placé sous la barre s\'en écarte du juste nécessaire (l\'échelle du canevas est comptée)', async (page, app) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await app.waitForSelector('.node');
+  for (let i = 0; i < 8; i += 1) await page.mouse.wheel(0, 100).then(() => page.mouse.move(400 + i, 320));   // dézoome vers 0,5 environ
+  await settled(app);
+  const scale = await app.evaluate(() => { const node = document.querySelector('.node'); return node.getBoundingClientRect().width / node.offsetWidth; });
+  assert.ok(scale < 0.8, `le canevas est dézoomé (${scale})`);
+  // Fait glisser le fond pour que le bouton de la liste soit sous la barre.
+  const button = await app.locator('.node .ss-button').first().boundingBox();
+  const from = { x: 450, y: 360 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 4 - button.x, from.y + 190 - button.y, { steps: 6 });
+  await page.mouse.up();
+  await app.locator('.node .ss-button').first().click();
+  await app.waitForSelector('.ss-panel:not([hidden])');
+  await settled(app);
+  const moved = await app.evaluate(() => document.querySelector('.ss-panel:not([hidden])').style.translate);
+  assert.notEqual(moved, '', 'la liste a été décalée');
+  assert.deepEqual(await covering(app, BARS.gauche.zone), [], 'la liste ne recouvre plus la zone');
+  const edge = await app.evaluate(() => document.querySelector('.ss-panel:not([hidden])').getBoundingClientRect().left);
+  assert.ok(edge >= 41.5 && edge < 43, `elle touche la zone sans s'en éloigner de plus d'un pixel (${edge})`);
+  await shot(page, 'gauche-liste-dezoome');
+}, { host: { context: { langue: 'fr', barre: BARS.gauche, ambiance: null } }, viewport: SMALL });
+
+await scenario('E2E-44 le kit manque (copie du dépôt sans ses sous-modules) : l\'app s\'ouvre quand même, avec ses couleurs, une fois le garde-fou de 2 s passé', async (page, app) => {
+  assert.equal(await app.evaluate(() => document.documentElement.hasAttribute('data-gfs-pending')), false, 'l\'attente est levée');
+  assert.equal((await app.evaluate(() => getComputedStyle(document.body).backgroundColor)), 'rgb(244, 246, 250)', 'les couleurs de l\'app');
+  await app.click('#add-node');
+  await app.waitForSelector('.ss-panel');
+}, { host: { context: { langue: 'fr', barre: BARS.haut, ambiance: POP }, fallback: true }, viewport: SMALL, blocked: ['**/kit/js/gfs-link.js'], tolerated: [/gfs-link/i, /ERR_FAILED/, /Failed to fetch/i, /module/i] });
 
 await browser.close();
 server.close();

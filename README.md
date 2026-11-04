@@ -23,9 +23,20 @@ Le graphe est enregistré automatiquement dans les options du widget, et, avec l
 2. Dans Grist : ajouter une vue « Personnalisé », coller l'adresse de la page, accès « Accès complet au document ».
 3. Construire le graphe, activer. Garder la vue ouverte.
 
+## Dans Grist Factory Suite (GFS)
+
+Quand GFS ouvre l'app dans l'un de ses cadres (`?gfs=<n>` dans l'adresse), l'app parle à GFS par le lien du kit commun des apps (`kit/`, voir plus bas) et en prend deux choses. Seule, dans Grist, rien ne change.
+
+- **La barre de GFS** se pose par-dessus le cadre, au bord que la personne choisit. L'app laisse libre la zone que GFS donne (`js/keep-clear.js`) : la barre d'outils se partage autour d'elle quand la barre est en haut ; le journal, le menu d'ajout, les listes et les bulles qui la recouvriraient s'en écartent du juste nécessaire ; une fenêtre se place dans le reste du cadre. La zone n'est jamais écrite dans le code : c'est celle que GFS envoie, à chaque changement.
+- **L'ambiance** que la personne a choisie dans GFS (Grist Factory, Pop, Papier, Brut, Néon, ou sa couleur) : le kit pose les jetons de couleur et de forme sur `<html>` (`js/gfs.js`), les feuilles de `css/` les lisent et jamais une couleur écrite en dur. Les types de nœuds et les états du test à blanc s'écrivent avec l'accent de l'ambiance ; le rouge de l'échec et l'ambre de l'avertissement restent ceux de l'app (HYG-17).
+
+Si le kit manque (copie du dépôt sans ses sous-modules), l'app s'ouvre quand même, avec ses couleurs, au bout de 2 secondes au plus. La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages restent actifs.
+
 ## Dépendances
 
-Aucune : HTML, CSS et JavaScript sans framework ni build. Seul script externe : `grist-plugin-api.js` servi par docs.getgrist.com (validé par la DINUM). La politique de sécurité de `index.html` n'autorise rien d'autre.
+Rien à installer : HTML, CSS et JavaScript sans framework ni build. Seul script externe : `grist-plugin-api.js` servi par docs.getgrist.com (validé par la DINUM). La politique de sécurité de `index.html` n'autorise rien d'autre.
+
+Le lien avec GFS vient du kit commun des apps Grist Factory (`lombre33/grist-factory-kit`), référencé en **sous-module** `kit/` (version 0.7.0, commit `db14544`) : des modules JavaScript servis par le même site, sans appel réseau ni `eval` (HYG-14 à 16). Cloner avec `git clone --recursive`, ou, après un clone simple, `git submodule update --init`. GitHub Pages publie le sous-module avec le site.
 
 ## Organisation du code
 
@@ -37,6 +48,8 @@ Aucune : HTML, CSS et JavaScript sans framework ni build. Seul script externe : 
 | `js/canvas.js` | canevas nodal : déplacement, zoom, nœuds, liens |
 | `js/main.js` | branchement sur l'API Grist, sauvegarde, exécution |
 | `js/i18n.js`, `js/theme.js` | textes fr/en, thèmes |
+| `js/gfs.js`, `js/keep-clear.js` | lien avec GFS : l'ambiance (par le kit) et la zone de la barre de GFS à laisser libre |
+| `kit/` | kit commun des apps Grist Factory (sous-module) : lien avec GFS, pose de l'ambiance |
 | `js/modal.js`, `js/search-select.js` | fenêtres et listes avec recherche |
 | `css/` | jetons de la charte, styles, canevas, fenêtres |
 
@@ -44,10 +57,10 @@ Aucune : HTML, CSS et JavaScript sans framework ni build. Seul script externe : 
 
 ```
 npm test            # unitaires et vérifications statiques, sans dépendance (Node)
-npm run test:e2e    # scénario de base dans Chromium avec une API Grist simulée
+npm run test:e2e    # scénarios dans Chromium avec une API Grist simulée, dont l'app dans un faux GFS (tests/e2e/gfs-host.html)
 ```
 
-`test:e2e` demande Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin).
+`test:e2e` demande Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin). `E2E_ONLY='E2E-3[6-9]|E2E-4'` n'en joue qu'une partie ; `E2E_SHOTS=<dossier>` range des captures d'écran des scénarios dans GFS, à regarder à la main. Les tests qui lisent le kit (HYG-14 à 17, E2E-36 à 44) demandent le sous-module récupéré.
 
 ## Limites connues du POC
 

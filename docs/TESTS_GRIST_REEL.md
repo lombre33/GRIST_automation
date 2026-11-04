@@ -206,3 +206,21 @@ Prérequis : document sans table `Automation` pour TAB-01 à TAB-03 ; les suivan
 | UI-06 | V0.5 | Fenêtres | Ouvrir les Réglages, Tab en boucle, Échap | Le focus reste dans la fenêtre ; Échap la ferme et le focus revient au bouton Réglages | ➖ |
 | UI-07 | V0.11.1 | Couleur du test à blanc | Tester avec le graphe de base, en clair puis en sombre | L'action prévue est signalée en bleu d'accent (barre pleine à texte blanc), plus en vert ; lisible dans les deux thèmes | ➖ |
 | UI-08 | V0.11.1 | Superpositions | Ouvrir le journal, le menu d'ajout (clic droit sur le fond), les Réglages | Même ordre qu'en 0.11 : le menu d'ajout recouvre le journal, la fenêtre des Réglages recouvre tout | ➖ |
+
+## Dans Grist Factory Suite (GFS) : la barre et l'ambiance
+
+À jouer dans GFS (consignes 003 et 006), avec l'app ouverte depuis l'adresse en ligne du dépôt. Les positions de la barre se changent avec le bouton « Position de la barre » de GFS ; l'ambiance, dans sa fenêtre « Thème ». Les essais automatiques jouent ces mêmes situations dans un faux GFS (`E2E-36` à `E2E-44`), pas dans le vrai.
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| LIEN-01 | V0.12.0 | Seule, rien ne change | Ouvrir l'app dans une vue « Personnalisé » de Grist, sans GFS | Les couleurs bleu et gris d'avant, mêmes coins et mêmes traits ; aucune erreur dans la console ; rien n'est écarté | ➖ |
+| LIEN-02 | V0.12.0 | Ouverture dans GFS | Ouvrir l'app depuis GFS (barre à gauche, par défaut), recharger plusieurs fois | La page apparaît directement dans l'ambiance de GFS, sans éclair d'une autre couleur ; la barre ne recouvre que le fond du graphe | ➖ |
+| LIEN-03 | V0.12.0 | Barre en haut | Position de la barre : en haut, à 700 × 400, en français puis en anglais | La barre d'outils se partage autour de la barre : « Ajouter », « Tester », « Activer » et les deux boutons à icône sont tous visibles, aucun recouvert ; le titre peut être coupé par « … » | ➖ |
+| LIEN-04 | V0.12.0 | Barre en bas, journal ouvert | Barre en bas, ouvrir le journal (bouton à icône « liste ») | Le journal remonte juste au-dessus de la barre, ses lignes se lisent ; fermé, il reprend sa place | ➖ |
+| LIEN-05 | V0.12.0 | Menus et fenêtres, aux quatre bords | Pour chaque bord : clic droit sur le fond près de la barre, ouvrir une liste dans un nœud, ouvrir les Réglages, et la question de la table dans un document sans `Automation` | Le menu d'ajout, les listes et les fenêtres sont entièrement hors de la barre ; une fenêtre trop haute se réduit et défile dedans | ➖ |
+| LIEN-06 | V0.12.0 | La barre change en route | Passer la barre de haut en bas, à gauche, à droite, sans recharger | L'app suit à chaque fois ; quand la barre n'est plus en haut, la barre d'outils reprend sa ligne d'origine ; rien ne reste décalé | ➖ |
+| LIEN-07 | V0.12.0 | Un nœud sous la barre | Barre à gauche ; glisser le fond pour qu'un nœud soit sous la barre, ouvrir une de ses listes ; recommencer en dézoomant au maximum | La liste s'ouvre à côté de la barre, jamais dessous | ➖ |
+| LIEN-08 | V0.12.0 | Les ambiances | Fenêtre « Thème » de GFS : Pop, Papier, Brut, Néon, une couleur libre, puis Grist Factory ; en clair puis en sombre | La page, la barre d'outils, les cartes des nœuds, les listes, les fenêtres et le journal prennent l'ambiance sans recharger (fond et décor, arrondis, traits, ombres, polices des titres, bouton « Activer » plein) ; tout se lit ; Grist Factory rend l'aspect d'origine | ➖ |
+| LIEN-09 | V0.12.0 | Mode choisi dans l'app | Dans une ambiance, Réglages > Sombre, Clair, Système | L'ambiance suit le mode de l'app (son choix, puis le système), pas celui de Grist ; le choix reste après recharge | ➖ |
+| LIEN-10 | V0.12.0 | Test à blanc dans une ambiance | Dans Néon puis Brut, Tester avec le graphe de base | Les états des nœuds (passé, bloqué, « sinon » en ambre, action en accent) se lisent ; l'ambre reste de l'ambre | ➖ |
+| LIEN-11 | V0.12.0 | Le kit est publié avec le site | Ouvrir `https://lombre33.github.io/GRIST_automation/kit/js/gfs-link.js` | Le code du module s'affiche (le sous-module est publié avec le site) | ➖ |

@@ -21,6 +21,13 @@
   apply();
   media.addEventListener('change', apply);
 
+  // Hébergée par GFS (`gfs=<n>` dans l'adresse du cadre), la page attend l'ambiance avant de s'afficher : sinon elle paraîtrait dans ses couleurs, puis changerait. js/gfs.js lève l'attente ;
+  // au plus 2 s, si le kit manque ou que GFS tarde. Seule, rien n'attend.
+  if (/[?&]gfs=\d/.test(root.location.search)) {
+    document.documentElement.dataset.gfsPending = '';
+    setTimeout(() => { delete document.documentElement.dataset.gfsPending; }, 2000);
+  }
+
   root.Theme = {
     MODES,
     get mode() { return mode; },

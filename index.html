@@ -14,15 +14,21 @@
   <link rel="stylesheet" href="css/modal.css">
   <script src="js/theme.js"></script>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <!-- Le lien avec GFS (barre à laisser libre, ambiance), pris du kit en sous-module : module à part, l'app s'ouvre sans lui si le kit manque. -->
+  <script type="module" src="js/gfs.js"></script>
 </head>
 <body>
   <header class="app-header">
-    <h1 data-i18n="app.title"></h1>
-    <button id="add-node" type="button" data-i18n-label="add.nodeLabel"><span class="icon icon-plus" aria-hidden="true"></span><span data-i18n="add.node"></span></button>
-    <button id="test-workflow" type="button"><span class="icon icon-play" aria-hidden="true"></span><span data-i18n="test.run"></span></button>
-    <button id="toggle-active" type="button" class="primary" aria-pressed="false"></button>
-    <button id="toggle-logs" type="button" class="icon-only" data-i18n-label="logs.toggle" aria-pressed="false"><span class="icon icon-list" aria-hidden="true"></span></button>
-    <button id="open-settings" type="button" class="icon-only" data-i18n-label="settings.open" aria-haspopup="dialog"><span class="icon icon-settings" aria-hidden="true"></span></button>
+    <div class="bar-start">
+      <h1 data-i18n="app.title"></h1>
+      <button id="add-node" type="button" data-i18n-label="add.nodeLabel"><span class="icon icon-plus" aria-hidden="true"></span><span data-i18n="add.node"></span></button>
+      <button id="test-workflow" type="button"><span class="icon icon-play" aria-hidden="true"></span><span data-i18n="test.run"></span></button>
+    </div>
+    <div class="bar-end">
+      <button id="toggle-active" type="button" class="primary" aria-pressed="false"></button>
+      <button id="toggle-logs" type="button" class="icon-only" data-i18n-label="logs.toggle" aria-pressed="false"><span class="icon icon-list" aria-hidden="true"></span></button>
+      <button id="open-settings" type="button" class="icon-only" data-i18n-label="settings.open" aria-haspopup="dialog"><span class="icon icon-settings" aria-hidden="true"></span></button>
+    </div>
   </header>
 
   <p id="open-tab-warning" class="warning" data-i18n="app.openTab" hidden></p>
@@ -52,6 +58,7 @@
   <script src="js/echo.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/canvas.js"></script>
+  <script src="js/keep-clear.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

@@ -1,4 +1,6 @@
-/* Jetons de la charte Grist Factory (docs/REGLES_UI_UX_ET_DEV.md). Un seul accent bleu, deux couleurs sémantiques (rouge, ambre). */
+/* Jetons de la charte Grist Factory (docs/REGLES_UI_UX_ET_DEV.md). Un seul accent bleu, deux couleurs sémantiques (rouge, ambre).
+   Ce fichier porte les valeurs d'origine de l'app : les feuilles lisent ces jetons, jamais une couleur écrite en dur (HYG-13). Dans GFS, l'ambiance choisie par la personne les redit
+   sur <html> (kit/js/ambiance-pose.js, posée par js/gfs.js) ; seule, l'app garde ces valeurs. --warn-* est une paire de l'app, l'avertissement ambre : GFS ne la connaît pas. */
 :root {
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --bg: #f4f6fa;
@@ -12,6 +14,7 @@
   --accent-hover: #2558c4;
   --accent-solid: #2f6fed;
   --accent-solid-hover: #2558c4;
+  --on-accent: #ffffff;
   --accent-soft: #e8f0fe;
   --accent-soft-border: #c7dbfd;
   --accent-ink: #2558c4;
@@ -21,10 +24,24 @@
   --warn-ink: #8a4b00;
   --warn-soft: #fff4e0;
   --scrim: rgba(15, 23, 42, .45);
-  --radius: 7px;
-  --radius-frame: 8px;
+  /* Formes (règle 15 du guide des apps) : arrondis des contrôles, des boutons, des saisies, des cartes, des fenêtres et des grands panneaux, trait des contrôles et des cartes, ombres. */
+  --radius-sm: 7px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-btn: 7px;
+  --radius-input: 7px;
+  --radius-panel: 8px;
+  --bw: 1px;
+  --shadow-ctl: none;
+  --shadow-panel: 0 1px 2px rgba(15, 23, 42, .08);
   --shadow-float: 0 6px 20px rgba(15, 23, 42, .18);
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, .08);
+  /* Polices et casse des titres et des étiquettes. */
+  --font-head: var(--font-ui);
+  --font-label: var(--font-ui);
+  --fw-head: 700;
+  --ls-head: normal;
+  --ls-label: normal;
+  --tt-head: none;
   /* Couches, de la plus basse à la plus haute : aucun z-index en dur ailleurs (HYG-10). */
   --z-node-top: 5;
   --z-lock: 20;
@@ -53,6 +70,6 @@
   --warn-ink: #f2c36b;
   --warn-soft: #3a2f1a;
   --scrim: rgba(3, 6, 12, .62);
+  --shadow-panel: 0 1px 2px rgba(0, 0, 0, .4);
   --shadow-float: 0 6px 20px rgba(0, 0, 0, .5);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, .4);
 }

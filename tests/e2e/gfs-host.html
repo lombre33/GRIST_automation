@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Faux GFS pour les essais de bout en bout</title>
+  <style>html, body { margin: 0; height: 100%; } iframe { display: block; border: 0; width: 100%; height: 100%; }</style>
+</head>
+<body>
+  <!-- Joue GFS comme navigateur/gfs-hote.js du kit : le cadre de l'app est isolé comme chez GFS (sandbox="allow-scripts", sans allow-same-origin), le contexte lui est rendu, et l'essai
+       lui envoie des événements (barre, ambiance). window.__context est posé par l'essai avant le chargement ; `hote` est ce que l'essai appelle. -->
+  <iframe id="app" title="app" sandbox="allow-scripts"></iframe>
+  <script>
+    const frame = document.getElementById('app');
+    const received = [];
+    window.addEventListener('message', (event) => {
+      if (event.source !== frame.contentWindow) return;
+      const message = event.data;
+      received.push(message);
+      if (message && message.type === 'appel' && message.nom === 'contexte') {
+        frame.contentWindow.postMessage({ gfs: 0, type: 'reponse', id: message.id, data: window.__context || {} }, '*');
+      }
+    });
+    window.hote = {
+      received: () => received.slice(),
+      event: (nom, data) => frame.contentWindow.postMessage({ gfs: 0, type: 'evenement', nom, data }, '*'),
+    };
+    frame.src = '/index.html?gfs=0';
+  </script>
+</body>
+</html>

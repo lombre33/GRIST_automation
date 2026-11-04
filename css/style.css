@@ -1,6 +1,8 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; }
-body { margin: 0; font-family: var(--font-ui); font-size: 13px; background: var(--bg); color: var(--text); }
+body { margin: 0; min-height: 100vh; font-family: var(--font-ui); font-size: 13px; background-color: var(--bg); background-image: var(--wash, none); background-size: var(--wash-size, auto); color: var(--text); }
+/* Hébergée par GFS, la page attend l'ambiance avant de s'afficher (js/theme.js pose l'attente, js/gfs.js la lève) : sinon elle paraîtrait dans ses couleurs, puis changerait. */
+html[data-gfs-pending] body { visibility: hidden; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
@@ -16,22 +18,27 @@ body { margin: 0; font-family: var(--font-ui); font-size: 13px; background: var(
 
 body { display: flex; flex-direction: column; }
 .app-header { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--surface); border-bottom: 1px solid var(--border); flex: none; }
-.app-header h1 { font-size: 14px; font-weight: 700; margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-start, .bar-end { display: contents; }
+.app-header h1 { font-family: var(--font-head); font-size: 14px; font-weight: var(--fw-head); letter-spacing: var(--ls-head); text-transform: var(--tt-head); margin: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Barre de GFS en haut (js/keep-clear.js) : la barre d'outils se partage autour de la zone, sans rien réserver ailleurs ; si une moitié est trop étroite, ses boutons passent à la ligne. */
+html[data-gfs-bar="haut"] .app-header { display: grid; grid-template-columns: max(0px, calc(var(--gfs-zone-x) - 10px)) var(--gfs-zone-w) minmax(0, 1fr); gap: 0; }
+html[data-gfs-bar="haut"] :is(.bar-start, .bar-end) { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+html[data-gfs-bar="haut"] .bar-end { grid-column: 3; justify-content: flex-end; }
 button[aria-pressed="true"].icon-only { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); }
 
 .warning { margin: 0; padding: 5px 12px; font-size: 12px; background: var(--warn-soft); color: var(--warn-ink); border-bottom: 1px solid var(--border); flex: none; }
 
 .stage { position: relative; flex: 1; min-height: 0; }
-h2 { font-size: 12px; font-weight: 700; margin: 0 0 6px; }
+h2 { font-family: var(--font-head); font-size: 12px; font-weight: var(--fw-head); letter-spacing: var(--ls-head); text-transform: var(--tt-head); margin: 0 0 6px; }
 
-input[type="text"] { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 4px 8px; min-height: 28px; }
+input[type="text"] { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: var(--bw) solid var(--border-strong); border-radius: var(--radius-input); padding: 4px 8px; min-height: 28px; }
 input::placeholder { color: var(--text-muted); }
 input:disabled, button:disabled { opacity: .45; cursor: not-allowed; }
 
-button { font: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; padding: 3px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; }
+button { font: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 28px; padding: 3px 10px; border: var(--bw) solid var(--border-strong); border-radius: var(--radius-btn); background: var(--surface); color: var(--text); box-shadow: var(--shadow-ctl); cursor: pointer; }
 button:hover:not(:disabled) { background: var(--surface-sunken); }
-button.primary { background: var(--accent-solid); border-color: var(--accent-solid); color: #fff; font-weight: 600; }
-button.primary:hover:not(:disabled) { background: var(--accent-solid-hover); }
+button.primary { background: var(--fill, var(--accent-solid)); border-color: var(--fill-line, var(--accent-solid)); color: var(--on-accent); font-weight: 600; }
+button.primary:hover:not(:disabled) { background: var(--fill-hover, var(--accent-solid-hover)); }
 button.icon-only { width: 28px; padding: 0; }
 
 
@@ -41,10 +48,10 @@ button.icon-only { width: 28px; padding: 0; }
 .ss-button { width: 100%; justify-content: space-between; text-align: left; }
 .ss-button .ss-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-button .ss-label.is-empty { color: var(--text-muted); }
-.ss-panel { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: var(--z-panel); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); box-shadow: var(--shadow-float); padding: 4px; }
+.ss-panel { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: var(--z-panel); background: var(--surface); border: var(--bw) solid var(--border-strong); border-radius: var(--radius-md); box-shadow: var(--shadow-float); padding: 4px; }
 .ss-panel.up { top: auto; bottom: calc(100% + 2px); }
 .ss-options { list-style: none; margin: 4px 0 0; padding: 0; max-height: 150px; overflow: auto; }
-.ss-options li { padding: 4px 8px; border-radius: var(--radius); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-options li { padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss-options li.is-empty-option { color: var(--text-muted); }
 .ss-options li.is-active, .ss-options li:hover { background: var(--surface-sunken); }
 .ss-options li[aria-selected="true"] { color: var(--accent-ink); font-weight: 600; }
@@ -54,7 +61,7 @@ button.icon-only { width: 28px; padding: 0; }
 .locked h2 { font-size: 14px; color: var(--text); margin: 0; }
 .locked p { margin: 0; max-width: 460px; }
 
-.logs { position: absolute; right: 10px; bottom: 10px; width: min(360px, calc(100% - 20px)); max-height: 45%; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-frame); box-shadow: var(--shadow-float); padding: 8px 12px; z-index: var(--z-logs); }
+.logs { position: absolute; right: 10px; bottom: 10px; width: min(360px, calc(100% - 20px)); max-height: 45%; display: flex; flex-direction: column; background: var(--surface); border: var(--bw) solid var(--border); border-radius: var(--radius-panel); box-shadow: var(--shadow-float); padding: 8px 12px; z-index: var(--z-logs); }
 .log-list { list-style: none; padding: 0; margin: 0; font-size: 12px; color: var(--text-muted); overflow: auto; }
 .log-list li { padding: 3px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .logs button { margin-top: 6px; align-self: flex-start; font-size: 12px; }
