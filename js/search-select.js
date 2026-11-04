@@ -101,14 +101,17 @@
     ss.list.children[ss.activeIndex].scrollIntoView({ block: 'nearest' });
   }
 
-  // Le panneau s'ouvre sous le bouton, ou au-dessus s'il manque de place en bas du cadre.
+  // Le panneau s'ouvre sous le bouton (sous l'hôte pour un menu, qui n'a pas de bouton), ou au-dessus s'il manque de place en bas du cadre,
+  // ou de settings.within, l'élément qui le rogne.
   function open(ss) {
     if (ss.select.disabled) return;
     ss.search.value = '';
     render(ss);
     ss.panel.hidden = false;
     ss.panel.classList.remove('up');
-    const room = window.innerHeight - ss.button.getBoundingClientRect().bottom;
+    const anchor = ss.settings.menu ? ss.host : ss.button;
+    const bottom = ss.settings.within ? ss.settings.within.getBoundingClientRect().bottom : window.innerHeight;
+    const room = bottom - anchor.getBoundingClientRect().bottom;
     ss.panel.classList.toggle('up', room < ss.panel.offsetHeight + 8);
     ss.button.setAttribute('aria-expanded', 'true');
     ss.search.focus();
@@ -139,6 +142,7 @@
   }
 
   // options.menu : pas de bouton, le panneau s'ouvre par open() à l'endroit de l'hôte (menu d'ajout du canevas) ; onClose est appelé à la fermeture.
+  // options.within : l'élément qui rogne le panneau (le canevas pour son menu), à défaut le cadre.
   function attach(select, options) {
     const ss = build(select, options || {});
     ss.button.addEventListener('click', () => (ss.panel.hidden ? open(ss) : close(ss, false)));

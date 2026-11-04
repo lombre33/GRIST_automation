@@ -1,4 +1,5 @@
-// Modèle du graphe d'automatisation : { version, active, nodes: [{ id, type, x, y, config }], edges: [{ from, to, branch? }] }.
+// Modèle du graphe d'automatisation : { version, active, nodes: [{ id, type, x, y, w?, config }], edges: [{ from, to, branch? }] }.
+// w : largeur du nœud en px, réglée en tirant son bord droit (facultative : sans elle, la largeur d'origine).
 // Logique pure (sans DOM). Un lien va toujours d'une sortie vers une entrée ; une entrée n'a qu'un lien ; pas de cycle.
 // branch : sortie d'où part le lien, 'then' (par défaut, absent du JSON) ou 'else' (sortie « sinon » d'une condition).
 (function (root) {
@@ -27,6 +28,11 @@
     graph.nodes.push(node);
     return node;
   }
+
+  // Largeur d'un nœud : bornée, et null quand elle n'est pas réglée (ou illisible), le nœud gardant alors sa largeur d'origine (css/canvas.css).
+  const WIDTH = { min: 200, base: 232, max: 600 };
+  const clampWidth = (width) => Math.round(Math.min(WIDTH.max, Math.max(WIDTH.min, width)));
+  const nodeWidth = (node) => (typeof node.w === 'number' && Number.isFinite(node.w) ? clampWidth(node.w) : null);
 
   function removeNode(graph, id) {
     graph.nodes = graph.nodes.filter((node) => node.id !== id);
@@ -181,7 +187,7 @@
     return paths.join('\n');
   }
 
-  const api = { VERSION, create, summarize, nodeById, addNode, removeNode, connect, disconnect, validate, parse };
+  const api = { VERSION, WIDTH, create, summarize, nodeById, addNode, removeNode, connect, disconnect, validate, parse, clampWidth, nodeWidth };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Graph = api;
 })(typeof window !== 'undefined' ? window : globalThis);

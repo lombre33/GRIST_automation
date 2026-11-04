@@ -1,6 +1,8 @@
 // Canevas nodal : fond uni, déplacement (glisser le fond) et zoom (molette), nœuds déplaçables par leur en-tête, liens courbes entre broches.
 // Une condition a deux sorties, « oui » et « sinon ». Ajout d'un nœud : clic droit sur le fond ou bouton « Ajouter ». Lien : glisser d'une sortie vers une entrée, ou cliquer la sortie puis l'entrée
-// (au clavier : Entrée sur la sortie puis sur l'entrée). Suppression : bouton du nœud, ou touche Suppr sur le nœud ou le lien sélectionné.
+// (au clavier : Entrée sur la sortie puis sur l'entrée) ; un lien glissé puis lâché sur le fond ouvre le menu d'ajout, et le nœud choisi s'y pose, relié.
+// Suppression : bouton du nœud, ou touche Suppr sur le nœud ou le lien sélectionné. Largeur d'un nœud : tirer son bord droit (au clavier, Maj + flèches
+// gauche et droite sur son en-tête), double-clic sur ce bord pour la largeur d'origine ; elle est gardée dans le graphe (node.w).
 // Le canevas ne connaît pas Grist : il lit et modifie le graphe (js/graph.js) et signale chaque changement par onChange. Les champs des nœuds sont dans js/canvas-fields.js.
 // En lecture seule (la personne ne peut pas modifier le document), on déplace et on zoome le fond pour voir le graphe ; rien ne s'ajoute, ne se relie, ne se déplace ni ne se supprime.
 // cv : l'état d'un canevas, que chaque fonction reçoit (voir create) ; un nœud y est une entrée { node, element, head, body, state, pinIn, pinsOut, pickers, selects, inputs }.
@@ -12,6 +14,7 @@
   const K_MIN = 0.4;
   const K_MAX = 1.6;
   const DRAG_THRESHOLD = 4;   // px : en deçà, un appui sur une sortie est un clic (le lien attend l'entrée), pas un glisser
+  const WIDTH_STEP = 20;      // px : Maj + flèche sur l'en-tête d'un nœud
   const t = (key, params) => I18n.t(key, params);
 
   function svg(tag, attributes, parent) {
@@ -105,7 +108,7 @@
 
   function showHints(cv) {
     cv.hint.hidden = cv.graph.nodes.length > 0;
-    cv.connectHint.hidden = !cv.connecting;
+    cv.connectHint.hidden = !cv.connecting || Boolean(cv.connecting.parked);   // lien lâché sur le fond : le menu d'ajout parle à sa place
   }
 
   /* ---------- Sélection et suppression ---------- */
@@ -166,7 +169,16 @@
     cv.tempWire.setAttribute('visibility', 'visible');
   }
 
-  // Appui sur une sortie : un glisser relie à l'entrée où le pointeur est relâché ; un simple clic laisse le lien en attente de l'entrée (clic, ou Entrée au clavier).
+  // Lien lâché sur le fond : il reste tracé jusqu'au point de chute, où s'ouvre le menu d'ajout ; fermer le menu sans choisir l'abandonne.
+  function parkConnection(cv, clientX, clientY) {
+    cv.connecting.parked = true;
+    moveTempWire(cv, clientX, clientY);
+    showHints(cv);
+    openAddMenu(cv, clientX, clientY, cv.connecting);
+  }
+
+  // Appui sur une sortie : un glisser relie à l'entrée où le pointeur est relâché, ou ouvre le menu d'ajout s'il est relâché sur le fond ;
+  // un simple clic laisse le lien en attente de l'entrée (clic, ou Entrée au clavier).
   function onPinOutPointerDown(cv, event, id, branch) {
     event.stopPropagation();
     event.preventDefault();
@@ -180,8 +192,11 @@
       if (cv.connecting) moveTempWire(cv, e.clientX, e.clientY);
     }, (e) => {
       if (!dragged || !cv.connecting) return;
-      const pin = document.elementFromPoint(e.clientX, e.clientY)?.closest('.pin-in');
-      if (pin) finishConnecting(cv, pin.dataset.node); else stopConnecting(cv);
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const pin = target?.closest('.pin-in');
+      if (pin) finishConnecting(cv, pin.dataset.node);
+      else if (target && isBackground(cv, target)) parkConnection(cv, e.clientX, e.clientY);
+      else stopConnecting(cv);
     });
   }
 
@@ -201,8 +216,28 @@
     remove.addEventListener('pointerdown', (event) => event.stopPropagation());
     entry.head.addEventListener('keydown', (event) => {
       if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); removeNode(cv, entry.node.id); }
+      else if (event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !cv.readOnly) {
+        event.preventDefault();
+        const before = entry.node.w;
+        setWidth(cv, entry, entry.element.offsetWidth + (event.key === 'ArrowRight' ? WIDTH_STEP : -WIDTH_STEP));
+        if (entry.node.w !== before) cv.onChange(cv.graph);
+      }
     });
     entry.head.addEventListener('pointerdown', (event) => startNodeDrag(cv, event, entry));
+  }
+
+  // Le bord droit d'un nœud, sous ses broches (premier enfant, que les broches recouvrent) : le tirer règle la largeur, un double-clic la remet à l'origine.
+  function buildGrip(cv, entry) {
+    const grip = make('span', 'node-grip', entry.element);
+    grip.setAttribute('aria-hidden', 'true');   // au clavier : Maj + flèches sur l'en-tête
+    grip.dataset.i18nLabel = 'node.resize';
+    grip.title = t('node.resize');
+    grip.addEventListener('pointerdown', (event) => startResize(cv, event, entry));
+    grip.addEventListener('dblclick', () => {
+      if (cv.readOnly || entry.node.w === undefined) return;
+      setWidth(cv, entry, null);
+      cv.onChange(cv.graph);
+    });
   }
 
   function buildPinIn(cv, entry) {
@@ -254,6 +289,7 @@
     element.setAttribute('role', 'group');
     const entry = { node, element, pickers: {}, selects: {}, inputs: {} };
     cv.views.set(node.id, entry);
+    buildGrip(cv, entry);
     buildHead(cv, entry);
     entry.body = make('div', 'node-body', element);
     entry.state = make('div', 'node-state', element);
@@ -275,6 +311,33 @@
   function placeNode(entry) {
     entry.element.style.left = entry.node.x + 'px';
     entry.element.style.top = entry.node.y + 'px';
+    const width = Graph.nodeWidth(entry.node);
+    entry.element.style.width = width === null ? '' : width + 'px';
+  }
+
+  // width : la largeur voulue, bornée (Graph.WIDTH) ; null : celle d'origine. Les liens suivent les broches.
+  function setWidth(cv, entry, width) {
+    if (width === null) delete entry.node.w;
+    else entry.node.w = Graph.clampWidth(width);
+    placeNode(entry);
+    drawWires(cv);
+  }
+
+  // Tirer le bord droit : la largeur suit le pointeur, à l'échelle du zoom ; elle n'est enregistrée qu'au relâchement, et seulement si elle a changé.
+  function startResize(cv, event, entry) {
+    if (event.button !== 0 || cv.readOnly) return;
+    event.stopPropagation();
+    event.preventDefault();
+    select(cv, { kind: 'node', id: entry.node.id });
+    bringToFront(cv, entry.element);
+    const start = { x: event.clientX, width: entry.element.offsetWidth, w: entry.node.w };
+    cv.container.classList.add('is-resizing');
+    entry.element.classList.add('is-resizing');
+    track((e) => setWidth(cv, entry, start.width + (e.clientX - start.x) / cv.view.k), () => {
+      cv.container.classList.remove('is-resizing');
+      entry.element.classList.remove('is-resizing');
+      if (entry.node.w !== start.w) cv.onChange(cv.graph);
+    });
   }
 
   // Glisser l'en-tête déplace le nœud ; la position n'est enregistrée qu'au relâchement, et seulement s'il a bougé.
@@ -295,9 +358,17 @@
     }, () => { if (moved) cv.onChange(cv.graph); });
   }
 
-  function addNode(cv, type, x, y) {
+  // link : le lien d'un fil lâché sur le fond ({ from, branch }) ; l'entrée du nœud se pose alors en (x, y), au bout du fil, et le fil la rejoint.
+  function addNode(cv, type, x, y, link) {
     const node = Graph.addNode(cv.graph, type, x, y);
     const entry = buildNode(cv, node);
+    if (link) {
+      const pin = pinCenter(cv, entry.pinIn);
+      node.x = Math.round(node.x + x - pin.x);
+      node.y = Math.round(node.y + y - pin.y);
+      placeNode(entry);
+      Graph.connect(cv.graph, link.from, node.id, link.branch);
+    }
     refreshSchema(cv);
     select(cv, { kind: 'node', id: node.id });
     bringToFront(cv, entry.element);
@@ -314,22 +385,30 @@
     cv.menu = null;
   }
 
-  // (clientX, clientY) : endroit où poser le nœud ; sans arguments, au centre du canevas. Le menu est une liste avec recherche, ouverte d'emblée.
-  function openAddMenu(cv, clientX, clientY) {
+  // (clientX, clientY) : endroit où poser le nœud ; sans arguments, au centre du canevas. Le menu est une liste avec recherche, ouverte d'emblée,
+  // qui reste dans le canevas (elle s'ouvre vers le haut près du bas). link : le lien d'un fil lâché sur le fond (voir parkConnection) ; le menu ne
+  // propose alors que les nœuds qui ont une entrée.
+  function openAddMenu(cv, clientX, clientY, link) {
     if (cv.readOnly) return;
     closeMenu(cv);
     const rect = cv.container.getBoundingClientRect();
     const x = clientX === undefined ? rect.left + rect.width / 2 : clientX;
     const y = clientY === undefined ? rect.top + rect.height / 2 : clientY;
-    cv.menu = make('div', 'add-menu', cv.container);
-    cv.menu.style.left = (x - rect.left) + 'px';
-    cv.menu.style.top = (y - rect.top) + 'px';
-    const list = make('select', '', cv.menu);
-    fillSelect(list, NodeTypes.ORDER.map((type) => [type, t(NodeTypes.TYPES[type].titleKey), NodeTypes.TYPES[type].titleKey]));
-    const picker = root.SearchSelect.attach(list, { menu: true, onClose: () => closeMenu(cv) });
+    const menu = make('div', 'add-menu', cv.container);
+    cv.menu = menu;
+    menu.style.left = Math.max(0, Math.min(x - rect.left, rect.width - menu.offsetWidth)) + 'px';
+    menu.style.top = (y - rect.top) + 'px';
+    const list = make('select', '', menu);
+    const types = NodeTypes.ORDER.filter((type) => !link || NodeTypes.TYPES[type].inputs > 0);
+    fillSelect(list, types.map((type) => [type, t(NodeTypes.TYPES[type].titleKey), NodeTypes.TYPES[type].titleKey]));
+    const picker = root.SearchSelect.attach(list, { menu: true, within: cv.container, onClose: () => {
+      if (cv.menu === menu) closeMenu(cv);
+      if (link && cv.connecting === link) stopConnecting(cv);
+    } });
     list.addEventListener('change', () => {
       const point = toWorld(cv, x, y);
-      addNode(cv, list.value, point.x - 20, point.y - 12);
+      if (link) addNode(cv, list.value, point.x, point.y, link);
+      else addNode(cv, list.value, point.x - 20, point.y - 12);
     });
     picker.open();
   }
@@ -351,7 +430,7 @@
       event.preventDefault();
       openAddMenu(cv, event.clientX, event.clientY);
     });
-    container.addEventListener('pointermove', (event) => { if (cv.connecting) moveTempWire(cv, event.clientX, event.clientY); });
+    container.addEventListener('pointermove', (event) => { if (cv.connecting && !cv.connecting.parked) moveTempWire(cv, event.clientX, event.clientY); });
     document.addEventListener('keydown', (event) => {
       if (event.defaultPrevented) return;
       const typing = event.target.closest && event.target.closest('input, select, textarea, .ss-panel');
@@ -409,7 +488,7 @@
       view: { x: 40, y: 40, k: 1 },
       views: new Map(),   // id du nœud -> son entrée
       selected: null,     // { kind: 'node', id } ou { kind: 'edge', from, to }
-      connecting: null,   // { from, branch } pendant la création d'un lien
+      connecting: null,   // { from, branch, parked } pendant la création d'un lien ; parked : lâché sur le fond, le menu d'ajout est ouvert
       menu: null,
     };
     cv.changed = () => { clearTrace(cv); cv.onChange(cv.graph); };

@@ -9,7 +9,7 @@ const I18N_TEXTS = {
     // La page : titre, et bandeaux sous la barre d'outils (index.html, js/main.js).
     'app.title': 'Grist Automation Builder',
     'app.otherTab': 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.',
-    'app.openTab': 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur.',
+    'app.openTab': 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur, y compris si la vue du widget est réduite.',
     'app.readOnly': 'Lecture seule : vous voyez ce workflow et pouvez le tester, sans le modifier ni l\'exécuter. Seule une personne qui peut modifier le document l\'active et l\'exécute.',
 
     // La barre d'outils : ajouter un nœud, tester, activer, montrer le journal.
@@ -44,6 +44,7 @@ const I18N_TEXTS = {
     'node.lookup': 'Lecture',
     'node.transform': 'Transformation',
     'node.delete': 'Supprimer le nœud',
+    'node.resize': 'Largeur du nœud : tirez ce bord (au clavier, Maj + flèches gauche et droite sur son titre) ; double-clic pour la largeur d\'origine',
     'pin.then': 'Sortie « oui » : condition vraie',
     'pin.else': 'Sortie « sinon » : condition fausse',
     'pin.in': 'Entrée',
@@ -191,6 +192,7 @@ const I18N_TEXTS = {
     'credits.site': 'Site',
     'credits.license': 'Licence',
     'credits.version': 'Version',
+    'credits.versionValue': 'pré-alpha {version}',
 
     // Les fenêtres, et la page ouverte hors de Grist.
     'modal.close': 'Fermer',
@@ -213,7 +215,7 @@ const I18N_TEXTS = {
     'tuto.addText': 'Clic droit sur le fond, ou « Ajouter » : tapez quelques lettres pour trouver le type de nœud. Glissez le fond pour vous déplacer, la molette pour zoomer.',
     'tuto.addAlt': 'Le menu d\'ajout ouvert sur le fond du canevas : une recherche et les cinq types de nœuds.',
     'tuto.linkName': 'Relier les nœuds',
-    'tuto.linkText': 'Tirez un lien de la sortie d\'un nœud, à droite, jusqu\'à l\'entrée d\'un autre, à gauche. Une Condition a deux sorties : « Oui » et « Sinon ».',
+    'tuto.linkText': 'Tirez un lien de la sortie d\'un nœud jusqu\'à l\'entrée d\'un autre ; lâché sur le fond, il ouvre le menu d\'ajout. Une Condition a deux sorties : « Oui » et « Sinon ».',
     'tuto.linkAlt': 'Un lien tiré de la sortie du Déclencheur jusqu\'à l\'entrée de la Condition.',
     'tuto.setName': 'Régler chaque nœud',
     'tuto.setText': 'Choisissez tables et colonnes dans les listes. Une valeur peut reprendre une colonne de la ligne, {Colonne}, ou le résultat d\'une Lecture ou d\'une Transformation, {nom}.',
@@ -230,7 +232,7 @@ const I18N_TEXTS = {
     // La page : titre, et bandeaux sous la barre d'outils (index.html, js/main.js).
     'app.title': 'Grist Automation Builder',
     'app.otherTab': 'Automation is on: another tab is running it for now, this one takes over if it closes.',
-    'app.openTab': 'Automation is on: it only runs while this view stays open in your browser.',
+    'app.openTab': 'Automation is on: it only runs while this view stays open in your browser, even when the widget is collapsed.',
     'app.readOnly': 'Read only: you can see this workflow and test it, but not change or run it. Only someone who can edit the document turns it on and runs it.',
 
     // La barre d'outils : ajouter un nœud, tester, activer, montrer le journal.
@@ -265,6 +267,7 @@ const I18N_TEXTS = {
     'node.lookup': 'Lookup',
     'node.transform': 'Transform',
     'node.delete': 'Delete node',
+    'node.resize': 'Node width: drag this edge (keyboard: Shift + Left or Right arrow on its title); double-click for the original width',
     'pin.then': 'Yes output: condition is true',
     'pin.else': 'Else output: condition is false',
     'pin.in': 'Input',
@@ -412,6 +415,7 @@ const I18N_TEXTS = {
     'credits.site': 'Website',
     'credits.license': 'License',
     'credits.version': 'Version',
+    'credits.versionValue': 'pre-alpha {version}',
 
     // Les fenêtres, et la page ouverte hors de Grist.
     'modal.close': 'Close',
@@ -434,7 +438,7 @@ const I18N_TEXTS = {
     'tuto.addText': 'Right-click the background, or "Add": type a few letters to find the node type. Drag the background to move around, scroll to zoom.',
     'tuto.addAlt': 'The add menu open on the canvas background: a search box and the five node types.',
     'tuto.linkName': 'Connect the nodes',
-    'tuto.linkText': 'Drag a link from a node\'s output, on its right, to another node\'s input, on its left. A Condition has two outputs: "Yes" and "Else".',
+    'tuto.linkText': 'Drag a link from a node\'s output to another node\'s input; dropped on the background, it opens the add menu. A Condition has two outputs: "Yes" and "Else".',
     'tuto.linkAlt': 'A link dragged from the Trigger\'s output to the Condition\'s input.',
     'tuto.setName': 'Set up each node',
     'tuto.setText': 'Pick tables and columns from the lists. A value can reuse a column of the row, {Column}, or the result of a Lookup or a Transform, {name}.',

@@ -4,12 +4,19 @@
 (function (root) {
   'use strict';
 
+  const looselyEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b) || (typeof a !== 'object' && typeof b !== 'object' && a !== null && b !== null && a !== undefined && b !== undefined && String(a) === String(b));
+
+  // Une valeur de colonne (a) se compare comme elle est rangée : un texte ou une case au texte tapé (text), un nombre ou une liste à la valeur
+  // saisie, lue comme un nombre si elle en a l'air (value). Ainsi un texte « 01000 » vaut 01000 tapé (qui se lirait sinon 1000), une case vaut
+  // true ou false. Sert aux conditions, à la ligne précise du déclencheur et aux colonnes clés ; « supérieur » et « inférieur » restent sans coercition (COND-05).
+  const matches = (a, value, text) => (typeof a === 'string' || typeof a === 'boolean' ? String(a) === text : looselyEqual(a, value));
+
   const OPERATORS = {
-    eq: (a, b) => a === b,
-    neq: (a, b) => a !== b,
+    eq: (a, b, text) => matches(a, b, text),
+    neq: (a, b, text) => !matches(a, b, text),
     gt: (a, b) => typeof a === 'number' && typeof b === 'number' && a > b,
     lt: (a, b) => typeof a === 'number' && typeof b === 'number' && a < b,
-    contains: (a, b) => typeof a === 'string' && typeof b === 'string' && a.includes(b),
+    contains: (a, b, text) => typeof a === 'string' && a.includes(text),
     empty: (a) => a === null || a === undefined || a === '',
     notEmpty: (a) => !(a === null || a === undefined || a === ''),
   };
@@ -58,8 +65,6 @@
     return { events, next };
   }
 
-  const looselyEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b) || (typeof a !== 'object' && typeof b !== 'object' && a !== null && b !== null && a !== undefined && b !== undefined && String(a) === String(b));
-
   function parseValue(text) {
     return text !== '' && text !== null && text !== undefined && !isNaN(Number(text)) ? Number(text) : text;
   }
@@ -67,7 +72,7 @@
   // Cible optionnelle (modification seulement) : la ligne modifiée doit avoir targetValue dans la colonne targetColumn.
   function matchesTrigger(trigger, event) {
     if (!trigger || trigger.action !== event.type) return false;
-    if (trigger.targetColumn && (event.type !== 'update' || !event.record || !looselyEqual(event.record[trigger.targetColumn], parseValue(trigger.targetValue)))) return false;
+    if (trigger.targetColumn && (event.type !== 'update' || !event.record || !matches(event.record[trigger.targetColumn], parseValue(trigger.targetValue), display(trigger.targetValue)))) return false;
     if (event.type === 'update' && trigger.column) {
       return Object.prototype.hasOwnProperty.call(event.changed, trigger.column);
     }
@@ -79,14 +84,15 @@
     const op = OPERATORS[cond.operator];
     if (!op) throw new Error('Opérateur inconnu : ' + cond.operator);
     if (!event.record) throw new Error('Condition impossible sans contenu de ligne');
-    return op(event.record[cond.column], resolveTemplate(cond.value, event, vars || {}));
+    return op(event.record[cond.column], resolveTemplate(cond.value, event, vars || {}), resolveTemplate(cond.value, event, vars || {}, true));
   }
 
   // Valeurs {Colonne} d'un texte : colonnes de la ligne ou variables des nœuds Transformation (qui priment). {{ et }} donnent des accolades littérales.
   // Un texte réduit à une seule valeur garde son type d'origine ; sinon le texte assemblé passe par parseValue, comme une valeur saisie.
+  // asText : le texte tel qu'il s'affiche, sans lecture comme un nombre (comparaisons, colonnes clés).
   const display = (value) => (value === null || value === undefined ? '' : Array.isArray(value) ? value.join(', ') : String(value));
 
-  function resolveTemplate(text, event, vars) {
+  function resolveTemplate(text, event, vars, asText) {
     const source = display(text);
     const lookup = (name) => {
       if (Object.prototype.hasOwnProperty.call(vars, name)) return vars[name];
@@ -95,8 +101,9 @@
       return event.record[name];
     };
     const whole = /^\{([^{}]+)\}$/.exec(source);
-    if (whole) return lookup(whole[1]);
-    return parseValue(source.replace(/\{\{|\}\}|\{([^{}]+)\}/g, (match, name) => (match === '{{' ? '{' : match === '}}' ? '}' : display(lookup(name)))));
+    if (whole) return asText ? display(lookup(whole[1])) : lookup(whole[1]);
+    const assembled = source.replace(/\{\{|\}\}|\{([^{}]+)\}/g, (match, name) => (match === '{{' ? '{' : match === '}}' ? '}' : display(lookup(name))));
+    return asText ? assembled : parseValue(assembled);
   }
 
   function toNumber(value) {
@@ -143,8 +150,10 @@
     const table = config.table || currentTable;
     if (config.type === 'UpdateRecord' && config.matchColumn) {
       // Ligne repérée par une colonne clé : l'identifiant est cherché dans la table avant l'écriture (resolveTargets).
-      const matchValue = resolveTemplate(config.matchValue, event, vars || {});
-      return { type: 'UpdateRecord', table, rowId: null, values, match: { column: config.matchColumn, value: matchValue } };
+      const match = { column: config.matchColumn, value: resolveTemplate(config.matchValue, event, vars || {}) };
+      // Le texte tel que tapé sert à la recherche (un texte « 01000 ») sans s'ajouter à ce que le journal montre de l'écriture prévue.
+      Object.defineProperty(match, 'text', { value: resolveTemplate(config.matchValue, event, vars || {}, true) });
+      return { type: 'UpdateRecord', table, rowId: null, values, match };
     }
     if (config.type === 'UpdateRecord') {
       if (table !== currentTable) throw new Error('Mise à jour d\'une autre table : indiquez la colonne qui repère la ligne');
@@ -162,13 +171,13 @@
     return ctx.tables.get(table);
   }
 
-  function findRows(data, table, column, value) {
+  function findRows(data, table, column, value, text) {
     if (!Object.prototype.hasOwnProperty.call(data, column)) throw new Error('Colonne inconnue dans ' + table + ' : ' + column);
-    return (data.id || []).map((id, index) => index).filter((index) => looselyEqual(data[column][index], value));
+    return (data.id || []).map((id, index) => index).filter((index) => matches(data[column][index], value, text));
   }
 
-  function findOne(data, table, column, value) {
-    const found = findRows(data, table, column, value);
+  function findOne(data, table, column, value, text) {
+    const found = findRows(data, table, column, value, text);
     if (found.length === 0) throw new Error('Ligne introuvable dans ' + table + ' : ' + column + ' = ' + display(value));
     if (found.length > 1) throw new Error('Plusieurs lignes dans ' + table + ' pour ' + column + ' = ' + display(value));
     return found[0];
@@ -179,7 +188,7 @@
     for (const effect of effects) {
       if (!effect.match) continue;
       const columns = await readTable(ctx, effect.table);
-      effect.rowId = columns.id[findOne(columns, effect.table, effect.match.column, effect.match.value)];
+      effect.rowId = columns.id[findOne(columns, effect.table, effect.match.column, effect.match.value, effect.match.text)];
     }
   }
 
@@ -188,9 +197,10 @@
     const table = config.table || currentTable;
     const columns = await readTable(ctx, table);
     const key = resolveTemplate(config.matchValue, event, vars);
-    const found = findRows(columns, table, config.matchColumn, key);
+    const text = resolveTemplate(config.matchValue, event, vars, true);
+    const found = findRows(columns, table, config.matchColumn, key, text);
     if (found.length === 0 && config.onMissing === 'empty') return '';
-    const index = findOne(columns, table, config.matchColumn, key);
+    const index = findOne(columns, table, config.matchColumn, key, text);
     if (!Object.prototype.hasOwnProperty.call(columns, config.column)) throw new Error('Colonne inconnue dans ' + table + ' : ' + config.column);
     return columns[config.column][index];
   }

@@ -222,12 +222,18 @@ await scenario('E2E-10 déplacement du fond, zoom à la molette, déplacement d\
   assert.ok(end.x > start.x + 50 && end.y > start.y + 25);
 });
 
+// Le graphe de la table Automation (sans identifiant de ligne), une fois que son dernier état y est écrit.
+const savedRows = async (page, done) => {
+  await page.waitForFunction(done);
+  return page.evaluate(() => window.__stub.docTables.Automation.rows.map(({ id, ...row }) => row));
+};
+const workflowSaved = (test) => `(() => { const row = window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Workflow'); return Boolean(row) && (${test})(JSON.parse(row.Config)); })()`;
+
 await scenario('E2E-11 sauvegarde automatique et rechargement du graphe', async (page) => {
   await buildFlow(page);
-  await page.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).edges.length === 2);
-  const saved = await page.evaluate(() => window.__stub.options.workflow);
+  const saved = await savedRows(page, workflowSaved('(graph) => graph.edges.length === 2'));
   const copy = await page.context().newPage();
-  await copy.addInitScript((value) => { window.__preloadOptions = { workflow: value }; }, saved);
+  await copy.addInitScript((rows) => { window.__preloadRows = rows; }, saved);
   await routeApi(copy);
   await copy.goto(url);
   await copy.waitForSelector('.node-action');
@@ -604,8 +610,8 @@ await scenario('E2E-34 modification faite pendant le démarrage, avant la décou
 await scenario('E2E-35 contenu du document illisible, graphe actif dans les réglages de la vue : rien ne s\'exécute à sa place', async (page) => {
   await buildFlow(page);
   await page.click('#toggle-active');
-  await page.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).active === true);
-  const saved = await page.evaluate(() => window.__stub.options.workflow);
+  // Un graphe actif ne va plus dans les réglages de la vue quand la table est là : il y est mis comme l'aurait laissé une version plus ancienne.
+  const saved = (await savedRows(page, workflowSaved('(graph) => graph.active === true'))).find((row) => row.Type === 'Workflow').Config;
   const copy = await page.context().newPage();
   await copy.addInitScript((init) => Object.assign(window, init), { __preloadOptions: { workflow: saved }, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] });
   await routeApi(copy);
@@ -860,7 +866,7 @@ const activeFlow = JSON.stringify({ version: 3, active: true, nodes: [
   { id: 'action-1', type: 'action', x: 330, y: 120, config: { type: 'AddRecord', table: 'Archive', matchColumn: '', matchValue: '', column: 'Motif', value: 'vu' } },
 ], edges: [{ from: 'trigger-1', to: 'action-1' }] });
 const activeRows = [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeFlow }];
-const FR = { openTab: 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur.', otherTab: 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.' };
+const FR = { openTab: 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur, y compris si la vue du widget est réduite.', otherTab: 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.' };
 
 await scenario('E2E-45 le thème que Grist pose ne déclenche aucune erreur de politique de sécurité, et les contrôles natifs gardent le thème de l\'app', async (page) => {
   await page.waitForFunction(() => document.documentElement.dataset.gristAppearance === 'dark');
@@ -1126,6 +1132,132 @@ await scenario('E2E-57 prise en main en anglais et en sombre : captures et texte
   assert.deepEqual(await unreadable(page), [], 'les textes se lisent (4,5:1), dans le thème sombre');
   assert.ok(await dotContrast(page) >= 4.5, 'les points aussi');
 }, { blocked: ['**/img/tuto/relier-en.webp*'], viewport: SMALL });
+
+/* ---------- Retouches de la 0.15.0 ---------- */
+
+// Grist garde les réglages écrits par grist.setOption comme une modification de la vue, à enregistrer par son bouton « Enregistrer » :
+// le widget n'y écrit le graphe que s'il ne peut pas le garder dans la table Automation.
+await scenario('E2E-58 graphe gardé dans la table : rien dans les réglages de la vue, même à l\'activation ; sans la table, les réglages le gardent', async (page) => {
+  await buildFlow(page);
+  await page.click('#toggle-active');
+  await page.waitForFunction(workflowSaved('(graph) => graph.active === true && graph.edges.length === 2'));
+  await page.click('#toggle-active');
+  await page.waitForFunction(workflowSaved('(graph) => graph.active === false'));
+  assert.deepEqual(await page.evaluate(() => window.__stub.options), {}, 'aucun réglage de la vue écrit : Grist n\'a rien à faire enregistrer');
+  const refused = await page.context().newPage();
+  await refused.addInitScript(() => { window.__noTables = true; });
+  await routeApi(refused);
+  await refused.goto(url);
+  await refused.waitForSelector('[role=dialog]');
+  await refused.keyboard.press('Escape');
+  await buildFlow(refused);
+  await refused.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).edges.length === 2);
+  assert.deepEqual(await refused.evaluate(() => Object.keys(window.__stub.docTables)), [], 'accord refusé : aucune table, le graphe est dans les réglages de la vue');
+});
+
+// Glisse un fil depuis la sortie `from` (un sélecteur) et le lâche en (x, y).
+async function dropWire(page, from, x, y) {
+  const out = await page.locator(from).boundingBox();
+  await page.mouse.move(out.x + out.width / 2, out.y + out.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, y, { steps: 6 });
+  await page.mouse.up();
+}
+const center = (box) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+
+await scenario('E2E-59 fil lâché sur le fond : menu d\'ajout à cet endroit, sans Déclencheur ; le nœud choisi est relié, son entrée au bout du fil ; Échap ou un clic ailleurs abandonnent', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  const drop = { x: 420, y: 200 };
+  await dropWire(page, '.node-trigger .pin-out', drop.x, drop.y);
+  await page.waitForSelector('.add-menu .ss-panel:not([hidden])');
+  assert.deepEqual(await page.locator('.add-menu [role=option]').allInnerTexts(), ['Condition', 'Lecture', 'Transformation', 'Action'], 'seulement les nœuds qui ont une entrée');
+  assert.equal(await page.locator('.wire-temp').getAttribute('visibility'), 'visible', 'le fil reste tracé jusqu\'au menu');
+  assert.equal(await page.locator('.canvas-connect-hint').isVisible(), false, 'le menu parle à la place de l\'invite');
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.add-menu input')), true, 'la recherche a le focus');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.add-menu').count(), 0);
+  assert.equal(await page.locator('.wire-temp').getAttribute('visibility'), 'hidden', 'Échap : le fil disparaît');
+  assert.equal(await page.locator('.node').count(), 1, 'rien n\'est ajouté');
+
+  await dropWire(page, '.node-trigger .pin-out', drop.x, drop.y);
+  await page.keyboard.type('cond');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.node-condition');
+  assert.equal(await page.locator('.wire-group').count(), 1, 'le nouveau nœud est relié');
+  const pin = center(await page.locator('.node-condition .pin-in').boundingBox());
+  assert.ok(Math.abs(pin.x - drop.x) <= 1.5 && Math.abs(pin.y - drop.y) <= 1.5, `l'entrée est au bout du fil (${pin.x}, ${pin.y})`);
+  assert.equal(await page.locator('.wire-temp').getAttribute('visibility'), 'hidden');
+
+  const elseOut = center(await page.locator('.node-condition .pin-out[data-branch=else]').boundingBox());
+  await dropWire(page, '.node-condition .pin-out[data-branch=else]', elseOut.x + 120, elseOut.y + 90);
+  await page.locator('.add-menu [role=option]', { hasText: 'Action' }).click();
+  await page.waitForSelector('.node-action');
+  assert.equal(await page.locator('.wire-group.wire-else').count(), 1, 'depuis « Sinon », le lien garde sa branche');
+  const saved = await savedRows(page, workflowSaved('(graph) => graph.edges.length === 2'));
+  assert.deepEqual(JSON.parse(saved.find((row) => row.Type === 'Workflow').Config).edges, [{ from: 'trigger-1', to: 'condition-1' }, { from: 'condition-1', to: 'action-1', branch: 'else' }]);
+
+  const canvas = await page.locator('#canvas').boundingBox();
+  await dropWire(page, '.node-condition .pin-out[data-branch=then]', canvas.x + canvas.width - 12, canvas.y + canvas.height - 12);
+  await page.waitForSelector('.add-menu .ss-panel:not([hidden])');
+  const panel = await page.locator('.add-menu .ss-panel').boundingBox();
+  assert.ok(panel.x >= canvas.x && panel.x + panel.width <= canvas.x + canvas.width + 0.5 && panel.y >= canvas.y && panel.y + panel.height <= canvas.y + canvas.height + 0.5, 'près du bord, le menu reste dans le canevas');
+  await page.mouse.click(300, 450);
+  assert.equal(await page.locator('.add-menu').count(), 0);
+  assert.equal(await page.locator('.wire-temp').getAttribute('visibility'), 'hidden', 'un clic ailleurs abandonne le fil');
+  assert.equal(await page.locator('.node').count(), 3);
+  await page.mouse.click(canvas.x + 30, canvas.y + canvas.height - 40, { button: 'right' });
+  await page.waitForSelector('.add-menu .ss-panel:not([hidden])');
+  assert.equal(await page.locator('.add-menu [role=option]').count(), 5, 'le clic droit propose toujours les cinq nœuds');
+});
+
+// Tire le bord droit d'un nœud de dx px, à mi-hauteur (loin des broches).
+async function dragEdge(page, selector, dx) {
+  const box = await page.locator(selector).boundingBox();
+  await page.mouse.move(box.x + box.width - 0.5, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 0.5 + dx, box.y + box.height / 2, { steps: 5 });
+  await page.mouse.up();
+}
+const widthOf = (page, selector) => page.locator(selector).evaluate((element) => element.offsetWidth);
+
+await scenario('E2E-60 largeur d\'un nœud : son bord se tire, au clavier aussi ; gardée dans le graphe, bornée, remise à l\'origine d\'un double-clic ; pas en lecture seule', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await addNode(page, 'Action', 420, 120);
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+  assert.equal(await widthOf(page, '.node-action'), 232, 'largeur d\'origine');
+  const wire = await page.locator('.wire-group .wire').getAttribute('d');
+  await dragEdge(page, '.node-trigger', 120);
+  assert.equal(await widthOf(page, '.node-trigger'), 352);
+  assert.notEqual(await page.locator('.wire-group .wire').getAttribute('d'), wire, 'le lien suit la sortie déplacée');
+  const saved = await savedRows(page, workflowSaved('(graph) => graph.nodes[0].w === 352 && graph.edges.length === 1'));
+  assert.equal(JSON.parse(saved.find((row) => row.Type === 'Workflow').Config).nodes[1].w, undefined, 'un nœud qu\'on n\'a pas élargi n\'a pas de largeur gardée');
+
+  await dragEdge(page, '.node-action', -400);
+  assert.equal(await widthOf(page, '.node-action'), 200, 'pas plus étroit que 200 px');
+  await page.locator('.node-action .node-head').focus();
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowRight');
+  assert.equal(await widthOf(page, '.node-action'), 240, 'Maj + flèche droite : 20 px de plus');
+  await page.keyboard.press('Shift+ArrowLeft');
+  assert.equal(await widthOf(page, '.node-action'), 220);
+  await page.waitForFunction(workflowSaved('(graph) => graph.nodes[1].w === 220'));
+
+  const action = await page.locator('.node-action').boundingBox();
+  await page.mouse.dblclick(action.x + action.width - 0.5, action.y + action.height / 2);
+  assert.equal(await widthOf(page, '.node-action'), 232, 'double-clic : largeur d\'origine');
+  const reset = await savedRows(page, workflowSaved('(graph) => graph.nodes[1].w === undefined && graph.nodes[0].w === 352'));
+
+  const copy = await page.context().newPage();
+  await copy.addInitScript((rows) => { window.__preloadRows = rows; }, reset);
+  await routeApi(copy);
+  await copy.goto(url + '?access=full&readonly=true');
+  await copy.waitForSelector('.node-trigger');
+  assert.equal(await widthOf(copy, '.node-trigger'), 352, 'la largeur revient au rechargement, en lecture seule aussi');
+  assert.equal(await copy.locator('.node-grip').first().isVisible(), false, 'en lecture seule, pas de bord à tirer');
+  await dragEdge(copy, '.node-trigger', 80);
+  assert.equal(await widthOf(copy, '.node-trigger'), 352, 'ni à la souris');
+});
 
 await browser.close();
 server.close();

@@ -48,6 +48,13 @@
 .pin.is-target { box-shadow: 0 0 0 3px var(--accent-soft-border); }
 .pin-none { display: none; }
 
+/* Bord droit d'un nœud : sa largeur se règle en le tirant (js/canvas.js) ; les broches, posées après, le recouvrent. */
+.node-grip { position: absolute; top: 0; bottom: 0; right: -5px; width: 9px; cursor: ew-resize; touch-action: none; }
+.node-grip::after { content: ""; position: absolute; top: 8px; bottom: 8px; left: 3px; width: 3px; border-radius: 2px; }
+.node-grip:hover::after, .node.is-resizing .node-grip::after { background: var(--accent); }
+.canvas.is-resizing, .canvas.is-resizing * { cursor: ew-resize; }
+.canvas.is-readonly .node-grip { display: none; }
+
 .add-menu { position: absolute; width: 190px; z-index: var(--z-menu); }
 
 /* Condition : vérifications empilées, et deux sorties « oui » / « sinon » en pied de nœud. */

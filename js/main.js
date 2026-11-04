@@ -1,5 +1,6 @@
 // Couche Grist du widget : branche le canevas (js/canvas.js), le graphe (js/graph.js) et le moteur (js/engine.js) sur l'API Grist.
-// Le graphe est stocké dans les options du widget (grist.setOption) et, avec l'accord de la personne, dans la table Automation du document.
+// Le graphe est gardé dans la table Automation du document, créée avec l'accord de la personne ; sans elle (refus, table inutilisable), dans les options
+// du widget (grist.setOption), que Grist garde comme une modification de la vue à enregistrer. Le graphe d'options déjà enregistrées se relit toujours.
 // Ce que Grist accorde se lit dans l'adresse du cadre : sans l'accès complet, le widget le dit et attend (Grist recharge le cadre quand il est accordé) ;
 // en lecture seule, le workflow se voit et se teste, rien ne s'écrit ni ne s'exécute dans cet onglet.
 'use strict';
@@ -118,15 +119,21 @@ const save = async () => {
     saveTimer = setTimeout(save, 300);
     return;
   }
+  let stored = false;
   if (!locked) {
     try {
-      if (tablesAvailable) await Store.saveGraph(docApi, graph, tableId, Graph.summarize(graph, t));
+      if (tablesAvailable) {
+        await Store.saveGraph(docApi, graph, tableId, Graph.summarize(graph, t));
+        stored = true;
+      }
     } catch (err) {
       addLog(storeMessage(err));
       if (err.code === 'unreadable-graph') setLocked(true);   // un autre onglet vient d'y mettre un contenu que cette version ne lit pas
     }
   }
-  if (!locked) grist.setOption('workflow', JSON.stringify(graph));
+  // Les réglages de la vue ne prennent le graphe que s'il n'a pas pu aller dans la table : Grist y voit une modification de la vue à enregistrer
+  // (son bouton « Enregistrer », en haut de la vue), que la personne devrait sinon presser à chaque changement.
+  if (!locked && !stored) grist.setOption('workflow', JSON.stringify(graph));
   savePending = false;
 };
 
@@ -426,7 +433,7 @@ function openSettings() {
     ...definition(t('credits.author'), document.createTextNode('Grist Factory')),
     ...definition(t('credits.site'), site),
     ...definition(t('credits.license'), document.createTextNode('GNU GPL v3.0')),
-    ...definition(t('credits.version'), document.createTextNode(window.APP_VERSION)),
+    ...definition(t('credits.version'), document.createTextNode(t('credits.versionValue', { version: window.APP_VERSION }))),
   );
   body.append(list, heading, credits);
   Modal.create({ title: t('settings.title'), width: 'form', body });

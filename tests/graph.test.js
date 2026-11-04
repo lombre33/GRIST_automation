@@ -271,3 +271,20 @@ test('GRAPH-22 résumé lisible : lecture et ligne précise', () => {
   assert.match(text, /où Cle = k1/);
   assert.match(text, /Lecture : \{valeur\} = Services\.Seuil \(où Nom = \{Nom\}\)/);
 });
+
+test('GRAPH-23 largeur d\'un nœud (w) : bornée, ignorée si illisible, gardée par la relecture', () => {
+  const node = (w) => ({ id: 'n', type: 'action', x: 0, y: 0, w, config: {} });
+  assert.strictEqual(G.nodeWidth(node(undefined)), null, 'sans largeur : celle d\'origine');
+  assert.strictEqual(G.nodeWidth(node(320)), 320);
+  assert.strictEqual(G.nodeWidth(node(320.6)), 321);
+  assert.strictEqual(G.nodeWidth(node(10)), G.WIDTH.min);
+  assert.strictEqual(G.nodeWidth(node(5000)), G.WIDTH.max);
+  for (const bad of ['320', null, NaN, Infinity, {}]) assert.strictEqual(G.nodeWidth(node(bad)), null, String(bad));
+  assert.ok(G.WIDTH.min < G.WIDTH.base && G.WIDTH.base < G.WIDTH.max);
+  const { g } = sample();
+  g.nodes[0].w = 300;
+  const back = G.parse(JSON.stringify(g));
+  assert.strictEqual(back.nodes[0].w, 300);
+  assert.strictEqual(back.nodes[1].w, undefined);
+  assert.deepStrictEqual(G.validate(back), G.validate(sample().g), 'la largeur ne change rien à la validation');
+});

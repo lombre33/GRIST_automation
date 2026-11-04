@@ -40,6 +40,8 @@ Liste de scénarios manuels, à jouer par Antoine sur son Grist (instance Grist.
 | LINK-04 | V0.5 | Une entrée, un lien | Relier deux nœuds différents à la même entrée | Le nouveau lien remplace l'ancien | ➖ |
 | LINK-05 | V0.5 | Suppression | Cliquer un lien puis Suppr ; supprimer un nœud avec sa corbeille | Le lien disparaît ; le nœud part avec ses liens | ➖ |
 | NAV-01 | V0.5 | Déplacer et zoomer | Glisser le fond, molette, glisser l'en-tête d'un nœud | Le fond bouge, le zoom se fait autour du pointeur (de 40 % à 160 %), le nœud suit la souris | ➖ |
+| LINK-06 | V0.15.0 | Fil lâché sur le fond | Glisser depuis la sortie du déclencheur et relâcher sur le fond vide ; taper « cond », Entrée. Recommencer depuis la sortie « Sinon » de la condition, choisir Action ; puis relâcher un fil près du bas à droite, et appuyer sur Échap ; enfin relâcher un fil et cliquer ailleurs | Au relâchement, le menu d'ajout s'ouvre au bout du fil, sans « Déclencheur » ; le nœud choisi s'y pose, son entrée au bout du fil, déjà relié (en pointillés depuis « Sinon ») ; près du bord, le menu reste entier (il s'ouvre vers le haut près du bas) ; Échap ou un clic ailleurs : le fil disparaît, rien n'est ajouté | ➖ |
+| NODE-06 | V0.15.0 | Largeur d'un nœud | Tirer le bord droit d'un nœud vers la droite, puis loin vers la gauche ; Tab jusqu'au titre du nœud, Maj + flèche droite, Maj + flèche gauche ; double-clic sur le bord ; recharger la page ; ouvrir le document avec un compte en lecture seule | Au survol du bord, un trait d'accent et une flèche double ; la largeur suit la souris, de 200 à 600 px, et les liens suivent ; Maj + flèche : 20 px de plus ou de moins ; double-clic : la largeur d'origine ; après rechargement, chaque nœud garde sa largeur ; en lecture seule, les largeurs sont là mais le bord ne se tire pas | ➖ |
 
 ## Exécution
 
@@ -59,6 +61,7 @@ Pour RUN-01 à RUN-09, construire d'abord : Déclencheur « modifiée », colonn
 | RUN-10 | V0.5 | Type incompatible | Action qui écrit « abc » dans une colonne numérique (Montant) | Comportement de Grist noté ; le widget n'affiche pas « réussi » si Grist refuse | ➖ |
 | RUN-11 | V0.5 | Valeurs piégées | Écrire `<script>alert(1)</script>` puis `=1+1` depuis une action | Les valeurs sont écrites comme texte, rien ne s'exécute dans l'interface | ➖ |
 | RUN-12 | V0.5 | Droits d'écriture | Compte sans droit d'écriture sur Archive, déclencher | Erreur lisible dans le journal | ➖ |
+| RUN-13 | V0.15.0 | Vue du widget réduite | Activer, réduire le widget (menu de la vue > « Réduire la vue »), passer un contact à Clos dans une autre vue de la page ; recharger la page, widget toujours réduit, et recommencer | Le bandeau, avant de réduire, dit « … y compris si la vue du widget est réduite » ; les deux modifications sont exécutées (Archive et journal), la seconde aussi après le rechargement | ➖ |
 
 ## Exécution unique et anti-boucle
 
@@ -100,6 +103,7 @@ Prérequis : table `Automation` créée, graphe de base activé.
 | BRA-03 | V0.7 | Test à blanc | Cliquer Tester quand la condition est fausse | La condition affiche « Faux : branche « sinon » », l'action du « Sinon » affiche « Action prévue » | ➖ |
 | BRA-04 | V0.7 | Sans « Sinon » | Retirer le lien « Sinon », provoquer une condition fausse | Rien n'est écrit (comme avant la 0.7) | ➖ |
 | BRA-05 | V0.7 | Clavier | Tab jusqu'à la sortie « Sinon », Entrée, Tab jusqu'à l'entrée de l'action, Entrée | Le lien « Sinon » est créé | ➖ |
+| CHK-05 | V0.15.0 | Comparaison au texte tapé | Ajouter à Contacts une colonne Actif de type « Booléen » (case à cocher) ; mettre Cle = 01000 sur un contact et 33000 sur un autre. Conditions, testées une à une avec Tester : Cle est égal à 01000, Cle est égal à 33000, Cle est égal à 1000, Actif est égal à true, Actif est égal à false | Vraies pour la bonne ligne : 01000 et 33000 retrouvent leurs contacts, 1000 aucun ; true une case cochée, false une case décochée (avant la 0.15.0, un texte de chiffres ou une case n'était jamais égal à ce qui était tapé) | ➖ |
 | MIG-01 | V0.7 | Ancien graphe | Ouvrir un document enregistré avec la 0.6 (table `Automation` déjà remplie) | Le graphe est retrouvé : chaque condition devient une vérification unique, l'état actif est conservé ; après une modification, la ligne `Workflow` est réécrite au nouveau format (Version = 3) | ➖ |
 
 ## Transformation et valeurs {Colonne}
@@ -134,6 +138,7 @@ Une action « Mettre à jour la ligne » sur une autre table doit dire quelle li
 | KEY-06 | V0.9 | Type de la clé | Clé numérique d'un côté, texte de l'autre (5 et « 5 ») | La ligne est trouvée | ➖ |
 | KEY-07 | V0.9 | Même table, autre ligne | Action sur « Table courante », repérée par Cle = k2 | La ligne dont Cle = k2 est modifiée, pas celle qui a déclenché | ➖ |
 | KEY-08 | V0.9 | Test à blanc | Cliquer Tester | Les effets annoncés portent le numéro de la ligne trouvée ; rien n'est écrit | ➖ |
+| KEY-09 | V0.15.0 | Clé à zéro en tête | Archive : Motif = 01000 sur une ligne, 1000 sur une autre ; action repérée par Motif = 01000 | Seule la ligne 01000 est modifiée (avant la 0.15.0, c'était la ligne 1000) | ➖ |
 
 ## Lecture d'une autre table et ligne précise
 
@@ -171,6 +176,8 @@ Prérequis : table `Services` (Nom, Seuil) du document de test. Le nœud Lecture
 | ACT-01 | V0.5 | Activation refusée | Avec un graphe incomplet (action sans colonne, nœud isolé), cliquer Activer | Refus ; le panneau des logs s'ouvre avec la raison pour chaque problème | ➖ |
 | ACT-02 | V0.5 | Bandeau et fermeture | Activer un graphe valide, puis recharger ou fermer l'onglet | Bandeau « onglet ouvert requis » affiché ; le navigateur demande confirmation avant de fermer. À noter : Chrome, Firefox, Edge | ➖ |
 | SAVE-01 | V0.5 | Sauvegarde automatique | Construire un graphe, attendre une seconde, recharger la page | Nœuds, liens, valeurs et état actif retrouvés ; les listes se remplissent | ➖ |
+| SAVE-03 | V0.15.0 | Pas de bouton « Enregistrer » de Grist | Avec la table `Automation`, modifier le graphe, l'activer, le désactiver, déplacer et élargir un nœud ; regarder l'en-tête de la vue, à droite de son titre | Aucun bouton « Enregistrer » ni « Retour » n'apparaît (en 0.14.0, il apparaissait à chaque changement) ; après rechargement, tout est retrouvé, lu dans la table | ➖ |
+| SAVE-04 | V0.15.0 | Sans la table | Dans un document sans table `Automation`, refuser sa création, construire un graphe | Le bouton « Enregistrer » de Grist apparaît : sans la table, c'est dans les réglages de la vue que le graphe est gardé ; l'enregistrer, recharger : le graphe est retrouvé | ➖ |
 | SAVE-02 | V0.6 (modifié) | Une configuration par table | Ajouter un second widget sur une autre page, même table | Il retrouve le même graphe, lu dans `Automation` (une ligne `Workflow` par table surveillée). Si les tables n'existent pas, il démarre vide (options du widget seulement) | ➖ |
 
 ## Table du document, accord et journal
@@ -207,7 +214,7 @@ Prérequis : document sans table `Automation` pour TAB-01 à TAB-03 ; les suivan
 | UI-02 | V0.5 | Thème | Réglages > Sombre, Clair, Système | Fond, nœuds et textes changent ; lisibles dans les deux thèmes | ➖ |
 | UI-03 | V0.5 | Langue | Réglages > EN puis FR | Tous les textes changent, y compris dans les nœuds | ➖ |
 | UI-04 | V0.5 | Clavier | Tab dans les nœuds ; Entrée sur une sortie puis sur une entrée ; Suppr sur un en-tête de nœud ; Échap dans une liste | Tout est atteignable ; le lien se crée au clavier ; Échap ferme la liste sans fermer la fenêtre | ➖ |
-| UI-05 | V0.5 | Crédits | Réglages | Auteur Grist Factory, site, licence GPL v3.0, version | ➖ |
+| UI-05 | V0.15.0 (modifié) | Crédits | Réglages | Auteur Grist Factory, site, licence GPL v3.0, version précédée de « pré-alpha » (« pre-alpha » en anglais) | ➖ |
 | UI-06 | V0.5 | Fenêtres | Ouvrir les Réglages, Tab en boucle, Échap | Le focus reste dans la fenêtre ; Échap la ferme et le focus revient au bouton Réglages | ➖ |
 | UI-07 | V0.11.1 | Couleur du test à blanc | Tester avec le graphe de base, en clair puis en sombre | L'action prévue est signalée en bleu d'accent (barre pleine à texte blanc), plus en vert ; lisible dans les deux thèmes | ➖ |
 | UI-08 | V0.11.1 | Superpositions | Ouvrir le journal, le menu d'ajout (clic droit sur le fond), les Réglages | Même ordre qu'en 0.11 : le menu d'ajout recouvre le journal, la fenêtre des Réglages recouvre tout | ➖ |

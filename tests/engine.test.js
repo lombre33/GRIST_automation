@@ -105,6 +105,40 @@ test('COND-05 types incompatibles : faux, pas de coercition', () => {
   assert.strictEqual(E.evalCondition({ column: 'N', operator: 'gt', value: 3 }, ev), false);
 });
 
+test('COND-06 « est égal à » compare à la valeur tapée : une case et true ou false, un texte de chiffres, un zéro en tête', () => {
+  const c = (record, operator, value) => E.evalCondition({ column: 'X', operator, value }, { record: { X: record } });
+  assert.strictEqual(c(true, 'eq', 'true'), true, 'case cochée');
+  assert.strictEqual(c(false, 'eq', 'false'), true, 'case décochée');
+  assert.strictEqual(c(false, 'eq', 'true'), false);
+  assert.strictEqual(c(true, 'neq', 'true'), false);
+  assert.strictEqual(c('33000', 'eq', '33000'), true, 'un texte de chiffres égale ce qui est tapé, lu sinon comme un nombre');
+  assert.strictEqual(c('33000', 'neq', '33000'), false);
+  assert.strictEqual(c('01000', 'eq', '01000'), true, 'le zéro en tête compte');
+  assert.strictEqual(c('01000', 'eq', '1000'), false);
+  assert.strictEqual(c(1000, 'eq', '01000'), true, 'une colonne Nombre compare les nombres');
+  assert.strictEqual(c('Clos', 'eq', 'clos'), false, 'la casse compte, comme avant');
+  assert.strictEqual(c(null, 'eq', ''), false, 'une cellule vide se teste par « est vide »');
+  assert.strictEqual(c('01000', 'contains', '010'), true, '« contient » cherche le texte tapé');
+  assert.strictEqual(c('a5b', 'contains', '5'), true);
+  assert.strictEqual(c(['L', 'a'], 'eq', 'a'), false, 'une liste se compare en entier');
+});
+
+test('KEY-01 colonnes clés et ligne précise : un texte à zéro en tête se retrouve tel que tapé, et le journal ne change pas', async () => {
+  const codes = { Archive: { id: [10, 11], Motif: ['01000', '1000'], Source: ['x', 'y'], Ref: [5, 6] } };
+  const api = createFakeApi({ tables: codes });
+  const result = await runKeyed({ matchValue: '01000' }, { Nom: 'a' }, api);
+  assert.strictEqual(result.status, 'success');
+  assert.deepStrictEqual(api.applied, [['UpdateRecord', 'Archive', 10, { Source: 'vu' }]]);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(result.effects[0].match)), { column: 'Motif', value: 1000 }, 'le texte tapé ne s\'ajoute pas au journal');
+  const read = await E.runWorkflow(lookupGraph({ matchValue: '{Code}', column: 'Source' }), event({ Code: '01000', Montant: 1 }), createFakeApi({ tables: { Archive: { id: [1, 2], Motif: ['01000', '1000'], Source: [0, 5] } } }), opts);
+  assert.strictEqual(read.status, 'success', 'la Lecture trouve une seule ligne');
+  const upd = (record) => ({ type: 'update', rowId: 1, record, changed: { Nom: { from: 'a', to: 'b' } } });
+  const trigger = { action: 'update', column: '', targetColumn: 'Cle', targetValue: '01000' };
+  assert.strictEqual(E.matchesTrigger(trigger, upd({ id: 1, Cle: '01000' })), true);
+  assert.strictEqual(E.matchesTrigger(trigger, upd({ id: 1, Cle: '1000' })), false);
+  assert.strictEqual(E.matchesTrigger({ ...trigger, targetValue: 'true' }, upd({ id: 1, Cle: true })), true, 'une case');
+});
+
 test('COND-04 opérateur inconnu : erreur explicite', async () => {
   const api = createFakeApi();
   const r = await E.runWorkflow(chain({ condition: { column: 'Statut', operator: 'nope', value: 1 } }), updateEvent('Clos'), api, opts);
