@@ -14,7 +14,6 @@
   const K_MIN = 0.4;
   const K_MAX = 1.6;
   const DRAG_THRESHOLD = 4;   // px : en deçà, un appui sur une sortie est un clic (le lien attend l'entrée), pas un glisser
-  const WIDTH_STEP = 20;      // px : Maj + flèche sur l'en-tête d'un nœud
   const t = (key, params) => I18n.t(key, params);
 
   function svg(tag, attributes, parent) {
@@ -169,16 +168,7 @@
     cv.tempWire.setAttribute('visibility', 'visible');
   }
 
-  // Lien lâché sur le fond : il reste tracé jusqu'au point de chute, où s'ouvre le menu d'ajout ; fermer le menu sans choisir l'abandonne.
-  function parkConnection(cv, clientX, clientY) {
-    cv.connecting.parked = true;
-    moveTempWire(cv, clientX, clientY);
-    showHints(cv);
-    openAddMenu(cv, clientX, clientY, cv.connecting);
-  }
-
-  // Appui sur une sortie : un glisser relie à l'entrée où le pointeur est relâché, ou ouvre le menu d'ajout s'il est relâché sur le fond ;
-  // un simple clic laisse le lien en attente de l'entrée (clic, ou Entrée au clavier).
+  // Appui sur une sortie : un glisser relie à l'entrée où il est relâché, ou ouvre là le menu d'ajout s'il l'est sur le fond ; un clic laisse le lien en attente (clic ou Entrée sur l'entrée).
   function onPinOutPointerDown(cv, event, id, branch) {
     event.stopPropagation();
     event.preventDefault();
@@ -195,8 +185,13 @@
       const target = document.elementFromPoint(e.clientX, e.clientY);
       const pin = target?.closest('.pin-in');
       if (pin) finishConnecting(cv, pin.dataset.node);
-      else if (target && isBackground(cv, target)) parkConnection(cv, e.clientX, e.clientY);
-      else stopConnecting(cv);
+      else if (target && isBackground(cv, target)) {
+        // Le lien reste tracé jusqu'au point de chute, où s'ouvre le menu d'ajout ; fermer le menu sans choisir l'abandonne.
+        cv.connecting.parked = true;
+        moveTempWire(cv, e.clientX, e.clientY);
+        showHints(cv);
+        openAddMenu(cv, e.clientX, e.clientY, cv.connecting);
+      } else stopConnecting(cv);
     });
   }
 
@@ -219,7 +214,7 @@
       else if (event.shiftKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !cv.readOnly) {
         event.preventDefault();
         const before = entry.node.w;
-        setWidth(cv, entry, entry.element.offsetWidth + (event.key === 'ArrowRight' ? WIDTH_STEP : -WIDTH_STEP));
+        setWidth(cv, entry, entry.element.offsetWidth + (event.key === 'ArrowRight' ? 20 : -20));   // 20 px par appui
         if (entry.node.w !== before) cv.onChange(cv.graph);
       }
     });
@@ -315,7 +310,7 @@
     entry.element.style.width = width === null ? '' : width + 'px';
   }
 
-  // width : la largeur voulue, bornée (Graph.WIDTH) ; null : celle d'origine. Les liens suivent les broches.
+  // width : largeur voulue, bornée (Graph.WIDTH), ou null pour l'origine ; les liens suivent. Tirée au pointeur (startResize), elle n'est enregistrée qu'au relâchement, si elle a changé.
   function setWidth(cv, entry, width) {
     if (width === null) delete entry.node.w;
     else entry.node.w = Graph.clampWidth(width);
@@ -323,7 +318,6 @@
     drawWires(cv);
   }
 
-  // Tirer le bord droit : la largeur suit le pointeur, à l'échelle du zoom ; elle n'est enregistrée qu'au relâchement, et seulement si elle a changé.
   function startResize(cv, event, entry) {
     if (event.button !== 0 || cv.readOnly) return;
     event.stopPropagation();
@@ -385,9 +379,8 @@
     cv.menu = null;
   }
 
-  // (clientX, clientY) : endroit où poser le nœud ; sans arguments, au centre du canevas. Le menu est une liste avec recherche, ouverte d'emblée,
-  // qui reste dans le canevas (elle s'ouvre vers le haut près du bas). link : le lien d'un fil lâché sur le fond (voir parkConnection) ; le menu ne
-  // propose alors que les nœuds qui ont une entrée.
+  // (clientX, clientY) : endroit où poser le nœud ; sans arguments, au centre du canevas. Le menu, une liste avec recherche ouverte d'emblée, reste dans
+  // le canevas (vers le haut près du bas). link : le lien d'un fil lâché sur le fond ; le menu ne propose alors que les nœuds qui ont une entrée.
   function openAddMenu(cv, clientX, clientY, link) {
     if (cv.readOnly) return;
     closeMenu(cv);

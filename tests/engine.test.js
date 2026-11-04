@@ -105,7 +105,7 @@ test('COND-05 types incompatibles : faux, pas de coercition', () => {
   assert.strictEqual(E.evalCondition({ column: 'N', operator: 'gt', value: 3 }, ev), false);
 });
 
-test('COND-06 « est égal à » compare à la valeur tapée : une case et true ou false, un texte de chiffres, un zéro en tête', () => {
+test('COND-12 « est égal à » compare à la valeur tapée : une case et true ou false, un texte de chiffres, un zéro en tête', () => {
   const c = (record, operator, value) => E.evalCondition({ column: 'X', operator, value }, { record: { X: record } });
   assert.strictEqual(c(true, 'eq', 'true'), true, 'case cochée');
   assert.strictEqual(c(false, 'eq', 'false'), true, 'case décochée');
@@ -123,7 +123,7 @@ test('COND-06 « est égal à » compare à la valeur tapée : une case et true 
   assert.strictEqual(c(['L', 'a'], 'eq', 'a'), false, 'une liste se compare en entier');
 });
 
-test('KEY-01 colonnes clés et ligne précise : un texte à zéro en tête se retrouve tel que tapé, et le journal ne change pas', async () => {
+test('ACT-16 colonnes clés, Lecture et ligne précise : un texte à zéro en tête se retrouve tel que tapé, et le journal ne change pas', async () => {
   const codes = { Archive: { id: [10, 11], Motif: ['01000', '1000'], Source: ['x', 'y'], Ref: [5, 6] } };
   const api = createFakeApi({ tables: codes });
   const result = await runKeyed({ matchValue: '01000' }, { Nom: 'a' }, api);
