@@ -17,6 +17,9 @@
 .node.is-selected { outline: 2px solid var(--accent); outline-offset: 1px; }
 .node-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: var(--radius-md) var(--radius-md) 0 0; font-weight: 700; cursor: grab; user-select: none; }
 .node-head:active { cursor: grabbing; }
+/* Lecture seule (js/canvas.js) : les nœuds ne se déplacent ni ne se relient ; le fond, lui, se déplace toujours. */
+.canvas.is-readonly .node-head, .canvas.is-readonly .node-head:active { cursor: default; }
+.canvas.is-readonly .pin { cursor: default; }
 .node-title { font-family: var(--font-head); letter-spacing: var(--ls-head); text-transform: var(--tt-head); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node-trigger .node-head { background: var(--accent-soft); color: var(--accent-ink); }
 .node-condition .node-head, .node-transform .node-head { background: var(--surface-sunken); color: var(--text); }

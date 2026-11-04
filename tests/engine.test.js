@@ -199,19 +199,20 @@ function branched(condition, withElse) {
 const event = (record) => ({ type: 'update', rowId: 7, record: { id: 7, ...record }, changed: { Statut: { from: 'x', to: record.Statut } } });
 const both = (join) => ({ join, checks: [{ column: 'Statut', operator: 'eq', value: 'Clos' }, { column: 'Montant', operator: 'gt', value: '100' }] });
 
-test('COND-09 ET : toutes les vérifications doivent être vraies', async () => {
-  const run = (record) => E.runWorkflow(branched(both('and')), event(record), createFakeApi(), opts);
-  assert.strictEqual((await run({ Statut: 'Clos', Montant: 500 })).status, 'success');
-  assert.strictEqual((await run({ Statut: 'Clos', Montant: 5 })).status, 'condition-false');
-  assert.strictEqual((await run({ Statut: 'Ouvert', Montant: 500 })).status, 'condition-false');
-});
-
-test('COND-10 OU : une seule vérification vraie suffit', async () => {
-  const run = (record) => E.runWorkflow(branched(both('or')), event(record), createFakeApi(), opts);
-  assert.strictEqual((await run({ Statut: 'Clos', Montant: 5 })).status, 'success');
-  assert.strictEqual((await run({ Statut: 'Ouvert', Montant: 500 })).status, 'success');
-  assert.strictEqual((await run({ Statut: 'Ouvert', Montant: 5 })).status, 'condition-false');
-});
+// [ligne, résultat attendu] pour chaque façon de combiner les deux vérifications de both().
+const JOINS = [
+  ['COND-09 ET : toutes les vérifications doivent être vraies', 'and', [
+    [{ Statut: 'Clos', Montant: 500 }, 'success'], [{ Statut: 'Clos', Montant: 5 }, 'condition-false'], [{ Statut: 'Ouvert', Montant: 500 }, 'condition-false']]],
+  ['COND-10 OU : une seule vérification vraie suffit', 'or', [
+    [{ Statut: 'Clos', Montant: 5 }, 'success'], [{ Statut: 'Ouvert', Montant: 500 }, 'success'], [{ Statut: 'Ouvert', Montant: 5 }, 'condition-false']]],
+];
+for (const [name, join, cases] of JOINS) {
+  test(name, async () => {
+    for (const [record, status] of cases) {
+      assert.strictEqual((await E.runWorkflow(branched(both(join)), event(record), createFakeApi(), opts)).status, status, JSON.stringify(record));
+    }
+  });
+}
 
 test('COND-11 une vérification sans colonne dans une condition à plusieurs : erreur explicite en ET', async () => {
   const bad = { join: 'and', checks: [{ column: 'Statut', operator: 'eq', value: 'Clos' }, { column: '', operator: 'eq', value: '' }] };

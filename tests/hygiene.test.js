@@ -14,6 +14,8 @@ const jsFiles = list('js', '.js');
 const cssFiles = list('css', '.css');
 const everything = [...jsFiles, ...cssFiles, 'index.html'];
 const offenders = (files, pattern) => files.filter((f) => pattern.test(read(f)));
+// Le code sans ses commentaires de fin de ligne (une adresse « https:// » dans une chaîne reste) : pour chercher ce que le code fait, pas ce qu'il en dit.
+const code = (file) => read(file).replace(/(^|\s)\/\/.*$/gm, '$1');
 
 test('HYG-01 aucun appel réseau, eval ni Function dans le code du widget', () => {
   assert.deepStrictEqual(offenders(jsFiles, /\beval\s*\(|new\s+Function|\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon/), []);
@@ -60,11 +62,21 @@ test('HYG-08 le compte personnel n\'apparaît nulle part dans l\'interface', () 
   assert.deepStrictEqual(offenders(everything, /lombre33/i), []);
 });
 
-test('HYG-09 le widget ne stocke que la langue et le thème dans le navigateur', () => {
+test('HYG-09 le widget ne garde dans le navigateur que la langue et le thème, et le temps d\'un rechargement l\'identifiant de l\'onglet qui exécute', () => {
   const keys = new Set();
   for (const f of jsFiles) for (const m of read(f).matchAll(/(?:getItem|setItem)\(\s*(?:STORAGE_KEY|'([^']+)')/g)) keys.add(m[1] || 'STORAGE_KEY');
   assert.deepStrictEqual([...keys].sort(), ['STORAGE_KEY']);
-  assert.deepStrictEqual(offenders(jsFiles, /sessionStorage|indexedDB|document\.cookie/), []);
+  assert.deepStrictEqual(offenders(jsFiles, /indexedDB|document\.cookie/), []);
+  // localStorage : ab_lang (js/i18n.js) et ab_theme (js/theme.js), des préférences d'affichage.
+  assert.deepStrictEqual(offenders(jsFiles, /localStorage/), ['js/i18n.js', 'js/theme.js']);
+  assert.match(read('js/i18n.js'), /STORAGE_KEY = 'ab_lang'/);
+  assert.match(read('js/theme.js'), /STORAGE_KEY = 'ab_theme'/);
+  // sessionStorage : l'identifiant de l'onglet pour le verrou d'exécution (Executor.tabIdentity), sous ab_executor_<table> ; rien du document.
+  assert.deepStrictEqual(jsFiles.filter((f) => /sessionStorage/.test(code(f))), ['js/main.js']);
+  assert.deepStrictEqual([...code('js/main.js').matchAll(/sessionStorage/g)].length, 1);
+  assert.match(read('js/main.js'), /Executor\.tabIdentity\(\(\) => sessionStorage, 'ab_executor_' \+ table, randomId\)/);
+  assert.match(read('README.md'), /localStorage/, 'le README dit ce que le widget garde dans le navigateur');
+  assert.match(read('README.md'), /sessionStorage/);
 });
 
 test('HYG-10 aucun z-index en dur : les couches passent par les jetons --z-* de la charte (règle 12 de GFS)', () => {
@@ -125,7 +137,19 @@ test('HYG-14 le kit commun est un sous-module du dépôt de GFS, et js/gfs.js en
 test('HYG-15 js/gfs.js n\'importe que les deux modules du kit dont il a besoin, par chemin relatif : aucune adresse, aucun import dynamique', () => {
   assert.deepStrictEqual([...read('js/gfs.js').matchAll(/\bfrom\s+'([^']+)'/g)].map((m) => m[1]).sort(), ['../kit/js/ambiance-pose.js', '../kit/js/gfs-link.js']);
   assert.deepStrictEqual(offenders(jsFiles, /\bimport\s*\(/), []);
-  assert.deepStrictEqual([...read('index.html').matchAll(/<script[^>]*type="module"[^>]*src="([^"]+)"/g)].map((m) => m[1]), ['js/gfs.js'], 'le seul module chargé par la page');
+  assert.deepStrictEqual([...read('index.html').matchAll(/<script[^>]*type="module"[^>]*src="([^"?]+)(?:\?v=[\d.]+)?"/g)].map((m) => m[1]), ['js/gfs.js'], 'le seul module chargé par la page');
+});
+
+test('HYG-18 chaque script et feuille de l\'app est demandé avec la version de l\'app (?v=) : une page à jour ne charge pas d\'anciens fichiers gardés en cache', () => {
+  const version = read('js/version.js').match(/APP_VERSION = '([^']+)'/)[1];
+  assert.strictEqual(JSON.parse(read('package.json')).version, version, 'package.json et js/version.js disent la même version');
+  const html = read('index.html');
+  const local = [...html.matchAll(/<(?:script|link)[^>]+(?:src|href)="((?!https:)[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(local.length >= 20, `fichiers de l'app demandés par la page : ${local.length}`);
+  assert.deepStrictEqual(local.filter((file) => !file.endsWith('?v=' + version)), []);
+  const files = local.map((file) => file.replace(/\?.*$/, ''));
+  assert.deepStrictEqual(files.filter((file) => !fs.existsSync(path.join(root, file))), [], 'chaque fichier demandé existe');
+  assert.deepStrictEqual(jsFiles.filter((file) => !files.includes(file)), [], 'chaque script de js/ est chargé par la page');
 });
 
 // Les modules du kit que la page charge vraiment : ceux que js/gfs.js importe, et ceux qu'ils importent à leur tour.

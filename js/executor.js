@@ -2,7 +2,8 @@
 // Élection par un verrou dans la table Automation (ligne Type = Lock) renouvelé toutes les quelques secondes.
 // Un onglet qui voit le verrou d'un autre change de date reste en veille ; si la date ne change plus pendant `ttl` secondes (onglet fermé ou planté),
 // il prend le relais. On compare des dates vues par soi-même, pas l'horloge des autres : un décalage d'horloge entre navigateurs ne gêne pas.
-// Limite : les modifications faites pendant le relais (au plus `ttl` secondes) ne sont exécutées par personne.
+// Limite : les modifications faites pendant le relais (au plus `ttl` secondes) ne sont exécutées par personne. Un onglet rechargé n'attend pas ce relais :
+// il garde son identifiant (tabIdentity) et reconnaît son propre verrou.
 (function (root) {
   'use strict';
   const Store = typeof module !== 'undefined' && module.exports ? require('./store.js') : root.Store;
@@ -62,7 +63,24 @@
     return { tick, release, isExecutor: () => executor, holder: () => holder };
   }
 
-  const api = { create };
+  // L'identifiant d'un onglet pour le verrou, le même après un rechargement de la page : l'onglet rechargé reconnaît son verrou et reprend tout de suite,
+  // au lieu d'attendre `ttl` secondes un exécutant qui n'existe plus (pendant lesquelles personne n'exécutait). Sans lui, chaque chargement tirait un nouvel identifiant.
+  // storage : () => sessionStorage (propre à l'onglet, vidé à sa fermeture) ; key : la clé, une par table de vue ; fresh : () => un identifiant neuf (16 caractères hexadécimaux).
+  // L'identifiant gardé est lu puis effacé : un onglet dupliqué, qui reçoit une copie de sessionStorage, n'en hérite pas. keep() le remet en place quand la page
+  // se ferme ou se recharge (pagehide) ; forget() l'efface si la page revient du cache de navigation (pageshow) avec son identifiant en mémoire.
+  // Un stockage refusé (cadre d'un autre site bloqué par le navigateur) ou un contenu inattendu donnent un identifiant neuf, comme avant.
+  function tabIdentity(storage, key, fresh) {
+    const safely = (use) => { try { return use(storage()); } catch (err) { return null; } };
+    const saved = safely((store) => { const value = store.getItem(key); store.removeItem(key); return value; });
+    const id = /^[0-9a-f]{16}$/.test(saved || '') ? saved : fresh();
+    return {
+      id,
+      keep: () => { safely((store) => store.setItem(key, id)); },
+      forget: () => { safely((store) => store.removeItem(key)); },
+    };
+  }
+
+  const api = { create, tabIdentity };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Executor = api;
 })(typeof window !== 'undefined' ? window : globalThis);

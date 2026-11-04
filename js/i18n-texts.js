@@ -1,0 +1,401 @@
+// Textes de l'interface, en français et en anglais, que js/i18n.js sert. Fichier de données, sans code : chargé avant js/i18n.js par la page, et par require() dans les tests.
+// Les deux langues sont en miroir, clé pour clé et dans le même ordre (I18N-01, I18N-07) : toute chaîne ajoutée ou modifiée a ses deux langues dans le même lot.
+// Paramètres : `{nom}`, remplacé par la valeur donnée à I18n.t. Pluriels : `{n|singulier|pluriel}` (en français 0 et 1 sont au singulier, en anglais seul 1). Pas de pluriel entre parenthèses.
+// Les textes de la page (index.html) y sont aussi écrits en français, lisibles avant le démarrage des scripts : ce sont ceux d'ici (I18N-08).
+'use strict';
+
+const I18N_TEXTS = {
+  fr: {
+    // La page : titre, et bandeaux sous la barre d'outils (index.html, js/main.js).
+    'app.title': 'Grist Automation Builder',
+    'app.otherTab': 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.',
+    'app.openTab': 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur.',
+    'app.readOnly': 'Lecture seule : vous voyez ce workflow et pouvez le tester, sans le modifier ni l\'exécuter. Seule une personne qui peut modifier le document l\'active et l\'exécute.',
+
+    // La barre d'outils : ajouter un nœud, tester, activer, montrer le journal.
+    'add.node': 'Ajouter',
+    'add.nodeLabel': 'Ajouter un nœud',
+    'test.run': 'Tester',
+    'toggle.activate': 'Activer',
+    'toggle.deactivate': 'Désactiver',
+
+    // Ce qui prend la place du canevas : l'accès à accorder dans Grist, un workflow que cette version ne lit pas (règle 3 de GFS).
+    'access.title': 'Le widget a besoin de l\'accès complet au document',
+    'access.body': 'Il lit les tables du document pour proposer leurs colonnes, enregistre le workflow et son journal dans une table Automation, et écrit dans les lignes que vos actions visent. Tant que cet accès n\'est pas accordé, il ne lit ni n\'enregistre rien.',
+    'access.how': 'Dans Grist, ouvrez le panneau de droite de cette vue : sous « Niveau d\'accès », cliquez sur « Accepter », ou choisissez « Accès complet au document ». Le widget se recharge alors tout seul.',
+    'locked.title': 'Workflow conservé tel quel',
+    'locked.body': 'Le workflow enregistré pour cette table vient d\'une version plus récente du widget, ou son contenu est illisible. Cette version ne l\'ouvre pas, n\'y écrit rien et ne l\'exécute pas : il reste intact dans le document.',
+    'locked.how': 'Pour le modifier, utilisez la dernière version du widget. Pour repartir de zéro, supprimez la ligne Workflow de cette table dans la table Automation, ou retirez le widget de la page puis ajoutez-le de nouveau.',
+
+    // La question de la table Automation, posée avant d'y écrire quoi que ce soit.
+    'consent.title': 'Créer la table du widget dans ce document ?',
+    'consent.body': 'Le widget range ses workflows et son journal dans une seule table du document, nommée Automation, visible dans la liste des pages de Grist. Sans elle, le graphe n\'est gardé que dans ce widget et le journal n\'est pas enregistré.',
+    'consent.create': 'Créer la table',
+    'consent.decline': 'Ne pas créer',
+
+    // Le canevas : l'aide quand il est vide, et pendant la création d'un lien.
+    'canvas.empty': 'Clic droit sur le fond, ou « Ajouter », pour créer un premier nœud.',
+    'canvas.connecting': 'Cliquez sur l\'entrée d\'un nœud pour relier (Échap pour annuler).',
+
+    // Les nœuds : titres des types, suppression, broches, sorties « oui » et « sinon » d'une condition.
+    'node.trigger': 'Déclencheur',
+    'node.condition': 'Condition',
+    'node.action': 'Action',
+    'node.lookup': 'Lecture',
+    'node.transform': 'Transformation',
+    'node.delete': 'Supprimer le nœud',
+    'pin.then': 'Sortie « oui » : condition vraie',
+    'pin.else': 'Sortie « sinon » : condition fausse',
+    'pin.in': 'Entrée',
+    'pin.out': 'Sortie',
+    'out.then': 'Oui',
+    'out.else': 'Sinon',
+
+    // Le déclencheur : l'événement, la colonne surveillée, la ligne précise.
+    'trigger.when': 'Quand une ligne est',
+    'trigger.update': 'modifiée',
+    'trigger.create': 'créée',
+    'trigger.delete': 'supprimée',
+    'trigger.column': 'Colonne surveillée',
+    'trigger.targetColumn': 'Ligne précise',
+    'trigger.targetValue': 'Valeur clé',
+
+    // La condition : les vérifications (colonne, opérateur, valeur) et leur combinaison ET/OU.
+    'cond.join': 'Combiner',
+    'cond.column': 'Colonne',
+    'cond.operator': 'Opérateur',
+    'cond.value': 'Valeur',
+    'check.add': 'Ajouter une vérification',
+    'check.remove': 'Retirer cette vérification',
+    'op.eq': 'est égal à',
+    'op.neq': 'est différent de',
+    'op.gt': 'est supérieur à',
+    'op.lt': 'est inférieur à',
+    'op.contains': 'contient',
+    'op.empty': 'est vide',
+    'op.notEmpty': 'n\'est pas vide',
+    'join.and': 'Toutes (ET)',
+    'join.or': 'Une au moins (OU)',
+
+    // La lecture d'une cellule dans une autre table.
+    'lookup.table': 'Table lue',
+    'lookup.matchColumn': 'Ligne repérée par',
+    'lookup.matchValue': 'Valeur clé',
+    'lookup.column': 'Colonne lue',
+    'lookup.onMissing': 'Si introuvable',
+    'lookup.error': 'Erreur',
+    'lookup.empty': 'Valeur vide',
+
+    // La transformation : une valeur calculée, rendue disponible sous {nom}.
+    'tf.name': 'Nom',
+    'tf.op': 'Opération',
+    'tf.a': 'Valeur A',
+    'tf.b': 'Valeur B',
+    'tf.concat': 'accolé à',
+    'tf.add': '+',
+    'tf.sub': '−',
+    'tf.mul': '×',
+    'tf.div': '÷',
+    'tf.upper': 'Majuscules',
+    'tf.lower': 'Minuscules',
+    'tf.trim': 'Sans espaces autour',
+
+    // L'action : ajouter une ligne, ou mettre à jour une ligne.
+    'act.type': 'Type',
+    'act.update': 'Mettre à jour la ligne',
+    'act.add': 'Ajouter une ligne',
+    'act.table': 'Table cible',
+    'act.column': 'Colonne',
+    'act.value': 'Valeur',
+    'act.matchColumn': 'Ligne repérée par',
+    'act.matchValue': 'Valeur clé',
+
+    // Les listes avec recherche (js/search-select.js) et leurs choix à part.
+    'list.eventRow': '— Ligne de l\'événement —',
+    'list.choose': '— Choisir … —',
+    'list.none': '— Aucune —',
+    'list.currentTable': '— Table courante —',
+    'list.search': 'Rechercher…',
+    'list.noResult': 'Aucun résultat',
+    'list.anyRow': '— Toute ligne —',
+
+    // Ce qui empêche d'activer (Graph.validate), écrit dans le journal.
+    'issue.actionMatch': '« {node} » met à jour une autre table : indiquez la colonne qui repère la ligne.',
+    'issue.actionMatchValue': '« {node} » : la valeur clé qui repère la ligne est vide.',
+    'issue.lookupIncomplete': '« {node} » : indiquez la colonne qui repère la ligne, la valeur clé et la colonne lue.',
+    'issue.triggerTarget': '« {node} » : une ligne précise ne s\'applique qu\'à une modification.',
+    'issue.triggerTargetValue': '« {node} » : la valeur clé de la ligne précise est vide.',
+    'issue.transformName': '« {node} » : le nom doit commencer par une lettre, ne contenir que lettres, chiffres et _, et être unique.',
+    'issue.transformOperand': '« {node} » : il manque une valeur.',
+    'issue.noTrigger': 'Ajoutez un nœud Déclencheur.',
+    'issue.noAction': 'Ajoutez un nœud Action.',
+    'issue.notConnected': '« {node} » n\'est pas relié.',
+    'issue.conditionColumn': '« {node} » n\'a pas de colonne.',
+    'issue.actionColumn': '« {node} » n\'a pas de colonne.',
+    'issue.noPath': 'Aucune action n\'est reliée à un déclencheur.',
+
+    // Le résumé lisible du graphe, enregistré avec lui (colonne Resume de la table Automation).
+    'sum.and': 'et',
+    'sum.or': 'ou',
+    'sum.where': 'où',
+    'branch.else': 'sinon',
+
+    // Le test à blanc : l'état de chaque nœud.
+    'trace.else': 'Faux : branche « sinon »',
+    'trace.passed': 'Passé',
+    'trace.blocked': 'Bloqué par la condition',
+    'trace.action': 'Action prévue',
+
+    // Le journal : son panneau, puis ses lignes (l'événement, son résultat, ce que le widget a fait ou refusé, et pourquoi).
+    'logs.title': 'Logs',
+    'logs.waiting': 'En attente d\'événements Grist…',
+    'logs.more': 'Exécutions plus anciennes',
+    'logs.toggle': 'Afficher ou masquer les logs',
+    'log.deactivatedElsewhere': 'Automation désactivée depuis un autre onglet : elle est désactivée ici aussi.',
+    'log.loopStopped': 'Ligne {row} : trop d\'exécutions rapprochées, arrêtée pour éviter une boucle.',
+    'log.event': '{event} ligne {row} : {status}',
+    'log.dryRun': 'Dry-run ligne {row} : {status} — {n} {n|effet|effets}',
+    'log.dryNoRow': 'Dry-run impossible : aucune ligne dans la vue.',
+    'log.badConfig': 'Configuration illisible : elle est conservée telle quelle, sans modification.',
+    'log.schemaError': 'Colonnes de « {table} » illisibles : {error}',
+    'log.cannotActivate': 'Activation impossible : {issue}',
+    'log.noTables': 'Non enregistré : la table du widget n\'a pas été créée dans ce document.',
+    'log.tablesCreated': 'Table du widget créée.',
+    'log.storeError': 'Enregistrement dans le document impossible : {error}',
+    'log.activated': 'Workflow activé.',
+    'log.deactivated': 'Workflow désactivé.',
+    'log.tableNameTaken': 'Le document a déjà une table « {table} » : Grist ne distingue pas les majuscules des minuscules, le widget ne peut donc pas créer sa table Automation. Renommez-la, puis rechargez le widget.',
+    'log.tableRenamed': 'Grist a créé la table « {table} » au lieu de Automation : le widget ne s\'en sert pas. Vous pouvez la supprimer.',
+    'log.tableColumns': 'La table Automation du document n\'a pas les colonnes attendues ({columns}) : le widget ne s\'en sert pas et n\'y écrit rien.',
+    'event.create': 'création',
+    'event.update': 'modification',
+    'event.delete': 'suppression',
+    'result.success': 'réussi',
+    'result.error': 'erreur',
+
+    // Le relais entre onglets (js/executor.js) : lequel exécute.
+    'executor.active': 'Cet onglet exécute maintenant l\'automation.',
+    'executor.standby': 'Un autre onglet exécute l\'automation : celui-ci reste en veille.',
+
+    // Les réglages (langue, thème) et les crédits.
+    'settings.open': 'Réglages',
+    'settings.title': 'Réglages',
+    'settings.language': 'Langue',
+    'settings.theme': 'Thème',
+    'theme.system': 'Système',
+    'theme.light': 'Clair',
+    'theme.dark': 'Sombre',
+    'credits.title': 'Crédits',
+    'credits.author': 'Auteur',
+    'credits.site': 'Site',
+    'credits.license': 'Licence',
+    'credits.version': 'Version',
+
+    // Les fenêtres, et la page ouverte hors de Grist.
+    'modal.close': 'Fermer',
+    'modal.copy': 'Copier',
+    'modal.copied': 'Copié',
+    'firstContact.title': 'Ouvrez ce widget depuis Grist',
+    'firstContact.body': 'Cette page est un widget Grist : elle ne fonctionne qu\'à l\'intérieur d\'un document Grist. Elle s\'arrête aussi si le script de l\'API Grist est bloqué par le réseau.',
+    'firstContact.how': 'Dans Grist : ajoutez une vue, choisissez le widget « Personnalisé », collez l\'adresse ci-dessous et donnez l\'accès complet au document.',
+    'firstContact.address': 'Adresse du widget',
+  },
+
+  en: {
+    // La page : titre, et bandeaux sous la barre d'outils (index.html, js/main.js).
+    'app.title': 'Grist Automation Builder',
+    'app.otherTab': 'Automation is on: another tab is running it for now, this one takes over if it closes.',
+    'app.openTab': 'Automation is on: it only runs while this view stays open in your browser.',
+    'app.readOnly': 'Read only: you can see this workflow and test it, but not change or run it. Only someone who can edit the document turns it on and runs it.',
+
+    // La barre d'outils : ajouter un nœud, tester, activer, montrer le journal.
+    'add.node': 'Add',
+    'add.nodeLabel': 'Add a node',
+    'test.run': 'Test',
+    'toggle.activate': 'Turn on',
+    'toggle.deactivate': 'Turn off',
+
+    // Ce qui prend la place du canevas : l'accès à accorder dans Grist, un workflow que cette version ne lit pas (règle 3 de GFS).
+    'access.title': 'The widget needs full access to the document',
+    'access.body': 'It reads the document\'s tables to offer their columns, saves the workflow and its log in an Automation table, and writes to the rows your actions target. Until this access is granted, it reads and saves nothing.',
+    'access.how': 'In Grist, open the right panel for this view: under “Access level”, click “Accept”, or choose “Full document access”. The widget then reloads by itself.',
+    'locked.title': 'Workflow kept as is',
+    'locked.body': 'The workflow saved for this table comes from a newer version of the widget, or its content is unreadable. This version does not open it, writes nothing to it and does not run it: it stays intact in the document.',
+    'locked.how': 'To edit it, use the latest version of the widget. To start over, delete this table\'s Workflow row in the Automation table, or remove the widget from the page and add it again.',
+
+    // La question de la table Automation, posée avant d'y écrire quoi que ce soit.
+    'consent.title': 'Create the widget table in this document?',
+    'consent.body': 'The widget keeps its workflows and its log in a single table of the document, named Automation, listed among Grist\'s pages. Without it, the graph is only kept in this widget and the log is not saved.',
+    'consent.create': 'Create the table',
+    'consent.decline': 'Do not create',
+
+    // Le canevas : l'aide quand il est vide, et pendant la création d'un lien.
+    'canvas.empty': 'Right-click the background, or "Add", to create a first node.',
+    'canvas.connecting': 'Click a node\'s input to connect (Esc to cancel).',
+
+    // Les nœuds : titres des types, suppression, broches, sorties « oui » et « sinon » d'une condition.
+    'node.trigger': 'Trigger',
+    'node.condition': 'Condition',
+    'node.action': 'Action',
+    'node.lookup': 'Lookup',
+    'node.transform': 'Transform',
+    'node.delete': 'Delete node',
+    'pin.then': 'Yes output: condition is true',
+    'pin.else': 'Else output: condition is false',
+    'pin.in': 'Input',
+    'pin.out': 'Output',
+    'out.then': 'Yes',
+    'out.else': 'Else',
+
+    // Le déclencheur : l'événement, la colonne surveillée, la ligne précise.
+    'trigger.when': 'When a row is',
+    'trigger.update': 'modified',
+    'trigger.create': 'created',
+    'trigger.delete': 'deleted',
+    'trigger.column': 'Watched column',
+    'trigger.targetColumn': 'Specific row',
+    'trigger.targetValue': 'Key value',
+
+    // La condition : les vérifications (colonne, opérateur, valeur) et leur combinaison ET/OU.
+    'cond.join': 'Combine',
+    'cond.column': 'Column',
+    'cond.operator': 'Operator',
+    'cond.value': 'Value',
+    'check.add': 'Add a check',
+    'check.remove': 'Remove this check',
+    'op.eq': 'equals',
+    'op.neq': 'is not equal to',
+    'op.gt': 'is greater than',
+    'op.lt': 'is less than',
+    'op.contains': 'contains',
+    'op.empty': 'is empty',
+    'op.notEmpty': 'is not empty',
+    'join.and': 'All (AND)',
+    'join.or': 'Any (OR)',
+
+    // La lecture d'une cellule dans une autre table.
+    'lookup.table': 'Table read',
+    'lookup.matchColumn': 'Row found by',
+    'lookup.matchValue': 'Key value',
+    'lookup.column': 'Column read',
+    'lookup.onMissing': 'If not found',
+    'lookup.error': 'Error',
+    'lookup.empty': 'Empty value',
+
+    // La transformation : une valeur calculée, rendue disponible sous {nom}.
+    'tf.name': 'Name',
+    'tf.op': 'Operation',
+    'tf.a': 'Value A',
+    'tf.b': 'Value B',
+    'tf.concat': 'joined with',
+    'tf.add': '+',
+    'tf.sub': '−',
+    'tf.mul': '×',
+    'tf.div': '÷',
+    'tf.upper': 'Uppercase',
+    'tf.lower': 'Lowercase',
+    'tf.trim': 'Trim spaces',
+
+    // L'action : ajouter une ligne, ou mettre à jour une ligne.
+    'act.type': 'Type',
+    'act.update': 'Update the row',
+    'act.add': 'Add a row',
+    'act.table': 'Target table',
+    'act.column': 'Column',
+    'act.value': 'Value',
+    'act.matchColumn': 'Row found by',
+    'act.matchValue': 'Key value',
+
+    // Les listes avec recherche (js/search-select.js) et leurs choix à part.
+    'list.eventRow': '— Row of the event —',
+    'list.choose': '— Choose … —',
+    'list.none': '— None —',
+    'list.currentTable': '— Current table —',
+    'list.search': 'Search…',
+    'list.noResult': 'No result',
+    'list.anyRow': '— Any row —',
+
+    // Ce qui empêche d'activer (Graph.validate), écrit dans le journal.
+    'issue.actionMatch': '"{node}" updates another table: pick the column that finds the row.',
+    'issue.actionMatchValue': '"{node}": the key value that finds the row is empty.',
+    'issue.lookupIncomplete': '"{node}": pick the column that finds the row, the key value and the column to read.',
+    'issue.triggerTarget': '"{node}": a specific row only applies to a modification.',
+    'issue.triggerTargetValue': '"{node}": the key value of the specific row is empty.',
+    'issue.transformName': '"{node}": the name must start with a letter, contain only letters, digits and _, and be unique.',
+    'issue.transformOperand': '"{node}": a value is missing.',
+    'issue.noTrigger': 'Add a Trigger node.',
+    'issue.noAction': 'Add an Action node.',
+    'issue.notConnected': '"{node}" is not connected.',
+    'issue.conditionColumn': '"{node}" has no column.',
+    'issue.actionColumn': '"{node}" has no column.',
+    'issue.noPath': 'No action is connected to a trigger.',
+
+    // Le résumé lisible du graphe, enregistré avec lui (colonne Resume de la table Automation).
+    'sum.and': 'and',
+    'sum.or': 'or',
+    'sum.where': 'where',
+    'branch.else': 'else',
+
+    // Le test à blanc : l'état de chaque nœud.
+    'trace.else': 'False: else branch',
+    'trace.passed': 'Passed',
+    'trace.blocked': 'Blocked by condition',
+    'trace.action': 'Action planned',
+
+    // Le journal : son panneau, puis ses lignes (l'événement, son résultat, ce que le widget a fait ou refusé, et pourquoi).
+    'logs.title': 'Logs',
+    'logs.waiting': 'Waiting for Grist events…',
+    'logs.more': 'Older runs',
+    'logs.toggle': 'Show or hide the logs',
+    'log.deactivatedElsewhere': 'Automation turned off from another tab: it is off here too.',
+    'log.loopStopped': 'Row {row}: too many runs in a short time, stopped to avoid a loop.',
+    'log.event': '{event} row {row}: {status}',
+    'log.dryRun': 'Dry run row {row}: {status} — {n} {n|effect|effects}',
+    'log.dryNoRow': 'Dry run impossible: no row in the view.',
+    'log.badConfig': 'Unreadable configuration: it is kept as is, unchanged.',
+    'log.schemaError': 'Columns of "{table}" unreadable: {error}',
+    'log.cannotActivate': 'Cannot turn on: {issue}',
+    'log.noTables': 'Not saved: the widget table was not created in this document.',
+    'log.tablesCreated': 'Widget table created.',
+    'log.storeError': 'Could not save to the document: {error}',
+    'log.activated': 'Workflow turned on.',
+    'log.deactivated': 'Workflow turned off.',
+    'log.tableNameTaken': 'The document already has a table "{table}": Grist does not tell upper and lower case apart, so the widget cannot create its Automation table. Rename it, then reload the widget.',
+    'log.tableRenamed': 'Grist created the table "{table}" instead of Automation: the widget does not use it. You can delete it.',
+    'log.tableColumns': 'The Automation table of the document lacks the expected columns ({columns}): the widget does not use it and writes nothing to it.',
+    'event.create': 'creation',
+    'event.update': 'modification',
+    'event.delete': 'deletion',
+    'result.success': 'done',
+    'result.error': 'error',
+
+    // Le relais entre onglets (js/executor.js) : lequel exécute.
+    'executor.active': 'This tab is now running the automation.',
+    'executor.standby': 'Another tab is running the automation: this one stays on standby.',
+
+    // Les réglages (langue, thème) et les crédits.
+    'settings.open': 'Settings',
+    'settings.title': 'Settings',
+    'settings.language': 'Language',
+    'settings.theme': 'Theme',
+    'theme.system': 'System',
+    'theme.light': 'Light',
+    'theme.dark': 'Dark',
+    'credits.title': 'Credits',
+    'credits.author': 'Author',
+    'credits.site': 'Website',
+    'credits.license': 'License',
+    'credits.version': 'Version',
+
+    // Les fenêtres, et la page ouverte hors de Grist.
+    'modal.close': 'Close',
+    'modal.copy': 'Copy',
+    'modal.copied': 'Copied',
+    'firstContact.title': 'Open this widget from Grist',
+    'firstContact.body': 'This page is a Grist widget: it only works inside a Grist document. It also stops if the Grist API script is blocked by the network.',
+    'firstContact.how': 'In Grist: add a view, choose the "Custom" widget, paste the address below and give it full document access.',
+    'firstContact.address': 'Widget address',
+  },
+};
+
+if (typeof module !== 'undefined' && module.exports) module.exports = I18N_TEXTS;

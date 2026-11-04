@@ -1,5 +1,7 @@
 // Couche Grist du widget : branche le canevas (js/canvas.js), le graphe (js/graph.js) et le moteur (js/engine.js) sur l'API Grist.
 // Le graphe est stocké dans les options du widget (grist.setOption) et, avec l'accord de la personne, dans la table Automation du document.
+// Ce que Grist accorde se lit dans l'adresse du cadre : sans l'accès complet, le widget le dit et attend (Grist recharge le cadre quand il est accordé) ;
+// en lecture seule, le workflow se voit et se teste, rien ne s'écrit ni ne s'exécute dans cet onglet.
 'use strict';
 
 const $ = (id) => document.getElementById(id);
@@ -13,14 +15,21 @@ let tableId = null;
 let cache = null;
 let lastRecords = [];
 let cursorRecord = null;       // ligne sélectionnée dans Grist (pour « Tester »)
-const instanceId = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
 const echo = Echo.create();
 let executor = null;           // élection de l'exécutant entre onglets ; null tant que la table Automation n'existe pas
+let tab = null;                // l'identifiant de cet onglet pour le verrou (Executor.tabIdentity), connu avec la table de la vue
+const randomId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 let heartbeat = null;
 const HEARTBEAT_MS = 6000;
 let tables = [];
 let tablesAvailable = false;   // la table Automation existe dans le document
 const columnsByTable = new Map();
+
+// Grist dit dans l'adresse du cadre le niveau d'accès accordé au widget (access : none, read table ou full) et si la personne peut modifier le document (readonly).
+// Sans ces paramètres (une version de Grist qui ne les donne pas), on fait comme avant : accès complet, modification permise.
+const frameParams = new URLSearchParams(location.search);
+const accessGranted = !frameParams.has('access') || frameParams.get('access') === 'full';
+const readOnly = frameParams.get('readonly') === 'true';
 
 const gristApi = { fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
 const docApi = Object.assign({ listTables: () => grist.docApi.listTables() }, gristApi);
@@ -42,8 +51,8 @@ function isUserColumn(name) {
 async function loadColumns(table) {
   if (columnsByTable.has(table)) return columnsByTable.get(table);
   try {
-    const data = await grist.docApi.fetchTable(table);
-    columnsByTable.set(table, Object.keys(data).filter(isUserColumn));
+    const columns = await grist.docApi.fetchTable(table);
+    columnsByTable.set(table, Object.keys(columns).filter(isUserColumn));
   } catch (err) {
     addLog(t('log.schemaError', { table, error: err.message }));
     columnsByTable.set(table, []);
@@ -62,12 +71,20 @@ async function loadSchema() {
 
 let locked = false;   // le workflow enregistré vient d'une version plus récente ou est abîmé : on le laisse tel quel, rien n'est écrit à sa place
 
-// Grisé, jamais masqué : l'explication prend la place du canevas (vide) et les boutons qui modifieraient le graphe sont grisés.
+// Les boutons qui modifieraient le graphe ou son exécution : grisés, jamais masqués, quand le workflow est conservé tel quel, et en lecture seule
+// (« Tester » reste alors : il n'écrit rien).
+function syncButtons() {
+  $('add-node').disabled = locked || readOnly;
+  $('toggle-active').disabled = locked || readOnly;
+  $('test-workflow').disabled = locked;
+}
+
+// L'explication prend la place du canevas (vide).
 function setLocked(value) {
   locked = value;
   $('locked').hidden = !value;
   $('canvas').inert = value;
-  for (const id of ['add-node', 'test-workflow', 'toggle-active']) $(id).disabled = value;
+  syncButtons();
 }
 
 // Ce que le canevas montre et ce qui s'exécute : rien. Un graphe déjà lu ailleurs (les réglages de la vue) ne doit pas continuer de tourner à la place de l'illisible.
@@ -95,7 +112,8 @@ let saveTimer = null;
 let savePending = false;
 let startupDone = false;   // le contenu déjà enregistré a été examiné : avant, on ne sait pas encore s'il faut le laisser intact
 
-async function save() {
+// Une constante plutôt qu'une fonction déclarée : rien d'autre dans la page ne peut la remplacer avant que la minuterie ne l'appelle.
+const save = async () => {
   if (!startupDone) {
     saveTimer = setTimeout(save, 300);
     return;
@@ -110,11 +128,11 @@ async function save() {
   }
   if (!locked) grist.setOption('workflow', JSON.stringify(graph));
   savePending = false;
-}
+};
 
 // Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand la table existe.
 function scheduleSave() {
-  if (locked) return;
+  if (locked || readOnly) return;
   clearTimeout(saveTimer);
   savePending = true;
   saveTimer = setTimeout(save, 300);
@@ -130,6 +148,7 @@ async function storeProblem() {
 // Demande l'accord de créer la table ; true si elle existe à la fin. Un refus ne se retient pas : la question revient à l'activation (et aux enregistrements qui en ont besoin).
 async function ensureStore() {
   if (tablesAvailable) return true;
+  if (readOnly) return false;   // créer la table demande de pouvoir modifier le document : la question n'aurait pas de sens
   if (await storeProblem()) return false;
   const accepted = await Modal.confirm({
     title: t('consent.title'),
@@ -154,7 +173,7 @@ async function ensureStore() {
 async function initStore() {
   const exists = (await Store.missingTables(docApi)).length === 0;
   tablesAvailable = exists && !(await storeProblem());
-  if (!exists) await ensureStore();
+  if (!exists) await ensureStore();   // en lecture seule, rien n'est demandé : le workflow reste celui des options de la vue
   if (!tablesAvailable) return;
   const stored = await Store.readGraph(docApi, tableId);
   if (stored.state === 'unreadable') {
@@ -218,7 +237,8 @@ async function recordRun(result) {
 }
 
 // Sans table Automation il n'y a pas de verrou partagé : cet onglet exécute seul (risque de doublon si le document est ouvert ailleurs).
-const canExecute = () => !executor || executor.isExecutor();
+// En lecture seule, jamais : Grist refuserait chaque écriture, et c'est l'onglet d'une personne qui peut modifier le document qui exécute.
+const canExecute = () => !readOnly && (!executor || executor.isExecutor());
 
 function onExecutorChange(isExecutor) {
   if (graph.active) addLog(t(isExecutor ? 'executor.active' : 'executor.standby'));
@@ -239,11 +259,12 @@ async function deactivatedElsewhere() {
 // Les événements reçus pendant une élection attendent son résultat au lieu d'être perdus.
 let electing = null;
 
-function electExecutor() {
+// Une constante, comme save : la minuterie du battement (startExecutor) appelle toujours celle-ci.
+const electExecutor = () => {
   if (!executor) return Promise.resolve();
   electing = elect().finally(() => { electing = null; });
   return electing;
-}
+};
 
 async function elect() {
   try {
@@ -255,9 +276,10 @@ async function elect() {
   }
 }
 
+// En lecture seule, pas d'élection : prendre le verrou est une écriture, que Grist refuserait toutes les 6 secondes.
 function startExecutor() {
-  if (!tablesAvailable || executor) return;
-  executor = Executor.create(docApi, tableId, instanceId, { onChange: onExecutorChange });
+  if (!tablesAvailable || executor || readOnly) return;
+  executor = Executor.create(docApi, tableId, tab.id, { onChange: onExecutorChange });
   heartbeat = setInterval(electExecutor, HEARTBEAT_MS);
 }
 
@@ -266,7 +288,7 @@ function refreshState() {
   $('toggle-active').textContent = t(active ? 'toggle.deactivate' : 'toggle.activate');
   $('toggle-active').setAttribute('aria-pressed', String(active));
   const standby = active && executor && !executor.isExecutor() && executor.holder() !== '';
-  $('open-tab-warning').hidden = !active;
+  $('open-tab-warning').hidden = !active || readOnly;   // en lecture seule, cet onglet n'exécute jamais : le bandeau de lecture seule le dit
   $('open-tab-warning').dataset.i18n = standby ? 'app.otherTab' : 'app.openTab';
   $('open-tab-warning').textContent = t(standby ? 'app.otherTab' : 'app.openTab');
   canvas.setActive(active);
@@ -303,7 +325,7 @@ async function onRecords(records) {
   cache = next;
   // Les modifications qui ne sont que l'écho de nos propres écritures ne redéclenchent rien (js/echo.js).
   const own = echo.filter(events);
-  if (!graph.active || own.length === 0) return;
+  if (!graph.active || own.length === 0 || readOnly) return;
   if (electing) await electing;
   if (!canExecute()) return;
   await handleEvents(own);
@@ -435,9 +457,31 @@ function showOutsideGrist() {
   Modal.create({ title: t('firstContact.title'), width: 'form', body });
 }
 
+// L'accès complet n'est pas (encore) accordé : Grist ne répond pas à la lecture de la table de la vue et refuse le reste. On le dit à la place du canevas,
+// au lieu d'un widget qui a l'air de marcher et n'enregistre rien ; Grist recharge le cadre quand la personne accepte.
+function showAccessNeeded() {
+  $('access-needed').hidden = false;
+  $('canvas').inert = true;
+  for (const id of ['add-node', 'test-workflow', 'toggle-active']) $(id).disabled = true;
+  startupDone = true;
+}
+
+// Lecture seule : le canevas se déplace et se zoome mais ne se modifie pas (js/canvas.js) ; « Tester » reste, il n'écrit rien.
+function showReadOnly() {
+  $('read-only-notice').hidden = false;
+  syncButtons();
+}
+
+// L'identifiant de cet onglet, gardé le temps d'un rechargement (js/executor.js, tabIdentity) : une clé par table de vue, deux vues du widget dans la même page ne se le prennent pas.
+function rememberTab(table) {
+  tab = Executor.tabIdentity(() => sessionStorage, 'ab_executor_' + table, randomId);
+  window.addEventListener('pagehide', () => tab.keep());
+  window.addEventListener('pageshow', (event) => { if (event.persisted) tab.forget(); });
+}
+
 function start() {
   I18n.apply();
-  canvas = Canvas.create($('canvas'), graph, schema, onGraphChange);
+  canvas = Canvas.create($('canvas'), graph, schema, onGraphChange, { readOnly });
   I18n.apply();
   refreshState();
   $('open-settings').addEventListener('click', openSettings);
@@ -454,7 +498,7 @@ function start() {
   $('toggle-logs').addEventListener('click', toggleLogs);
   $('logs-more').addEventListener('click', loadOlderLogs);
   window.addEventListener('beforeunload', (event) => {
-    if (graph.active) {
+    if (graph.active && !readOnly) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -462,6 +506,8 @@ function start() {
   });
 
   grist.ready({ requiredAccess: 'full' });
+  if (!accessGranted) return showAccessNeeded();
+  if (readOnly) showReadOnly();
   grist.onOptions((options) => {
     if (loaded || locked || !options || !options.workflow) return;
     const saved = Graph.parse(options.workflow);
@@ -475,6 +521,7 @@ function start() {
   grist.onRecord((record) => { cursorRecord = record; }, { includeColumns: 'all' });
   grist.selectedTable.getTableId().then(async (id) => {
     tableId = id;
+    rememberTab(id);
     try {
       await initStore();
     } finally {

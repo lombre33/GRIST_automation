@@ -48,16 +48,17 @@
   const known = new WeakMap();
   const isUserColumn = (name) => name !== 'id' && name !== 'manualSort' && !name.startsWith('gristHelper_');
 
-  function rows(data) {
-    return (data.id || []).map((id, i) => Object.fromEntries(Object.keys(data).map((key) => [key, data[key][i]])));
+  // fetchTable rend une table colonne par colonne ({ id: [...], Type: [...] }) : on la lit ligne par ligne.
+  function rows(columns) {
+    return (columns.id || []).map((id, i) => Object.fromEntries(Object.keys(columns).map((key) => [key, columns[key][i]])));
   }
 
   // Toutes les lignes de la table, en retenant ses colonnes au passage. Les colonnes inconnues sont tolérées : on ne lit que celles qu'on connaît.
   async function load(api) {
-    const data = await api.fetchTable(TABLE);
-    const names = Object.keys(data).filter(isUserColumn);
+    const columns = await api.fetchTable(TABLE);
+    const names = Object.keys(columns).filter(isUserColumn);
     known.set(api, names.length ? new Set(names) : null);
-    return rows(data);
+    return rows(columns);
   }
 
   async function missingTables(api) {

@@ -5,6 +5,9 @@
 // window.__preloadRows : lignes ajoutées à la table Automation au démarrage.
 // window.__fetchDelay : délai (ms) de la lecture des tables du widget, pour modifier le graphe avant la fin du démarrage.
 // Comme Grist : une écriture dans une colonne qui n'existe pas échoue en entier, et un identifiant déjà pris (sans tenir compte de la casse) devient `nom_2`.
+// Comme Grist encore : à `ready`, le thème de Grist (window.__gristAppearance, sombre par défaut) est posé dans <style id="grist-theme">, créée si la page n'a pas
+// d'élément de ce nom, et en style en ligne sur <html> ; en lecture seule (`readonly=true` dans l'adresse), toute écriture est refusée et notée dans `refused`.
+// `calls` compte les appels faits à l'API, par nom.
 const FIXED = {
   Contacts: { id: [1], manualSort: [1], Nom: ['A'], Statut: ['Nouveau'], Montant: [10], gristHelper_Display: [''] },
   Archive: { id: [1, 2], manualSort: [1, 2], Motif: ['a', 'b'], Source: [10, 500] },
@@ -30,14 +33,36 @@ if (window.__foreignLock) {
   docTables.Automation.nextId = 2;
   setInterval(() => { lock.Date += 1; }, 1000);
 }
-window.__stub = { applied: [], options: window.__preloadOptions || {}, pushRecords: null, docTables };
+window.__stub = { applied: [], refused: [], calls: {}, options: window.__preloadOptions || {}, pushRecords: null, docTables };
+const readOnly = new URLSearchParams(location.search).get('readonly') === 'true';
+const count = (name) => { window.__stub.calls[name] = (window.__stub.calls[name] || 0) + 1; };
+const refuse = (what) => { window.__stub.refused.push(what); return Promise.reject(new Error('No write access')); };
+
+// Ce que fait attachCssThemeVars dans le script d'API de Grist (version de novembre 2026).
+function attachTheme() {
+  const appearance = window.__gristAppearance || 'dark';
+  let style = document.head.querySelector('#grist-theme');
+  if (!style) {
+    style = document.createElement('style');
+    style.setAttribute('id', 'grist-theme');
+    document.head.append(style);
+  }
+  style.textContent = `@layer grist-theme {\n  :root {\n--grist-theme-text: ${appearance === 'dark' ? '#efefef' : '#262633'};\n  }\n}\n`;
+  document.documentElement.style.setProperty('color-scheme', appearance);
+  document.documentElement.setAttribute('data-grist-appearance', appearance);
+}
+
 window.grist = {
-  ready() {},
+  ready() { count('ready'); attachTheme(); },
   onOptions(cb) { cb(window.__stub.options); },
-  setOption(key, value) { window.__stub.options[key] = value; return Promise.resolve(); },
+  setOption(key, value) {
+    if (readOnly) return refuse(['setOption', key]);
+    window.__stub.options[key] = value;
+    return Promise.resolve();
+  },
   onRecord(cb) { window.__stub.pushRecord = (record) => cb(record); },
   onRecords(cb) { window.__stub.pushRecords = (records) => cb(records); },
-  selectedTable: { getTableId: () => Promise.resolve('Contacts') },
+  selectedTable: { getTableId: () => { count('getTableId'); return Promise.resolve('Contacts'); } },
   docApi: {
     listTables: () => Promise.resolve([...Object.keys(FIXED), ...Object.keys(docTables)]),
     fetchTable: (name) => {
@@ -48,6 +73,7 @@ window.grist = {
       return window.__fetchDelay ? new Promise((resolve) => setTimeout(() => resolve(data), window.__fetchDelay)) : Promise.resolve(data);
     },
     applyUserActions: (actions) => {
+      if (readOnly) return refuse(actions);
       for (const [kind, name, , values] of actions) {
         const unknown = docTables[name] && values && Object.keys(values).find((column) => !docTables[name].columns.includes(column));
         if (unknown) return Promise.reject(new Error(`Invalid column "${unknown}"`));

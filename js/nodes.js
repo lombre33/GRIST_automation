@@ -3,8 +3,7 @@
 // 'targetColumn' (colonne de la table cible du nœud), 'text' (saisie libre).
 (function (root) {
   'use strict';
-
-  const UNARY = ['upper', 'lower', 'trim'];
+  const UNARY = ['upper', 'lower', 'trim'];   // opérations d'une transformation qui n'ont qu'une valeur (A) : la valeur B y est grisée
 
   const TYPES = {
     trigger: {
@@ -74,7 +73,6 @@
       ],
     },
   };
-
   // Opérateurs d'une vérification de condition, avec la clé de traduction de leur libellé.
   const OPERATORS = [['eq', 'op.eq'], ['neq', 'op.neq'], ['gt', 'op.gt'], ['lt', 'op.lt'], ['contains', 'op.contains'], ['empty', 'op.empty'], ['notEmpty', 'op.notEmpty']];
   const needsValue = (check) => check.operator !== 'empty' && check.operator !== 'notEmpty';

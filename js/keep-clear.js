@@ -44,7 +44,7 @@
 
   const html = document.documentElement;
   const toRect = (box) => ({ x: box.left, y: box.top, largeur: box.width, hauteur: box.height });
-  let bar = null;
+  let current = null;   // la barre de GFS telle que le lien du kit la donne, ou null
   let queued = false;
 
   function refresh() {
@@ -53,8 +53,8 @@
     const veils = Array.from(document.querySelectorAll('.modal'));
     for (const element of floating) element.style.removeProperty('translate');
     for (const veil of veils) for (const side of Object.values(SIDES)) veil.style.removeProperty('--gfs-pad-' + side);
-    if (!bar) return;
-    const zone = { x: bar.zone.x + TOLERANCE, y: bar.zone.y + TOLERANCE, largeur: bar.zone.largeur - 2 * TOLERANCE, hauteur: bar.zone.hauteur - 2 * TOLERANCE };
+    if (!current) return;
+    const zone = { x: current.zone.x + TOLERANCE, y: current.zone.y + TOLERANCE, largeur: current.zone.largeur - 2 * TOLERANCE, hauteur: current.zone.hauteur - 2 * TOLERANCE };
     for (const element of floating) {
       if (!element.getClientRects().length) continue;
       const box = element.getBoundingClientRect();
@@ -63,7 +63,7 @@
       let shiftY = 0;
       // La première passe vise d'après l'échelle estimée ; la suivante reprend ce que l'arrondi a laissé.
       for (let pass = 0; pass < 3; pass += 1) {
-        const { dx, dy } = escape(toRect(element.getBoundingClientRect()), { bord: bar.bord, zone });
+        const { dx, dy } = escape(toRect(element.getBoundingClientRect()), { bord: current.bord, zone });
         if (!dx && !dy) break;
         shiftX += dx / scale;
         shiftY += dy / scale;
@@ -73,12 +73,12 @@
     const frame = { largeur: html.clientWidth, hauteur: html.clientHeight };
     for (const veil of veils) {
       const dialog = veil.querySelector('.modal-box');
-      if (dialog && overlaps(toRect(dialog.getBoundingClientRect()), bar.zone)) veil.style.setProperty('--gfs-pad-' + SIDES[bar.bord], inset(bar, frame) + 'px');
+      if (dialog && overlaps(toRect(dialog.getBoundingClientRect()), current.zone)) veil.style.setProperty('--gfs-pad-' + SIDES[current.bord], inset(current, frame) + 'px');
     }
   }
 
   function schedule() {
-    if (bar && !queued) {
+    if (current && !queued) {
       queued = true;
       requestAnimationFrame(refresh);
     }
@@ -86,11 +86,11 @@
 
   // `next` : ce que le lien du kit donne (GfsLink.bar() et son abonné), ou null. Une forme inconnue vaut null : mieux n'écarter rien que n'importe quoi.
   function set(next) {
-    bar = next && SIDES[next.bord] && next.zone ? next : null;
-    if (bar) {
-      html.dataset.gfsBar = bar.bord;
-      html.style.setProperty('--gfs-zone-x', bar.zone.x + 'px');
-      html.style.setProperty('--gfs-zone-w', bar.zone.largeur + 'px');
+    current = next && SIDES[next.bord] && next.zone ? next : null;
+    if (current) {
+      html.dataset.gfsBar = current.bord;
+      html.style.setProperty('--gfs-zone-x', current.zone.x + 'px');
+      html.style.setProperty('--gfs-zone-w', current.zone.largeur + 'px');
     } else {
       delete html.dataset.gfsBar;
       html.style.removeProperty('--gfs-zone-x');

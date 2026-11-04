@@ -1,7 +1,10 @@
 /* Jetons de la charte Grist Factory (docs/REGLES_UI_UX_ET_DEV.md). Un seul accent bleu, deux couleurs sémantiques (rouge, ambre).
    Ce fichier porte les valeurs d'origine de l'app : les feuilles lisent ces jetons, jamais une couleur écrite en dur (HYG-13). Dans GFS, l'ambiance choisie par la personne les redit
    sur <html> (kit/js/ambiance-pose.js, posée par js/gfs.js) ; seule, l'app garde ces valeurs. --warn-* est une paire de l'app, l'avertissement ambre : GFS ne la connaît pas. */
+/* color-scheme : les contrôles natifs (barres de défilement, listes, cases) suivent le thème de l'app. Grist écrit le sien sur <html>, en style en ligne, à chaque
+   ouverture : sans !important, une app claire dans un Grist sombre aurait des barres de défilement sombres. */
 :root {
+  color-scheme: light !important;
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --bg: #f4f6fa;
   --surface: #ffffff;
@@ -52,6 +55,7 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark !important;
   --bg: #171b23;
   --surface: #1e2430;
   --surface-sunken: #262e3c;

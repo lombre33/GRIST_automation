@@ -178,21 +178,21 @@
   async function resolveTargets(effects, ctx) {
     for (const effect of effects) {
       if (!effect.match) continue;
-      const data = await readTable(ctx, effect.table);
-      effect.rowId = data.id[findOne(data, effect.table, effect.match.column, effect.match.value)];
+      const columns = await readTable(ctx, effect.table);
+      effect.rowId = columns.id[findOne(columns, effect.table, effect.match.column, effect.match.value)];
     }
   }
 
   // Valeur lue par un nœud Lecture : une cellule d'une autre table, repérée par une clé.
   async function applyLookup(config, event, vars, currentTable, ctx) {
     const table = config.table || currentTable;
-    const data = await readTable(ctx, table);
+    const columns = await readTable(ctx, table);
     const key = resolveTemplate(config.matchValue, event, vars);
-    const found = findRows(data, table, config.matchColumn, key);
+    const found = findRows(columns, table, config.matchColumn, key);
     if (found.length === 0 && config.onMissing === 'empty') return '';
-    const index = findOne(data, table, config.matchColumn, key);
-    if (!Object.prototype.hasOwnProperty.call(data, config.column)) throw new Error('Colonne inconnue dans ' + table + ' : ' + config.column);
-    return data[config.column][index];
+    const index = findOne(columns, table, config.matchColumn, key);
+    if (!Object.prototype.hasOwnProperty.call(columns, config.column)) throw new Error('Colonne inconnue dans ' + table + ' : ' + config.column);
+    return columns[config.column][index];
   }
 
   function toUserAction(plan) {

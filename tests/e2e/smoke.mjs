@@ -11,8 +11,9 @@ const { chromium } = await import(process.env.PLAYWRIGHT_PATH ? `${process.env.P
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const server = http.createServer((req, res) => {
-  const file = path.join(root, req.url === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]));
-  if (!file.startsWith(root) || !fs.existsSync(file)) { res.writeHead(404); return res.end(); }
+  const asked = decodeURIComponent(req.url.split('?')[0]);
+  const file = path.join(root, asked === '/' ? 'index.html' : asked);
+  if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end(); }
   // Comme GitHub Pages : le cadre isolé de GFS (origine opaque) ne charge un module que si le site l'autorise.
   res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream', 'access-control-allow-origin': '*' });
   res.end(fs.readFileSync(file));
@@ -28,8 +29,9 @@ let failures = 0;
 // host : { context, fallback } joue l'app dans un faux GFS (tests/e2e/gfs-host.html), un cadre isolé comme chez GFS, qui rend `context` à l'appel `contexte` ; run(page, app) reçoit alors aussi le cadre de l'app
 //   (`app`), dans lequel on lit et on clique (`page` reste la page de l'hôte : souris, clavier, captures). Sans host, `app` est la page. `fallback` garde le garde-fou de 2 s de l'attente de l'ambiance.
 // blocked : adresses (globs) dont la requête échoue ; tolerated : messages de la console attendus dans ce scénario.
+// query : ce que Grist ajoute à l'adresse du cadre (`?access=none`, `?access=full&readonly=true`…), lu par js/main.js.
 // E2E_ONLY=<expression régulière> ne joue que les scénarios dont le nom lui correspond (E2E_ONLY='E2E-3[6-9]|E2E-4').
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [] } = {}) {
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '' } = {}) {
   if (process.env.E2E_ONLY && !new RegExp(process.env.E2E_ONLY).test(name)) return;
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   const page = await context.newPage();
@@ -53,7 +55,7 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
     ? route.fulfill({ contentType: 'text/javascript', body: stubSource })
     : route.abort()));
   try {
-    await page.goto(host ? `${url}tests/e2e/gfs-host.html` : url);
+    await page.goto(host ? `${url}tests/e2e/gfs-host.html` : url + query);
     let app = page;
     if (host) {
       app = await (await page.waitForSelector('#app')).contentFrame();
@@ -96,6 +98,33 @@ async function waitSchema(page) {
   await page.waitForFunction(() => document.querySelector('.node select option[value="Statut"], .node select option[value="Archive"]'));
 }
 
+// Le nœud action-1 ajoute une ligne dans Archive, colonne Motif = value.
+async function archiveAction(page, value) {
+  await pick(page, 'action-1-type', 'ajouter');
+  await pick(page, 'action-1-table', 'archive');
+  await pick(page, 'action-1-column', 'motif');
+  await page.fill('#action-1-value', value);
+}
+
+// Fait passer les lignes de la vue par ces états, l'un après l'autre.
+async function push(page, ...records) {
+  for (const record of records) await page.evaluate((r) => window.__stub.pushRecords([r]), record);
+}
+
+// Active le workflow puis fait passer la ligne 1 de « Nouveau » à « Clos » ; attend les deux lignes du journal (activation, exécution).
+async function activateAndClose(page) {
+  await page.click('#toggle-active');
+  await push(page, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+}
+
+// La ligne illisible de la table Automation est toujours seule et intacte, et les réglages de la vue n'ont rien reçu.
+async function assertUntouched(target, message) {
+  const rows = await target.evaluate(() => window.__stub.docTables.Automation.rows);
+  assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], message);
+  assert.equal(await target.evaluate(() => window.__stub.options.workflow), undefined, 'rien dans les réglages de la vue non plus');
+}
+
 // Déclencheur -> condition -> action, entièrement configurés (premier lien au clic puis clic, second au glisser).
 async function buildFlow(page) {
   await addNode(page, 'Déclencheur', 40, 120);
@@ -105,10 +134,7 @@ async function buildFlow(page) {
   await pick(page, 'trigger-1-column', 'statut');
   await pick(page, 'condition-1-column', 'statut');
   await page.fill('#condition-1-value', 'Clos');
-  await pick(page, 'action-1-type', 'ajouter');
-  await pick(page, 'action-1-table', 'archive');
-  await pick(page, 'action-1-column', 'motif');
-  await page.fill('#action-1-value', 'clos');
+  await archiveAction(page, 'clos');
   await page.locator('.node-trigger .pin-out').click();
   await page.locator('.node-condition .pin-in').click();
   const out = await page.locator('.node-condition .pin-out[data-branch=then]').boundingBox();
@@ -260,10 +286,7 @@ await scenario('E2E-12 tables du document : accord demandé au démarrage, graph
   assert.equal(row.Type, 'Workflow');
   assert.equal(row.Table, 'Contacts');
   assert.match(row.Resume, /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action/);
-  await page.click('#toggle-active');
-  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
-  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  await activateAndClose(page);
   const log = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log' && r.Evenement === 'update'));
   const toggle = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log' && r.Evenement === 'activate'));
   assert.equal(toggle.Table, 'Contacts', 'l\'activation est tracée dans le journal');
@@ -287,10 +310,7 @@ await scenario('E2E-13 accord refusé : le widget marche sans tables, la questio
 
 await scenario('E2E-14 le graphe du document est relu au démarrage, avec le journal', async (page) => {
   await buildFlow(page);
-  await page.click('#toggle-active');
-  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
-  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  await activateAndClose(page);
   await page.waitForTimeout(400);
   const tables = await page.evaluate(() => JSON.stringify(window.__stub.docTables));
   const copy = await page.context().newPage();
@@ -368,12 +388,10 @@ await scenario('E2E-18 condition à deux vérifications (OU) et branche « sinon
   await page.locator('#action-2-value').locator('xpath=ancestor::div[contains(@class,"node")]').locator('.pin-in').click();
   assert.equal(await page.locator('.wire-else').count(), 1);
   await page.click('#toggle-active');
-  const push = (record) => page.evaluate((r) => window.__stub.pushRecords([r]), record);
-  await push({ id: 1, Nom: 'A', Statut: 'Nouveau', Montant: 10 });
-  await push({ id: 1, Nom: 'A', Statut: 'Ouvert', Montant: 500 });
+  await push(page, { id: 1, Nom: 'A', Statut: 'Nouveau', Montant: 10 }, { id: 1, Nom: 'A', Statut: 'Ouvert', Montant: 500 });
   await page.waitForFunction(() => window.__stub.applied.length === 1);
   assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['AddRecord', 'Archive', null, { Motif: 'clos' }], 'OU : le montant suffit');
-  await push({ id: 1, Nom: 'A', Statut: 'En cours', Montant: 5 });
+  await push(page, { id: 1, Nom: 'A', Statut: 'En cours', Montant: 5 });
   await page.waitForFunction(() => window.__stub.applied.length === 2);
   assert.deepEqual(await page.evaluate(() => window.__stub.applied[1]), ['AddRecord', 'Archive', null, { Motif: 'autre' }], 'faux : branche « sinon »');
   await page.click('#test-workflow');
@@ -393,10 +411,7 @@ await scenario('E2E-19 nœud Transformation : concaténation utilisée dans l\'a
   await pick(page, 'transform-1-op', 'majuscules');
   assert.equal(await page.locator('#transform-1-b').isDisabled(), true, 'valeur B grisée pour une opération à une valeur');
   await pick(page, 'transform-1-op', 'accolé');
-  await pick(page, 'action-1-type', 'ajouter');
-  await pick(page, 'action-1-table', 'archive');
-  await pick(page, 'action-1-column', 'motif');
-  await page.fill('#action-1-value', 'Fiche {titre}');
+  await archiveAction(page, 'Fiche {titre}');
   await page.locator('.node-trigger .pin-out').click();
   await page.locator('.node-transform .pin-in').click();
   await page.locator('.node-transform .pin-out').click();
@@ -437,12 +452,10 @@ await scenario('E2E-21 mise à jour d\'une ligne d\'une autre table repérée pa
   await page.locator('.node-trigger .pin-out').click();
   await page.locator('.node-action .pin-in').click();
   await page.click('#toggle-active');
-  const push = (record) => page.evaluate((r) => window.__stub.pushRecords([r]), record);
-  await push({ id: 1, Nom: 'a', Statut: 'Nouveau' });
-  await push({ id: 1, Nom: 'b', Statut: 'Clos' });
+  await push(page, { id: 1, Nom: 'a', Statut: 'Nouveau' }, { id: 1, Nom: 'b', Statut: 'Clos' });
   await page.waitForFunction(() => window.__stub.applied.length === 1);
   assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['UpdateRecord', 'Archive', 2, { Source: 'vu' }]);
-  await push({ id: 1, Nom: 'zzz', Statut: 'Nouveau' });
+  await push(page, { id: 1, Nom: 'zzz', Statut: 'Nouveau' });
   await page.click('#toggle-logs');
   await page.waitForFunction(() => /Ligne introuvable dans Archive/.test(document.getElementById('log-list').innerText));
   assert.equal(await page.evaluate(() => window.__stub.applied.length), 1);
@@ -475,21 +488,16 @@ await scenario('E2E-23 nœud Lecture : un seuil lu dans une autre table sert dan
   await pick(page, 'condition-1-column', 'montant');
   await pick(page, 'condition-1-operator', 'supérieur');
   await page.fill('#condition-1-value', '{seuil}');
-  await pick(page, 'action-1-type', 'ajouter');
-  await pick(page, 'action-1-table', 'archive');
-  await pick(page, 'action-1-column', 'motif');
-  await page.fill('#action-1-value', 'dépassé {seuil}');
+  await archiveAction(page, 'dépassé {seuil}');
   for (const [from, to] of [['trigger', 'lookup'], ['lookup', 'condition'], ['condition', 'action']]) {
     await page.locator(`.node-${from} .pin-out[data-branch=then]`).click();
     await page.locator(`.node-${to} .pin-in`).click();
   }
   await page.click('#toggle-active');
-  const push = (record) => page.evaluate((r) => window.__stub.pushRecords([r]), record);
-  await push({ id: 1, Nom: 'a', Statut: 'Nouveau', Montant: 20 });
-  await push({ id: 1, Nom: 'a', Statut: 'Clos', Montant: 20 });
+  await push(page, { id: 1, Nom: 'a', Statut: 'Nouveau', Montant: 20 }, { id: 1, Nom: 'a', Statut: 'Clos', Montant: 20 });
   await page.waitForFunction(() => window.__stub.applied.length === 1);
   assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['AddRecord', 'Archive', null, { Motif: 'dépassé 10' }]);
-  await push({ id: 1, Nom: 'b', Statut: 'Nouveau', Montant: 20 });
+  await push(page, { id: 1, Nom: 'b', Statut: 'Nouveau', Montant: 20 });
   await page.waitForTimeout(400);
   assert.equal(await page.evaluate(() => window.__stub.applied.length), 1, 'seuil de b = 500 : 20 ne le dépasse pas');
 }, { viewport: { width: 1400, height: 800 } });
@@ -502,10 +510,7 @@ await scenario('E2E-24 déclencheur sur une ligne précise : les autres lignes s
   assert.equal(await page.locator('#trigger-1-targetValue').isDisabled(), true, 'valeur clé grisée sans colonne clé');
   await pick(page, 'trigger-1-targetColumn', 'nom');
   await page.fill('#trigger-1-targetValue', 'Ada');
-  await pick(page, 'action-1-type', 'ajouter');
-  await pick(page, 'action-1-table', 'archive');
-  await pick(page, 'action-1-column', 'motif');
-  await page.fill('#action-1-value', 'vu');
+  await archiveAction(page, 'vu');
   await page.locator('.node-trigger .pin-out').click();
   await page.locator('.node-action .pin-in').click();
   await pick(page, 'trigger-1-action', 'créée');
@@ -514,9 +519,9 @@ await scenario('E2E-24 déclencheur sur une ligne précise : les autres lignes s
   assert.match(await page.locator('#log-list').innerText(), /ne s'applique qu'à une modification/);
   await pick(page, 'trigger-1-action', 'modifiée');
   await page.click('#toggle-active');
-  const push = (records) => page.evaluate((r) => window.__stub.pushRecords(r), records);
-  await push([{ id: 1, Nom: 'Ada', Statut: 'a' }, { id: 2, Nom: 'Bob', Statut: 'a' }]);
-  await push([{ id: 1, Nom: 'Ada', Statut: 'b' }, { id: 2, Nom: 'Bob', Statut: 'b' }]);
+  const pushView = (records) => page.evaluate((r) => window.__stub.pushRecords(r), records);   // toutes les lignes de la vue à la fois
+  await pushView([{ id: 1, Nom: 'Ada', Statut: 'a' }, { id: 2, Nom: 'Bob', Statut: 'a' }]);
+  await pushView([{ id: 1, Nom: 'Ada', Statut: 'b' }, { id: 2, Nom: 'Bob', Statut: 'b' }]);
   await page.waitForFunction(() => window.__stub.applied.length >= 1);
   await page.waitForTimeout(300);
   assert.equal(await page.evaluate(() => window.__stub.applied.length), 1, 'seule la ligne Ada déclenche');
@@ -569,9 +574,7 @@ await scenario('E2E-28 workflow illisible dans la table Automation : conservé t
   await page.click('#toggle-logs');
   assert.match(await page.locator('#log-list').innerText(), /Configuration illisible/);
   await page.waitForTimeout(700);
-  const rows = await page.evaluate(() => window.__stub.docTables.Automation.rows);
-  assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], 'même contenu, aucune ligne ajoutée (ni verrou)');
-  assert.equal(await page.evaluate(() => window.__stub.options.workflow), undefined, 'rien dans les réglages de la vue non plus');
+  await assertUntouched(page, 'même contenu, aucune ligne ajoutée (ni verrou)');
 }, { init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
 
 await scenario('E2E-29 le graphe du document passe avant des réglages de vue illisibles', async (page) => {
@@ -632,9 +635,7 @@ await scenario('E2E-34 modification faite pendant le démarrage, avant la décou
   await addNode(page, 'Déclencheur', 40, 120);
   await page.waitForSelector('#locked:not([hidden])');
   await page.waitForTimeout(1500);
-  const rows = await page.evaluate(() => window.__stub.docTables.Automation.rows);
-  assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], 'la ligne illisible est intacte');
-  assert.equal(await page.evaluate(() => window.__stub.options.workflow), undefined, 'les réglages de la vue non plus ne sont pas écrasés');
+  await assertUntouched(page, 'la ligne illisible est intacte');
 }, { init: { __fetchDelay: 400, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
 
 await scenario('E2E-35 contenu du document illisible, graphe actif dans les réglages de la vue : rien ne s\'exécute à sa place', async (page) => {
@@ -649,9 +650,7 @@ await scenario('E2E-35 contenu du document illisible, graphe actif dans les rég
   await copy.waitForSelector('#locked:not([hidden])');
   assert.equal(await copy.locator('.node').count(), 0, 'le graphe des réglages de la vue n\'est plus affiché');
   assert.equal(await copy.locator('#open-tab-warning').isVisible(), false, 'rien n\'est actif');
-  const push = (status) => copy.evaluate((value) => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: value }]), status);
-  await push('Nouveau');
-  await push('Clos');
+  await push(copy, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
   await copy.waitForTimeout(1500);
   assert.deepEqual(await copy.evaluate(() => window.__stub.applied), [], 'aucune écriture dans Archive');
   const rows = await copy.evaluate(() => window.__stub.docTables.Automation.rows);
@@ -889,6 +888,98 @@ await scenario('E2E-44 le kit manque (copie du dépôt sans ses sous-modules) : 
   await app.click('#add-node');
   await app.waitForSelector('.ss-panel');
 }, { host: { context: { langue: 'fr', barre: BARS.haut, ambiance: POP }, fallback: true }, viewport: SMALL, blocked: ['**/kit/js/gfs-link.js'], tolerated: [/gfs-link/i, /ERR_FAILED/, /Failed to fetch/i, /module/i] });
+
+/* ---------- Le widget seul dans Grist : ce que Grist accorde et pose (pré-alpha publique) ---------- */
+
+// Un workflow actif complet (déclencheur -> action), tel qu'enregistré dans la table Automation.
+const activeFlow = JSON.stringify({ version: 3, active: true, nodes: [
+  { id: 'trigger-1', type: 'trigger', x: 40, y: 120, config: { action: 'update', column: 'Statut', targetColumn: '', targetValue: '' } },
+  { id: 'action-1', type: 'action', x: 330, y: 120, config: { type: 'AddRecord', table: 'Archive', matchColumn: '', matchValue: '', column: 'Motif', value: 'vu' } },
+], edges: [{ from: 'trigger-1', to: 'action-1' }] });
+const activeRows = [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeFlow }];
+const FR = { openTab: 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur.', otherTab: 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.' };
+
+await scenario('E2E-45 le thème que Grist pose ne déclenche aucune erreur de politique de sécurité, et les contrôles natifs gardent le thème de l\'app', async (page) => {
+  await page.waitForFunction(() => document.documentElement.dataset.gristAppearance === 'dark');
+  assert.equal(await page.evaluate(() => document.getElementById('grist-theme').tagName), 'TEMPLATE', 'Grist écrit dans l\'élément inerte de la page');
+  assert.equal(await page.evaluate(() => document.querySelectorAll('style').length), 0, 'aucune balise <style> créée');
+  assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('color-scheme')), 'dark', 'Grist pose bien son mode en style en ligne');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), 'light', 'l\'app, en clair, garde des contrôles clairs');
+  await page.click('#open-settings');
+  await page.getByRole('button', { name: 'Sombre' }).click();
+  assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), 'dark');
+}, { init: { __gristAppearance: 'dark' } });
+
+await scenario('E2E-46 accès complet pas encore accordé dans Grist : le widget le dit à la place du canevas, ne lit ni n\'écrit rien, et ne pose aucune question', async (page) => {
+  await page.waitForSelector('#access-needed:not([hidden])');
+  assert.equal(await page.locator('#access-needed h2').innerText(), 'Le widget a besoin de l\'accès complet au document');
+  assert.match(await page.locator('#access-needed').innerText(), /Accepter/);
+  for (const id of ['add-node', 'test-workflow', 'toggle-active']) assert.equal(await page.locator('#' + id).isDisabled(), true, id);
+  assert.equal(await page.evaluate(() => document.getElementById('canvas').inert), true);
+  await page.waitForTimeout(500);
+  assert.deepEqual(await page.evaluate(() => window.__stub.calls), { ready: 1 }, 'grist.ready seul : Grist montre alors sa demande d\'accès');
+  assert.equal(await page.locator('.modal').count(), 0, 'pas de question de table');
+}, { query: '?access=none&readonly=false', noTables: true });
+
+await scenario('E2E-47 lecture seule : le workflow se voit, se déplace et se teste ; rien ne s\'écrit, rien ne s\'exécute, même au bout du battement de 6 s', async (page) => {
+  await page.waitForSelector('.node-action');
+  assert.equal(await page.locator('#read-only-notice').isVisible(), true);
+  assert.equal(await page.locator('#open-tab-warning').isVisible(), false, 'cet onglet n\'exécute pas : pas de bandeau d\'exécution');
+  assert.equal(await page.locator('#add-node').isDisabled(), true);
+  assert.equal(await page.locator('#toggle-active').isDisabled(), true);
+  assert.equal(await page.locator('#test-workflow').isDisabled(), false, 'Tester reste');
+  assert.equal(await page.locator('.node input:not([disabled]), .node select:not([disabled]), .node button:not([disabled])').count(), 0, 'les champs, broches et boutons des nœuds sont grisés');
+  await page.mouse.click(700, 500, { button: 'right' });
+  assert.equal(await page.locator('.add-menu').count(), 0, 'pas de menu d\'ajout');
+  const before = await page.locator('.node-action').boundingBox();
+  const head = await page.locator('.node-action .node-head').boundingBox();
+  await page.mouse.move(head.x + 20, head.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(head.x + 120, head.y + 80, { steps: 4 });
+  await page.mouse.up();
+  assert.deepEqual(await page.locator('.node-action').boundingBox(), before, 'le nœud ne bouge pas');
+  await page.keyboard.press('Delete');
+  assert.equal(await page.locator('.node').count(), 2, 'Suppr ne supprime rien');
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]));
+  await page.click('#test-workflow');
+  assert.equal(await page.locator('.node-action .node-state').innerText(), 'Action prévue');
+  await page.evaluate(() => window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]));
+  await page.waitForTimeout(7000);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied), [], 'rien n\'est exécuté');
+  assert.deepEqual(await page.evaluate(() => window.__stub.refused), [], 'aucune écriture tentée : ni verrou, ni journal, ni options');
+  await page.click('#toggle-logs');
+  assert.doesNotMatch(await page.locator('#log-list').innerText(), /No write access|impossible/);
+}, { query: '?access=full&readonly=true', init: { __preloadRows: activeRows } });
+
+await scenario('E2E-48 lecture seule dans un document sans table Automation : aucune question de création', async (page) => {
+  await page.waitForSelector('#read-only-notice:not([hidden])');
+  await page.waitForTimeout(800);
+  assert.equal(await page.locator('.modal').count(), 0);
+  assert.deepEqual(await page.evaluate(() => window.__stub.refused), []);
+}, { query: '?access=full&readonly=true', noTables: true });
+
+await scenario('E2E-49 un onglet rechargé reprend l\'exécution tout de suite : il reconnaît son verrou au lieu d\'attendre 20 s qu\'il expire', async (page) => {
+  page.on('dialog', (dialog) => dialog.accept());   // « Quitter la page ? » : un workflow actif ne s'exécute que tant que la vue est ouverte
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Lock' && row.Config));
+  const rows = await page.evaluate(() => window.__stub.docTables.Automation.rows.map((row) => ({ ...row })));
+  const owner = rows.find((row) => row.Type === 'Lock').Config;
+  assert.match(owner, /^[0-9a-f]{16}$/);
+  // Le document garde ses lignes d'un chargement à l'autre, verrou compris, comme si la page n'avait pas eu le temps de le libérer.
+  await page.addInitScript((saved) => { window.__preloadRows = saved.map(({ id, ...row }) => row); }, rows);
+  await page.reload();
+  await page.waitForSelector('.node-action');
+  await page.waitForFunction((text) => document.getElementById('open-tab-warning').textContent === text, FR.openTab, { timeout: 3000 });
+  assert.equal(await page.evaluate(() => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock').Config), owner, 'même identifiant d\'onglet');
+  await push(page, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
+  await page.waitForFunction(() => window.__stub.applied.length > 0, null, { timeout: 3000 });
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied), [['AddRecord', 'Archive', null, { Motif: 'vu' }]]);
+}, { init: { __preloadRows: activeRows } });
+
+await scenario('E2E-50 un onglet neuf (dupliqué, ou une autre personne) n\'hérite pas du verrou : il attend l\'exécutant en place', async (page) => {
+  await page.waitForSelector('.node-action');
+  await page.waitForFunction((text) => document.getElementById('open-tab-warning').textContent === text, FR.otherTab, { timeout: 3000 });
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied), []);
+}, { init: { __preloadRows: [...activeRows, { Type: 'Lock', Table: 'Contacts', Config: 'aaaaaaaaaaaaaaaa', Date: 1 }] } });
 
 await browser.close();
 server.close();

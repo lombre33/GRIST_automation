@@ -157,15 +157,20 @@ test('GRAPH-15 lecture : condition sans vérification ou lien « sinon » sur un
   assert.strictEqual(G.parse(JSON.stringify(text)), null);
 });
 
-test('GRAPH-16 validation d\'une transformation : nom valide et unique, valeurs présentes', () => {
+// Déclencheur -> un nœud du type donné -> action complète : seul le nœud du milieu reste à régler.
+function chain(type) {
   const g = G.create();
   const t = G.addNode(g, 'trigger', 0, 0);
-  const f = G.addNode(g, 'transform', 0, 0);
+  const middle = G.addNode(g, type, 0, 0);
   const a = G.addNode(g, 'action', 0, 0);
-  G.connect(g, t.id, f.id);
-  G.connect(g, f.id, a.id);
+  G.connect(g, t.id, middle.id);
+  G.connect(g, middle.id, a.id);
   a.config.column = 'Motif';
-  const keys = () => G.validate(g).map((i) => i.key);
+  return { g, middle, keys: () => G.validate(g).map((i) => i.key) };
+}
+
+test('GRAPH-16 validation d\'une transformation : nom valide et unique, valeurs présentes', () => {
+  const { g, middle: f, keys } = chain('transform');
   assert.deepStrictEqual(keys(), ['issue.transformOperand'], 'valeur A manquante');
   f.config.a = '{Nom}';
   assert.deepStrictEqual(keys(), ['issue.transformOperand'], 'valeur B manquante pour une opération à deux valeurs');
@@ -224,14 +229,7 @@ test('GRAPH-19 un graphe enregistré avant la clé de ligne reste valable (champ
 });
 
 test('GRAPH-20 validation d\'une lecture : colonne clé, valeur clé, colonne lue, nom valide et unique (partagé avec les transformations)', () => {
-  const g = G.create();
-  const t = G.addNode(g, 'trigger', 0, 0);
-  const l = G.addNode(g, 'lookup', 0, 0);
-  const a = G.addNode(g, 'action', 0, 0);
-  G.connect(g, t.id, l.id);
-  G.connect(g, l.id, a.id);
-  a.config.column = 'Motif';
-  const keys = () => G.validate(g).map((i) => i.key);
+  const { g, middle: l, keys } = chain('lookup');
   assert.deepStrictEqual(keys(), ['issue.lookupIncomplete']);
   Object.assign(l.config, { table: 'Services', matchColumn: 'Nom', matchValue: '{Nom}', column: 'Seuil' });
   assert.deepStrictEqual(keys(), []);

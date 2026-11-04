@@ -114,3 +114,62 @@ test('MUL-09 le verrou n\'est pas pris pour un workflow ou un journal : chaque t
   assert.strictEqual(await Store.loadGraph(doc, 'Contacts'), null);
   assert.strictEqual((await Store.logsPage(doc, 'Contacts', 10)).rows.length, 1);
 });
+
+// sessionStorage d'un onglet, tel que le navigateur le donne (ou le refuse) au cadre du widget.
+function fakeSession() {
+  const items = new Map();
+  return {
+    items,
+    getItem: (key) => (items.has(key) ? items.get(key) : null),
+    setItem: (key, value) => { items.set(key, String(value)); },
+    removeItem: (key) => { items.delete(key); },
+  };
+}
+const ids = (...list) => () => list.shift();
+
+test('MUL-10 un onglet rechargé garde son identifiant, et reprend son verrou sans attendre le délai', async () => {
+  const doc = await setup();
+  const clock = { t: 1000000 };
+  const session = fakeSession();
+  const before = Executor.tabIdentity(() => session, 'ab_executor_Contacts', ids('aaaaaaaaaaaaaaaa'));
+  assert.strictEqual(await instance(doc, before.id, clock).tick(), true);
+  before.keep();   // pagehide : la page se recharge, sans avoir pu libérer le verrou
+  clock.t += 2000;
+  const after = Executor.tabIdentity(() => session, 'ab_executor_Contacts', ids('bbbbbbbbbbbbbbbb'));
+  assert.strictEqual(after.id, 'aaaaaaaaaaaaaaaa');
+  assert.strictEqual(await instance(doc, after.id, clock).tick(), true, 'le verrou encore frais est le sien : il exécute tout de suite');
+  assert.strictEqual(session.items.size, 0, 'lu puis effacé');
+});
+
+test('MUL-11 un onglet dupliqué n\'hérite pas de l\'identifiant : l\'original exécute, la copie attend', async () => {
+  const doc = await setup();
+  const clock = { t: 1000000 };
+  const session = fakeSession();
+  const original = Executor.tabIdentity(() => session, 'ab_executor_Contacts', ids('aaaaaaaaaaaaaaaa'));
+  await instance(doc, original.id, clock).tick();
+  const duplicate = fakeSession();
+  for (const [key, value] of session.items) duplicate.setItem(key, value);   // la copie de sessionStorage que reçoit l'onglet dupliqué
+  const copy = Executor.tabIdentity(() => duplicate, 'ab_executor_Contacts', ids('cccccccccccccccc'));
+  assert.strictEqual(copy.id, 'cccccccccccccccc');
+  assert.strictEqual(await instance(doc, copy.id, clock).tick(), false);
+});
+
+test('MUL-12 une clé par table de vue, et un contenu inattendu ou un stockage refusé donnent un identifiant neuf', () => {
+  const session = fakeSession();
+  session.setItem('ab_executor_Contacts', 'aaaaaaaaaaaaaaaa');
+  assert.strictEqual(Executor.tabIdentity(() => session, 'ab_executor_Services', ids('dddddddddddddddd')).id, 'dddddddddddddddd');
+  session.setItem('ab_executor_Services', '<script>');
+  assert.strictEqual(Executor.tabIdentity(() => session, 'ab_executor_Services', ids('eeeeeeeeeeeeeeee')).id, 'eeeeeeeeeeeeeeee');
+  const refused = () => { throw new Error('SecurityError'); };
+  const identity = Executor.tabIdentity(refused, 'ab_executor_Contacts', ids('ffffffffffffffff'));
+  assert.strictEqual(identity.id, 'ffffffffffffffff');
+  assert.doesNotThrow(() => { identity.keep(); identity.forget(); });
+});
+
+test('MUL-13 une page revenue du cache de navigation efface l\'identifiant gardé : une copie faite ensuite n\'en hérite pas', () => {
+  const session = fakeSession();
+  const identity = Executor.tabIdentity(() => session, 'ab_executor_Contacts', ids('aaaaaaaaaaaaaaaa'));
+  identity.keep();
+  identity.forget();
+  assert.strictEqual(session.items.size, 0);
+});

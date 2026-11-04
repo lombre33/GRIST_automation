@@ -12,12 +12,31 @@ test('I18N-01 les deux langues ont exactement les mêmes clés', () => {
   assert.deepStrictEqual(Object.keys(I.DICT.fr).sort(), Object.keys(I.DICT.en).sort());
 });
 
-// Clés citées dans index.html et dans le code (hors js/i18n.js) : littéraux 'ns.clé' et préfixes dynamiques 'ns.' + ….
+test('I18N-07 les deux langues sont dans le même ordre, section par section (js/i18n-texts.js se relit en miroir)', () => {
+  assert.deepStrictEqual(Object.keys(I.DICT.en), Object.keys(I.DICT.fr));
+});
+
+// Les textes écrits en dur dans index.html, lisibles avant le démarrage des scripts (et par un audit qui lit la page sans l'exécuter) : ceux du français.
+test('I18N-08 les textes de index.html sont ceux du français de js/i18n-texts.js', () => {
+  const html = read('index.html');
+  const texts = [...html.matchAll(/data-i18n="([^"]+)"[^>]*>([^<]*)</g)].filter(([, , text]) => text !== '');
+  assert.ok(texts.length >= 8, `textes trouvés : ${texts.length}`);
+  for (const [, key, text] of texts) assert.strictEqual(text, I.DICT.fr[key], key);
+  const labels = [...html.matchAll(/data-i18n-label="([^"]+)" aria-label="([^"]+)" title="([^"]+)"/g)];
+  assert.strictEqual(labels.length, 3, 'les trois boutons à étiquette : Ajouter, journal, Réglages');
+  for (const [, key, label, title] of labels) {
+    assert.strictEqual(label, I.DICT.fr[key], key);
+    assert.strictEqual(title, I.DICT.fr[key], key);
+  }
+  assert.match(html, new RegExp(`id="toggle-active"[^>]*>${I.DICT.fr['toggle.activate']}<`), 'le bouton Activer, dont js/main.js tient le texte');
+});
+
+// Clés citées dans index.html et dans le code (hors js/i18n.js et js/i18n-texts.js) : littéraux 'ns.clé' et préfixes dynamiques 'ns.' + ….
 function usedKeys() {
   const namespaces = [...new Set(Object.keys(I.DICT.fr).map((key) => key.split('.')[0]))].join('|');
   const used = new Set();
   for (const match of read('index.html').matchAll(/data-i18n(?:-placeholder|-label)?="([^"]+)"/g)) used.add(match[1]);
-  const sources = fs.readdirSync(path.join(root, 'js')).filter((f) => f.endsWith('.js') && f !== 'i18n.js');
+  const sources = fs.readdirSync(path.join(root, 'js')).filter((f) => f.endsWith('.js') && f !== 'i18n.js' && f !== 'i18n-texts.js');
   for (const file of sources) {
     const code = read('js/' + file);
     for (const match of code.matchAll(new RegExp(`'((?:${namespaces})\\.\\w+)'`, 'g'))) used.add(match[1]);

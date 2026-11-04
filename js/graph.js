@@ -65,92 +65,115 @@
     graph.edges = graph.edges.filter((edge) => !(edge.from === from && edge.to === to));
   }
 
-  // Problèmes qui empêchent d'activer : retourne une liste de { key, node } (clés de i18n `issue.*`).
-  // context.currentTable (facultatif) : permet de repérer une mise à jour d'une autre table sans ligne cible.
-  function validate(graph, context) {
-    const currentTable = context && context.currentTable;
+  const blank = (value) => String(value).trim() === '';
+  const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;   // nom d'une valeur {nom} donnée par une transformation ou une lecture
+
+  // Ce que chaque type de nœud vérifie dans sa propre configuration : les clés `issue.*` des problèmes trouvés (false : rien à redire sur ce point).
+  // currentTable : la table de la vue, si elle est connue (une mise à jour d'une autre table doit dire quelle ligne elle vise).
+  const NODE_CHECKS = {
+    trigger: (config) => [
+      Boolean(config.targetColumn) && config.action !== 'update' && 'issue.triggerTarget',
+      Boolean(config.targetColumn) && config.action === 'update' && blank(config.targetValue) && 'issue.triggerTargetValue',
+    ],
+    condition: (config) => [config.checks.some((check) => !check.column) && 'issue.conditionColumn'],
+    transform: (config) => [(blank(config.a) || (!Types.UNARY.includes(config.op) && blank(config.b))) && 'issue.transformOperand'],
+    lookup: (config) => [(!config.matchColumn || !config.column || blank(config.matchValue)) && 'issue.lookupIncomplete'],
+    action: (config, currentTable) => {
+      const update = config.type === 'UpdateRecord';
+      const otherTable = Boolean(currentTable && config.table && config.table !== currentTable);
+      return [
+        !config.column && 'issue.actionColumn',
+        update && !config.matchColumn && otherTable && 'issue.actionMatch',
+        update && Boolean(config.matchColumn) && blank(config.matchValue) && 'issue.actionMatchValue',
+      ];
+    },
+  };
+
+  // Les valeurs {nom} des transformations et des lectures : chaque nom bien formé, et pris par un seul nœud.
+  function nameIssues(graph) {
     const issues = [];
-    const triggers = graph.nodes.filter((node) => node.type === 'trigger');
-    if (!triggers.length) issues.push({ key: 'issue.noTrigger' });
-    if (!graph.nodes.some((node) => node.type === 'action')) issues.push({ key: 'issue.noAction' });
-    for (const node of graph.nodes) {
-      if (node.type !== 'trigger' && !graph.edges.some((edge) => edge.to === node.id)) issues.push({ key: 'issue.notConnected', node: node.id });
-      if (node.type === 'condition' && node.config.checks.some((check) => !check.column)) issues.push({ key: 'issue.conditionColumn', node: node.id });
-      if (node.type === 'action' && !node.config.column) issues.push({ key: 'issue.actionColumn', node: node.id });
-      if (node.type === 'action' && node.config.type === 'UpdateRecord') {
-        const { table, matchColumn, matchValue } = node.config;
-        if (!matchColumn && currentTable && table && table !== currentTable) issues.push({ key: 'issue.actionMatch', node: node.id });
-        if (matchColumn && String(matchValue).trim() === '') issues.push({ key: 'issue.actionMatchValue', node: node.id });
-      }
-    }
     const names = new Set();
     for (const node of graph.nodes.filter((candidate) => candidate.type === 'transform' || candidate.type === 'lookup')) {
       const { name } = node.config;
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) || names.has(name)) issues.push({ key: 'issue.transformName', node: node.id });
+      if (!NAME.test(name) || names.has(name)) issues.push({ key: 'issue.transformName', node: node.id });
       names.add(name);
-      if (node.type === 'transform') {
-        const { op, a, b } = node.config;
-        if (String(a).trim() === '' || (!Types.UNARY.includes(op) && String(b).trim() === '')) issues.push({ key: 'issue.transformOperand', node: node.id });
-      } else if (!node.config.matchColumn || !node.config.column || String(node.config.matchValue).trim() === '') {
-        issues.push({ key: 'issue.lookupIncomplete', node: node.id });
-      }
-    }
-    for (const node of triggers) {
-      if (node.config.targetColumn && node.config.action !== 'update') issues.push({ key: 'issue.triggerTarget', node: node.id });
-      if (node.config.targetColumn && node.config.action === 'update' && String(node.config.targetValue).trim() === '') issues.push({ key: 'issue.triggerTargetValue', node: node.id });
-    }
-    if (triggers.length && !graph.nodes.some((node) => node.type === 'action' && triggers.some((t) => reaches(graph, t.id, node.id)))) {
-      if (graph.nodes.some((node) => node.type === 'action')) issues.push({ key: 'issue.noPath' });
     }
     return issues;
   }
 
+  // Problèmes qui empêchent d'activer : retourne une liste de { key, node } (clés de i18n `issue.*`), ceux du graphe entier d'abord, puis nœud par nœud.
+  // context.currentTable (facultatif) : permet de repérer une mise à jour d'une autre table sans ligne cible.
+  function validate(graph, context) {
+    const currentTable = context && context.currentTable;
+    const triggers = graph.nodes.filter((node) => node.type === 'trigger');
+    const actions = graph.nodes.filter((node) => node.type === 'action');
+    const issues = [];
+    if (!triggers.length) issues.push({ key: 'issue.noTrigger' });
+    if (!actions.length) issues.push({ key: 'issue.noAction' });
+    for (const node of graph.nodes) {
+      if (node.type !== 'trigger' && !graph.edges.some((edge) => edge.to === node.id)) issues.push({ key: 'issue.notConnected', node: node.id });
+      for (const key of NODE_CHECKS[node.type](node.config, currentTable)) if (key) issues.push({ key, node: node.id });
+    }
+    issues.push(...nameIssues(graph));
+    const reached = actions.some((action) => triggers.some((trigger) => reaches(graph, trigger.id, action.id)));
+    if (triggers.length && actions.length && !reached) issues.push({ key: 'issue.noPath' });
+    return issues;
+  }
+
   // Version 2 -> 3 : la condition unique devient une liste de vérifications (ET), sans lien « sinon ».
-  function migrate(data) {
-    if (data.version !== 2) return data;
-    for (const node of data.nodes) {
+  function migrate(saved) {
+    if (saved.version !== 2) return saved;
+    for (const node of saved.nodes) {
       if (node.type === 'condition' && node.config && !node.config.checks) {
         const { column, operator, value } = node.config;
         node.config = { join: 'and', checks: [{ column: column || '', operator: operator || 'eq', value: value === undefined ? '' : value }] };
       }
     }
-    data.version = VERSION;
-    return data;
+    saved.version = VERSION;
+    return saved;
   }
 
   // Lecture d'une configuration enregistrée : retourne un graphe valide ou null si illisible (version ou type de nœud inconnus, JSON abîmé).
   // Ce qui est inconnu dans un graphe lisible survit à l'enregistrement (règle 3 de GFS) : clés de la racine, attributs des nœuds, de leur config et des liens.
   function parse(text) {
-    let data;
-    try { data = JSON.parse(text); } catch (err) { return null; }
-    if (!data || (data.version !== VERSION && data.version !== 2) || !Array.isArray(data.nodes) || !Array.isArray(data.edges)) return null;
-    if (!data.nodes.every((node) => node && Types.TYPES[node.type] && typeof node.id === 'string' && node.config)) return null;
-    data = migrate(data);
-    const conditionsOk = data.nodes.every((node) => node.type !== 'condition' || (Array.isArray(node.config.checks) && node.config.checks.length > 0));
+    let saved;
+    try { saved = JSON.parse(text); } catch (err) { return null; }
+    if (!saved || (saved.version !== VERSION && saved.version !== 2) || !Array.isArray(saved.nodes) || !Array.isArray(saved.edges)) return null;
+    if (!saved.nodes.every((node) => node && Types.TYPES[node.type] && typeof node.id === 'string' && node.config)) return null;
+    saved = migrate(saved);
+    const conditionsOk = saved.nodes.every((node) => node.type !== 'condition' || (Array.isArray(node.config.checks) && node.config.checks.length > 0));
     if (!conditionsOk) return null;
-    const edges = data.edges.filter((edge) => nodeById(data, edge.from) && nodeById(data, edge.to) && Types.TYPES[nodeById(data, edge.from).type].branches.includes(edge.branch || 'then'));
-    const unknown = Object.fromEntries(Object.entries(data).filter(([key]) => !['version', 'active', 'nodes', 'edges'].includes(key)));
-    return { version: VERSION, active: Boolean(data.active), nodes: data.nodes, edges, ...unknown };
+    // Un lien vers un nœud absent, ou depuis une sortie que le nœud n'a pas, est laissé de côté (ce n'est pas une raison de refuser tout le graphe).
+    const edges = saved.edges.filter((edge) => nodeById(saved, edge.from) && nodeById(saved, edge.to) && Types.TYPES[nodeById(saved, edge.from).type].branches.includes(edge.branch || 'then'));
+    const unknown = Object.fromEntries(Object.entries(saved).filter(([key]) => !['version', 'active', 'nodes', 'edges'].includes(key)));
+    return { version: VERSION, active: Boolean(saved.active), nodes: saved.nodes, edges, ...unknown };
   }
+
+  // Une étape du résumé, par type de nœud : ce que fait le nœud, avec ses colonnes et ses valeurs (— : pas encore choisi). t : la traduction.
+  const DESCRIBE = {
+    trigger: (config, t) => `${t('node.trigger')} : ${t('trigger.' + config.action)}${config.column ? ' (' + config.column + ')' : ''}`
+      + (config.targetColumn ? ` ${t('sum.where')} ${config.targetColumn} = ${config.targetValue}` : ''),
+    lookup: (config, t) => `${t('node.lookup')} : {${config.name}} = ${config.table || '—'}.${config.column || '—'} (${t('sum.where')} ${config.matchColumn || '—'} = ${config.matchValue})`,
+    transform: (config, t) => `${t('node.transform')} : {${config.name}} = `
+      + (Types.UNARY.includes(config.op) ? `${t('tf.' + config.op)} (${config.a})` : `${config.a} ${t('tf.' + config.op)} ${config.b}`),
+    condition: (config, t) => {
+      const checks = config.checks.map((check) => `${check.column || '—'} ${t('op.' + check.operator)}${Types.needsValue(check) && check.value !== '' ? ' ' + check.value : ''}`);
+      return `${t('node.condition')} : ${checks.join(` ${t(config.join === 'or' ? 'sum.or' : 'sum.and')} `)}`;
+    },
+    action: (config, t) => {
+      const update = config.type === 'UpdateRecord';
+      return `${t('node.action')} : ${t(update ? 'act.update' : 'act.add')} ${config.table || '—'}.${config.column || '—'} = ${config.value}`
+        + (update && config.matchColumn ? ` (${t('sum.where')} ${config.matchColumn} = ${config.matchValue})` : '');
+    },
+  };
 
   // Résumé lisible d'un graphe (champ « Resume » de la table des workflows), une ligne par chemin déclencheur -> action.
   // t : fonction de traduction (clé, paramètres) : le texte écrit dans le document suit la langue de l'interface.
   function summarize(graph, t) {
-    const describe = (node) => {
-      const c = node.config;
-      if (node.type === 'trigger') return `${t('node.trigger')} : ${t('trigger.' + c.action)}${c.column ? ' (' + c.column + ')' : ''}${c.targetColumn ? ` ${t('sum.where')} ${c.targetColumn} = ${c.targetValue}` : ''}`;
-      if (node.type === 'lookup') return `${t('node.lookup')} : {${c.name}} = ${c.table || '—'}.${c.column || '—'} (${t('sum.where')} ${c.matchColumn || '—'} = ${c.matchValue})`;
-      if (node.type === 'transform') return `${t('node.transform')} : {${c.name}} = ${Types.UNARY.includes(c.op) ? `${t('tf.' + c.op)} (${c.a})` : `${c.a} ${t('tf.' + c.op)} ${c.b}`}`;
-      if (node.type === 'condition') {
-        const checks = c.checks.map((check) => `${check.column || '—'} ${t('op.' + check.operator)}${Types.needsValue(check) && check.value !== '' ? ' ' + check.value : ''}`);
-        return `${t('node.condition')} : ${checks.join(` ${t(c.join === 'or' ? 'sum.or' : 'sum.and')} `)}`;
-      }
-      return `${t('node.action')} : ${t(c.type === 'UpdateRecord' ? 'act.update' : 'act.add')} ${c.table || '—'}.${c.column || '—'} = ${c.value}${c.type === 'UpdateRecord' && c.matchColumn ? ` (${t('sum.where')} ${c.matchColumn} = ${c.matchValue})` : ''}`;
-    };
     const paths = [];
     const walk = (node, trail) => {
       const outgoing = graph.edges.filter((edge) => edge.from === node.id);
-      const here = trail.concat(describe(node));
+      const here = trail.concat(DESCRIBE[node.type](node.config, t));
       if (!outgoing.length) paths.push(here.join(' → '));
       for (const edge of outgoing) walk(nodeById(graph, edge.to), edge.branch === 'else' ? here.concat(t('branch.else')) : here);
     };
