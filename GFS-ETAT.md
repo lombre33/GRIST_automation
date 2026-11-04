@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-11-04, au commit `941eafd` (le dernier commit de code que cette page décrit).
+Mis à jour le 2026-11-04, au commit `3f7d45a` (le dernier commit de code que cette page décrit).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -11,12 +11,17 @@ Mis à jour le 2026-11-04, au commit `941eafd` (le dernier commit de code que ce
   - pour mémoire, règle 5 respectée : `document.referrer` n'est jamais lu ; une seule fonction, `widgetAddress()` (`js/main.js`), lit l'adresse de la page, pour l'afficher quand le widget est ouvert hors de Grist
   - ligne « Automation+ » du guide, relevé à `f5e4100` : juste, sauf « Premier client du kit » (colonne « Premier pas »), périmé depuis le 16/10 : c'est Form+ (cahier 4.5), Automation+ vient après Publipostage+ ; précision : `Auteur` est une formule déclenchée (à la création de la ligne), avec repli sans formule si Grist la refuse
 - 002 · faite · `e356021` · `LICENSE` ajouté, texte officiel de la GPL 3.0, SHA-256 `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986`
-- 003 · lue · la barre de GFS recouvre « Ajouter » (barre en haut) et le début du journal (barre en bas) ; rien ne change avant le lot qui prend le lien avec GFS du kit (guide 1.2, point 4) : `GfsLink.onBar` écartera alors la barre d'outils (haut) et le journal (bas), puis les menus et fenêtres se caleront sur la zone libre, jamais écrite en dur
+- 003 · faite · `3f7d45a` · la barre est lue par le lien du kit (`GfsLink.bar()` et `onBar`, `js/gfs.js`) et `js/keep-clear.js` laisse sa zone libre aux quatre bords, jamais écrite en dur : barre en haut, la barre d'outils se partage autour de la zone (à 700 × 400 le titre est coupé par « … ») ; barre en bas, le journal remonte du juste nécessaire ; le menu d'ajout, les listes et les bulles s'écartent (échelle du canevas comptée), une fenêtre trop haute se réduit dans le reste du cadre ; seule, rien ne change (BAR-01 à 06, E2E-36 à 44) ; la langue de GFS (guide 1.2, point 8) n'est pas dans ce lot : FR et EN restent actifs
 - 004 · faite · lue, aucun code · la clé `workflow` n'est écrite que sur un geste de la personne (modifier le graphe, l'activer, accepter la création de la table : `save` de `js/main.js`, appelé par `scheduleSave`), jamais au démarrage ni à l'ouverture de la vue ; à garder ainsi
 - 005 · faite · lue, aucun code · le site est publié à l'adresse indiquée, `https://lombre33.github.io/GRIST_automation/index.html`, entrée `index.html` à la racine, adresse inchangée (rien à reporter dans le catalogue) ; vu en ligne le 2026-11-02, mais il servait encore la 0.9.0 : voir le premier changement ci-dessous
-- 006 · lue · les cinq ambiances de GFS et la couleur de la personne arrivent par le lien avec GFS du kit ; rien ne change avant le lot qui le prend (le même que la 003) : le kit à `8afa569` ou plus récent, `Ambiance.start()` une fois dans `js/main.js` (ou `createAmbiance({ link: GfsLink, isDark })` si l'app garde sa clé `ab_theme`), les feuilles écrites avec les jetons ; les couleurs des nœuds (type, état) restent celles d'Automation+, contraste compris ; « 006 · faite » viendra avec les deux essais demandés
+- 006 · faite · `3f7d45a` · `createAmbiance({ link: GfsLink, isDark })` de `kit/js/ambiance-pose.js` (l'app garde sa clé `ab_theme`), démarré par `js/gfs.js` (module chargé dans `<head>`, pas dans `js/main.js` : la page attend l'ambiance, 2 s au plus, pour ne pas changer de couleurs sous les yeux) ; feuilles sur les jetons de couleur et de forme, valeurs d'origine dans `css/tokens.css`, fond `--bg` sur `body` (`min-height: 100vh`) avec `--wash` ; les deux essais : E2E-37 (message d'exemple du kit : fond, carte, bandeau, bouton plein en dégradé, clair et sombre, 4,5:1 ; `null` rend les couleurs de l'app) et HYG-07, 13 et 17 (aucune couleur en dur hors de `css/tokens.css`, exceptions écrites et justifiées : le rouge, l'ambre, le voile) ; mesuré aussi, hors dépôt, avec les messages que fabrique `prototype/js/ambiance.js` : les cinq ambiances et une couleur libre, clair et sombre, aucun texte sous 4,62:1
 
 ## Changements qui touchent GFS
+- 2026-11-04 · `3f7d45a` · la barre et l'ambiance de GFS suivies par le lien du kit (0.12.0) :
+  - nouveau : sous-module `kit/` (`https://github.com/lombre33/grist-factory-kit.git`, commit `db14544`, version 0.7.0, le même que GFS), publié avec le site (vérifié en ligne) ; un clone sans ses sous-modules ouvre l'app avec ses couleurs, 2 s au plus après (E2E-44) : cloner avec `--recursive`
+  - lectures de GFS en plus : le contexte et les événements `barre` et `ambiance`, par `window.parent` (le kit n'accepte un message que du cadre parent) ; l'app ne dit à GFS que la demande `contexte` (E2E-36) ; aucune action `ouvrir`, `choisir`, `insérer` ni `ranger`
+  - CSP inchangée : un module de plus, `js/gfs.js`, et ceux du kit qu'il importe, du même site, sans appel réseau (HYG-15 et 16) ; le kit pose les jetons sur `<html>` par le CSSOM
+  - table `Automation`, colonnes, clé `workflow`, stockage du navigateur (`ab_lang`, `ab_theme`) : rien ne change ; seule, l'app est celle de la 0.11.1 (E2E-36), sauf `--on-accent` à la place du blanc en dur
 - 2026-11-02 · `941eafd` · le site en ligne sert de nouveau la dernière version, la 0.11.1 : la publication de GitHub Pages échouait depuis le 21/10 (Jekyll refusait une accolade double non fermée dans un fichier de documentation), le site était resté à la 0.9.0 ; `.nojekyll` à la racine le fait publier les fichiers tels quels (test HYG-12) ; rien d'autre ne change : ni table, ni colonne, ni clé de réglages, ni adresse, ni bibliothèque, ni permission
 - 2026-10-21 · `6eb0165` · règles 3, 4 et 12 du guide corrigées (0.11.1), même table `Automation` et mêmes colonnes :
   - lectures en plus : `listTables` avant et après l'`AddTable` (identifiant réel), et une lecture de `Automation` au démarrage pour vérifier ses colonnes ; écritures inchangées (`AddRecord`, `UpdateRecord`, `AddTable`), mais jamais dans une colonne absente
@@ -34,7 +39,8 @@ Mis à jour le 2026-11-04, au commit `941eafd` (le dernier commit de code que ce
 - 2026-10-21 · `7dae9e3` · première table dans le document, avec l'accord de la personne : `Automation_Workflows` et `Automation_Logs`, `Auteur` en formule déclenchée (0.6.0)
 
 ## Questions pour GFS
-- aucune
+- le dépôt du kit n'a aucune étiquette alors que son README parle de la v0.7.0 : nous référençons le commit `db14544` (celui que GFS référence, `6a3e2bd`) ; une étiquette `v0.7.0` dessus permettrait de nommer la version sans ambiguïté, à vous de voir
+- types et états des nœuds (consigne 006, point 5) : le déclencheur (accent doux), l'action (accent plein) et les états du test à blanc (passé, action prévue) s'écrivent avec l'accent de la charte, donc suivent l'ambiance, contraste tenu par les paires de la règle 15 ; seuls le rouge de l'échec et l'ambre de l'avertissement (`--danger*`, `--warn-*`) sont à nous et ne bougent pas ; si vous attendez que le type reste bleu d'une ambiance à l'autre, dites-le : ce serait trois jetons de plus à nous, contraste à notre charge
 
 ## Demandes à GFS
 - aucune
