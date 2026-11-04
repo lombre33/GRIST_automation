@@ -25,6 +25,7 @@ const HEARTBEAT_MS = 6000;
 let tables = [];
 let tablesAvailable = false;   // la table Automation existe dans le document
 const columnsByTable = new Map();
+let showProblems = false;     // après un refus d'activer, ce qui manque reste montré sur les nœuds jusqu'à ce que tout soit réglé
 
 // Grist dit dans l'adresse du cadre le niveau d'accès accordé au widget (access : none, read table ou full) et si la personne peut modifier le document (readonly).
 // Sans ces paramètres (une version de Grist qui ne les donne pas), on fait comme avant : accès complet, modification permise.
@@ -61,7 +62,20 @@ async function loadColumns(table) {
   return columnsByTable.get(table);
 }
 
-const schema = { currentTable: () => tableId, tables: () => tables, columns: loadColumns };
+// Le type d'une colonne, 'Ref:Table1' par exemple ('' s'il n'est pas lisible), lu dans les tables de métadonnées de Grist à chaque demande :
+// le canevas s'en sert quand on choisit une colonne clé, pour reconnaître une Référence vers la table de la vue (js/canvas-fields.js, suggestKey).
+async function columnType(table, column) {
+  try {
+    const [metaTables, metaColumns] = await Promise.all([grist.docApi.fetchTable('_grist_Tables'), grist.docApi.fetchTable('_grist_Tables_column')]);
+    const parent = metaTables.id[metaTables.tableId.indexOf(table)];
+    const index = metaColumns.id.findIndex((id, at) => metaColumns.parentId[at] === parent && metaColumns.colId[at] === column);
+    return index < 0 ? '' : String(metaColumns.type[index]);
+  } catch (err) {
+    return '';
+  }
+}
+
+const schema = { currentTable: () => tableId, tables: () => tables, columns: loadColumns, columnType };
 
 async function loadSchema() {
   tables = (await grist.docApi.listTables()).filter((name) => !Store.isOwnTable(name));
@@ -290,19 +304,39 @@ function startExecutor() {
   heartbeat = setInterval(electExecutor, HEARTBEAT_MS);
 }
 
+// Ce qui manque au workflow (Graph.validate) : montré sur les nœuds quand il est actif, chaque exécution échouant alors, ou après un refus d'activer.
+function currentIssues() {
+  if (readOnly || locked || (!graph.active && !showProblems)) return [];
+  const issues = Graph.validate(graph, { currentTable: tableId });
+  if (!issues.length) showProblems = false;
+  return issues;
+}
+
+const issueText = (issue) => t(issue.key, { node: issue.node ? canvas.nodeLabel(issue.node) : '' });
+// Sur le nœud lui-même, son nom en tête du message est de trop : « Action » : choisissez… devient Choisissez…
+const onNode = (text) => text.replace(/^(« [^»]* »|"[^"]*")\s*:?\s*/, '').replace(/^./, (first) => first.toUpperCase());
+
 function refreshState() {
   const active = graph.active;
   $('toggle-active').textContent = t(active ? 'toggle.deactivate' : 'toggle.activate');
   $('toggle-active').setAttribute('aria-pressed', String(active));
+  const issues = currentIssues();
+  canvas.showIssues(issues.filter((issue) => issue.node).map((issue) => ({ node: issue.node, text: onNode(issueText(issue)) })));
   const standby = active && executor && !executor.isExecutor() && executor.holder() !== '';
-  $('open-tab-warning').hidden = !active || readOnly;   // en lecture seule, cet onglet n'exécute jamais : le bandeau de lecture seule le dit
-  $('open-tab-warning').dataset.i18n = standby ? 'app.otherTab' : 'app.openTab';
-  $('open-tab-warning').textContent = t(standby ? 'app.otherTab' : 'app.openTab');
+  const key = active && issues.length ? 'app.incomplete' : standby ? 'app.otherTab' : 'app.openTab';
+  const warning = $('open-tab-warning');
+  warning.hidden = !active || readOnly;   // en lecture seule, cet onglet n'exécute jamais : le bandeau de lecture seule le dit
+  warning.classList.toggle('is-danger', key === 'app.incomplete');
+  // Le bandeau d'un workflow incomplet cite le premier problème : sans data-i18n, I18n.apply ne l'efface pas (langchange le récrit ici).
+  if (key === 'app.incomplete') delete warning.dataset.i18n;
+  else warning.dataset.i18n = key;
+  warning.textContent = t(key, { issue: issues.length ? issueText(issues[0]) : '' });
   canvas.setActive(active);
 }
 
 function onGraphChange() {
   scheduleSave();
+  if (graph.active || showProblems) refreshState();
 }
 
 /* ---------- Exécution ---------- */
@@ -311,6 +345,7 @@ async function handleEvents(events) {
   for (const event of events) {
     if (!echo.allowRun(event.rowId)) {
       addLog(t('log.loopStopped', { row: event.rowId }));
+      markErrors(true);
       continue;
     }
     let expected = null;
@@ -320,8 +355,11 @@ async function handleEvents(events) {
     });
     if (result.status === 'error' && expected !== null) echo.cancel(expected);
     if (result.status === 'skipped' || result.status === 'condition-false') continue;
-    const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : '');
+    // Réussi sans rien écrire : « toutes les lignes trouvées » n'en a trouvé aucune, ce que le journal dit.
+    const nothing = result.status === 'success' && !result.effects.length ? ' — ' + t('result.noRow') : '';
+    const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : nothing);
     addLog(t('log.event', { event: t('event.' + result.event), row: result.rowId, status }));
+    if (result.status === 'error') markErrors(true);
     await recordRun(result);
   }
 }
@@ -352,15 +390,17 @@ async function dryRun() {
   canvas.showTrace(result.trace);
   const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : '');
   addLog(t('log.dryRun', { row: record.id, status, n: result.effects.length }) + ' ' + JSON.stringify(result.effects));
+  if (result.status === 'error') markErrors(true);
 }
 
 async function toggleActive() {
   if (!graph.active) {
     const issues = Graph.validate(graph, { currentTable: tableId });
     if (issues.length) {
-      $('logs').hidden = false;
-      $('toggle-logs').setAttribute('aria-pressed', 'true');
-      for (const issue of issues) addLog(t('log.cannotActivate', { issue: t(issue.key, { node: issue.node ? canvas.nodeLabel(issue.node) : '' }) }));
+      showLogs(true);
+      for (const issue of issues) addLog(t('log.cannotActivate', { issue: issueText(issue) }));
+      showProblems = true;
+      refreshState();
       return;
     }
     if (!(await ensureStore())) addLog(t('log.noTables'));
@@ -373,10 +413,24 @@ async function toggleActive() {
   await electExecutor();
 }
 
+function showLogs(visible) {
+  $('logs').hidden = !visible;
+  $('toggle-logs').setAttribute('aria-pressed', String(visible));
+  if (visible) markErrors(false);
+}
+
 function toggleLogs() {
-  const logs = $('logs');
-  logs.hidden = !logs.hidden;
-  $('toggle-logs').setAttribute('aria-pressed', String(!logs.hidden));
+  showLogs($('logs').hidden);
+}
+
+// Une erreur arrivée journal fermé : un point sur le bouton du journal, que son nom dit aussi, jusqu'à ce qu'on l'ouvre.
+function markErrors(on) {
+  const button = $('toggle-logs');
+  const key = on && $('logs').hidden ? 'logs.toggleErrors' : 'logs.toggle';
+  button.classList.toggle('has-news', key === 'logs.toggleErrors');
+  button.dataset.i18nLabel = key;
+  button.setAttribute('aria-label', t(key));
+  button.title = t(key);
 }
 
 /* ---------- Réglages et crédits ---------- */

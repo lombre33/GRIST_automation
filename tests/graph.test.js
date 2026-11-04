@@ -258,7 +258,7 @@ test('GRAPH-21 déclencheur à ligne précise : réservé à la modification, va
   assert.deepStrictEqual(keys(), ['issue.triggerTarget']);
 });
 
-test('GRAPH-22 résumé lisible : lecture et ligne précise', () => {
+test('GRAPH-22 résumé lisible : recherche et filtre du déclencheur', () => {
   const g = G.create();
   const t = G.addNode(g, 'trigger', 0, 0);
   const l = G.addNode(g, 'lookup', 0, 0);
@@ -269,7 +269,7 @@ test('GRAPH-22 résumé lisible : lecture et ligne précise', () => {
   G.connect(g, l.id, a.id);
   const text = G.summarize(g, (k, p) => require('../js/i18n.js').translate(k, p, 'fr'));
   assert.match(text, /où Cle = k1/);
-  assert.match(text, /Lecture : \{valeur\} = Services\.Seuil \(où Nom = \{Nom\}\)/);
+  assert.match(text, /Recherche : \{valeur\} = Services\.Seuil \(où Nom = \{Nom\}\)/);
 });
 
 test('GRAPH-23 largeur d\'un nœud (w) : bornée, ignorée si illisible, gardée par la relecture', () => {

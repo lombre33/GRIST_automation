@@ -23,7 +23,7 @@ test('I18N-08 les textes de index.html sont ceux du français de js/i18n-texts.j
   assert.ok(texts.length >= 8, `textes trouvés : ${texts.length}`);
   for (const [, key, text] of texts) assert.strictEqual(text, I.DICT.fr[key], key);
   const labels = [...html.matchAll(/data-i18n-label="([^"]+)" aria-label="([^"]+)" title="([^"]+)"/g)];
-  assert.strictEqual(labels.length, 3, 'les trois boutons à étiquette : Ajouter, journal, Réglages');
+  assert.strictEqual(labels.length, 4, 'les quatre boutons à étiquette : Ajouter, Tester, journal, Réglages');
   for (const [, key, label, title] of labels) {
     assert.strictEqual(label, I.DICT.fr[key], key);
     assert.strictEqual(title, I.DICT.fr[key], key);
@@ -61,11 +61,11 @@ test('I18N-06 aucune clé inutilisée (pas de texte mort)', () => {
 test('I18N-03 pluriels : 0 et 1 au singulier en français, seul 1 en anglais', () => {
   const fr = (n) => I.translate('log.dryRun', { row: 1, status: 'x', n }, 'fr');
   const en = (n) => I.translate('log.dryRun', { row: 1, status: 'x', n }, 'en');
-  assert.match(fr(0), /0 effet$/);
-  assert.match(fr(1), /1 effet$/);
-  assert.match(fr(2), /2 effets$/);
-  assert.match(en(0), /0 effects$/);
-  assert.match(en(1), /1 effect$/);
+  assert.match(fr(0), /0 écriture prévue$/);
+  assert.match(fr(1), /1 écriture prévue$/);
+  assert.match(fr(2), /2 écritures prévues$/);
+  assert.match(en(0), /0 planned writes$/);
+  assert.match(en(1), /1 planned write$/);
 });
 
 test('I18N-04 langue au premier lancement', () => {

@@ -1,7 +1,7 @@
 // Les champs d'un nœud du canevas (js/canvas.js) : une ligne par champ que son type déclare (js/nodes.js), et la liste des vérifications d'une condition.
 // Les listes qui dépendent du document (colonnes de la table de la vue, tables, colonnes de la table cible) se remplissent après coup, une fois le schéma lu :
 // leur choix enregistré reste dans le graphe même si la colonne n'existe plus, la liste le montre alors vide.
-// cv : l'état du canevas (Canvas.create) ; entry : ce que le canevas garde d'un nœud { node, element, body, pickers, selects, inputs, checksBox, checkViews }.
+// cv : l'état du canevas (Canvas.create) ; entry : ce que le canevas garde d'un nœud { node, element, body, pickers, selects, inputs, viewTable, checksBox, checkViews }.
 // Chaque saisie modifie la configuration du nœud puis appelle cv.changed() : le canevas efface le test à blanc affiché et prévient js/main.js, qui enregistre.
 (function (root) {
   'use strict';
@@ -56,10 +56,15 @@
     return line;
   }
 
-  function control(tag, line, id) {
+  // placeholderKey : l'exemple grisé d'un champ libre, qui suit la langue (data-i18n-placeholder).
+  function control(tag, line, id, placeholderKey) {
     const element = make(tag, '', line);
     element.id = id;
     if (tag === 'input') element.type = 'text';
+    if (placeholderKey) {
+      element.dataset.i18nPlaceholder = placeholderKey;
+      element.placeholder = t(placeholderKey);
+    }
     return element;
   }
 
@@ -73,7 +78,7 @@
     const view = {
       column: control('select', labelledRow(group, id('column'), 'cond.column'), id('column')),
       operator: control('select', labelledRow(group, id('operator'), 'cond.operator'), id('operator')),
-      value: control('input', labelledRow(group, id('value'), 'cond.value'), id('value')),
+      value: control('input', labelledRow(group, id('value'), 'cond.value'), id('value'), 'ph.condValue'),
     };
     fillSelect(view.operator, NodeTypes.OPERATORS.map(([value, key]) => [value, t(key), key]));
     view.operator.value = check.operator;
@@ -118,7 +123,7 @@
     });
   }
 
-  // Un champ déclaré par le type du nœud : 'checks' (les vérifications), 'text' (saisie libre), ou une liste : 'choice' (fixe), 'column', 'table', 'targetColumn'
+  // Un champ déclaré par le type du nœud : 'checks' (les vérifications), 'text' (saisie libre), 'viewTable' (la table de la vue, sans choix), ou une liste : 'choice' (fixe), 'column', 'table', 'targetColumn'
   // (remplies par refreshSchema et refreshTargetColumns).
   function fieldRow(cv, entry, spec) {
     if (spec.kind === 'checks') {
@@ -129,8 +134,14 @@
     const config = entry.node.config;
     const inputId = `${entry.node.id}-${spec.key}`;
     const line = labelledRow(entry.body, inputId, spec.labelKey);
+    if (spec.kind === 'viewTable') {
+      entry.viewTable = make('output', 'node-static', line);
+      entry.viewTable.id = inputId;
+      entry.viewTable.textContent = cv.schema.currentTable() || '—';
+      return;
+    }
     if (spec.kind === 'text') {
-      const input = control('input', line, inputId);
+      const input = control('input', line, inputId, spec.placeholderKey);
       input.value = config[spec.key] || '';
       input.addEventListener('input', () => { config[spec.key] = input.value; cv.changed(); });
       entry.inputs[spec.key] = input;
@@ -140,18 +151,29 @@
     entry.selects[spec.key] = select;
     if (spec.kind === 'choice') {
       fillSelect(select, spec.choices.map(([value, key]) => [value, t(key), key]));
-      select.value = config[spec.key];
+      select.value = config[spec.key] === undefined && spec.fallback ? spec.fallback : config[spec.key];
     }
     entry.pickers[spec.key] = SearchSelect.attach(select);
     select.addEventListener('change', () => {
       config[spec.key] = select.value;
       if (spec.key === 'table') refreshTargetColumns(cv, entry);
+      if (spec.key === 'matchColumn') suggestKey(cv, entry);
       syncDisabled(cv, entry);
       cv.changed();
     });
   }
 
-  // Grise les champs sans objet (disabledWhen du type : une ligne précise pour une création, la valeur B d'une opération à une valeur…).
+  // Une colonne Référence vers la table de la vue garde le numéro de la ligne visée : sa valeur cherchée, si elle est vide, devient {id}.
+  async function suggestKey(cv, entry) {
+    const { config } = entry.node;
+    const type = cv.schema.columnType ? await cv.schema.columnType(config.table || cv.schema.currentTable(), config.matchColumn) : '';
+    if (type !== 'Ref:' + cv.schema.currentTable() || String(config.matchValue || '').trim() !== '') return;
+    config.matchValue = '{id}';
+    entry.inputs.matchValue.value = '{id}';
+    cv.changed();
+  }
+
+  // Grise et cache les champs sans objet (disabledWhen du type : le filtre du déclencheur pour une création, la valeur B d'une opération à une valeur…).
   // En lecture seule, tous les contrôles du nœud sont grisés : on voit la configuration, on ne la change pas.
   function syncDisabled(cv, entry) {
     for (const spec of NodeTypes.TYPES[entry.node.type].fields) {
@@ -159,6 +181,7 @@
       const field = entry.inputs[spec.key] || entry.selects[spec.key];
       if (!field) continue;   // champ pas encore construit (la liste des vérifications précède « Combiner »)
       field.disabled = spec.disabledWhen(entry.node.config);
+      field.closest('.node-row').hidden = field.disabled;   // sans objet : ni montré ni rempli (le nœud reste court), il revient quand il sert
       if (entry.pickers[spec.key]) entry.pickers[spec.key].refresh();
     }
     if (!cv.readOnly || !entry.element) return;
@@ -167,7 +190,7 @@
     for (const view of entry.checkViews || []) Object.values(view.pickers).forEach((picker) => picker.refresh());
   }
 
-  // Colonnes de la table cible d'une action ou d'une lecture, pour les listes « Ligne repérée par » et « Colonne ».
+  // Colonnes de la table cible d'une action ou d'une recherche, pour les listes « Repérer par la colonne », « Colonne à lire » et « Colonne à remplir ».
   async function refreshTargetColumns(cv, entry) {
     if (entry.node.type !== 'action' && entry.node.type !== 'lookup') return;
     const table = entry.node.config.table || cv.schema.currentTable();
@@ -185,6 +208,7 @@
   async function refreshSchema(cv) {
     const currentColumns = cv.schema.currentTable() ? await cv.schema.columns(cv.schema.currentTable()) : [];
     for (const entry of cv.views.values()) {
+      if (entry.viewTable) entry.viewTable.textContent = cv.schema.currentTable() || '—';
       if (entry.checkViews) await fillCheckColumns(cv, entry);
       for (const spec of NodeTypes.TYPES[entry.node.type].fields) {
         const select = entry.selects[spec.key];

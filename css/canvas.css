@@ -27,9 +27,16 @@
 .node-action .node-head button { color: var(--on-accent); border-color: transparent; background: transparent; }
 .node-delete { width: 24px; min-height: 24px; border-color: transparent; background: transparent; }
 .node-body { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 5px; }
-.node-row { display: grid; grid-template-columns: 4.9em 1fr; align-items: center; gap: 6px; }
+/* Un champ : son libellé au-dessus, le contrôle sur toute la largeur (les libellés disent ce qu'ils attendent, les choix se lisent en entier) ;
+   dans une vérification de condition, libellés courts à gauche. */
+.node-row { display: flex; flex-direction: column; gap: 2px; }
+.check .node-row { display: grid; grid-template-columns: 4.9em 1fr; align-items: center; gap: 6px; }
 .node-row > label { color: var(--text-muted); font-family: var(--font-label); letter-spacing: var(--ls-label); font-size: 12px; }
+.node-static { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .node-state { padding: 3px 10px; border-top: 1px solid var(--border); font-size: 12px; font-weight: 600; border-radius: 0 0 var(--radius-md) var(--radius-md); }
+/* Ce qui manque au nœud, quand le workflow est actif ou que l'activation vient d'être refusée (js/main.js, currentIssues) ; un test à blanc garde ses couleurs. */
+.node.has-issue { border-color: var(--danger); }
+.node-issue { padding: 4px 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--danger-ink); white-space: pre-line; }
 .trace-passed { border-color: var(--accent); }
 .trace-passed .node-state { background: var(--accent-soft); color: var(--accent-ink); }
 .trace-blocked { border-style: dashed; }
@@ -55,7 +62,9 @@
 .canvas.is-resizing, .canvas.is-resizing * { cursor: ew-resize; }
 .canvas.is-readonly .node-grip { display: none; }
 
-.add-menu { position: absolute; width: 190px; z-index: var(--z-menu); }
+.add-menu { position: absolute; width: 280px; max-width: 100%; z-index: var(--z-menu); }
+/* Chaque type dit ce qu'il fait (« Action : écrire dans une table ») : le texte entier, sur deux lignes s'il le faut. */
+.add-menu .ss-options li { white-space: normal; }
 
 /* Condition : vérifications empilées, et deux sorties « oui » / « sinon » en pied de nœud. */
 .checks { display: flex; flex-direction: column; gap: 6px; }

@@ -8,7 +8,7 @@
 
   // Une valeur de colonne (a) se compare comme elle est rangée : un texte ou une case au texte tapé (text), un nombre ou une liste à la valeur
   // saisie, lue comme un nombre si elle en a l'air (value). Ainsi un texte « 01000 » vaut 01000 tapé (qui se lirait sinon 1000), une case vaut
-  // true ou false. Sert aux conditions, à la ligne précise du déclencheur et aux colonnes clés ; « supérieur » et « inférieur » restent sans coercition (COND-05).
+  // true ou false. Sert aux conditions, au filtre du déclencheur et aux colonnes clés ; « supérieur » et « inférieur » restent sans coercition (COND-05).
   const matches = (a, value, text) => (typeof a === 'string' || typeof a === 'boolean' ? String(a) === text : looselyEqual(a, value));
 
   const OPERATORS = {
@@ -19,6 +19,7 @@
     contains: (a, b, text) => typeof a === 'string' && a.includes(text),
     empty: (a) => a === null || a === undefined || a === '',
     notEmpty: (a) => !(a === null || a === undefined || a === ''),
+    checked: (a) => a === true, unchecked: (a) => a !== true,   // case à cocher : une case vide (null) n'est pas cochée
   };
 
   function snapshot(records) {
@@ -80,7 +81,7 @@
   }
 
   function evalCondition(cond, event, vars) {
-    if (!cond || !cond.column) throw new Error('Condition incomplète : aucune colonne');
+    if (!cond || !cond.column) throw new Error('Condition incomplète : aucune colonne choisie');
     const op = OPERATORS[cond.operator];
     if (!op) throw new Error('Opérateur inconnu : ' + cond.operator);
     if (!event.record) throw new Error('Condition impossible sans contenu de ligne');
@@ -145,18 +146,20 @@
 
   // Écriture prévue par un nœud action, sans l'exécuter (utilisée par le dry-run).
   function planAction(config, event, currentTable, vars) {
-    if (!config.column) throw new Error('Action incomplète : aucune colonne');
+    if (!config.column) throw new Error('Action incomplète : aucune colonne à remplir');
     const values = { [config.column]: resolveTemplate(config.value, event, vars || {}) };
     const table = config.table || currentTable;
     if (config.type === 'UpdateRecord' && config.matchColumn) {
       // Ligne repérée par une colonne clé : l'identifiant est cherché dans la table avant l'écriture (resolveTargets).
       const match = { column: config.matchColumn, value: resolveTemplate(config.matchValue, event, vars || {}) };
       // Le texte tel que tapé sert à la recherche (un texte « 01000 ») sans s'ajouter à ce que le journal montre de l'écriture prévue.
+      // all (« Si plusieurs lignes : toutes les modifier ») : de même, hors du journal ; resolveTargets en fait une écriture par ligne trouvée.
       Object.defineProperty(match, 'text', { value: resolveTemplate(config.matchValue, event, vars || {}, true) });
+      Object.defineProperty(match, 'all', { value: config.many === 'all' });
       return { type: 'UpdateRecord', table, rowId: null, values, match };
     }
     if (config.type === 'UpdateRecord') {
-      if (table !== currentTable) throw new Error('Mise à jour d\'une autre table : indiquez la colonne qui repère la ligne');
+      if (table !== currentTable) throw new Error('Modification d\'une autre table : choisissez « Repérer par la colonne »');
       return { type: 'UpdateRecord', table, rowId: event.rowId, values };
     }
     if (config.type === 'AddRecord') return { type: 'AddRecord', table, values };
@@ -164,7 +167,7 @@
   }
 
 
-  // Lecture d'une table (une seule fois par exécution) et recherche de l'unique ligne dont `column` vaut `value`.
+  // Lecture d'une table (une seule fois par exécution) et recherche des lignes dont `column` vaut `value`.
   async function readTable(ctx, table) {
     if (!ctx.api.fetchTable) throw new Error('Lecture de la table impossible');
     if (!ctx.tables.has(table)) ctx.tables.set(table, await ctx.api.fetchTable(table));
@@ -176,23 +179,29 @@
     return (data.id || []).map((id, index) => index).filter((index) => matches(data[column][index], value, text));
   }
 
-  function findOne(data, table, column, value, text) {
+  function findKeyed(data, table, column, value, text, all) {
+    // Exactement une ligne ; avec all, toutes celles qu'il y a, aucune comprise. Une colonne Référence garde le numéro de la ligne visée :
+    // un texte n'y trouve jamais rien, ce que le message dit, même avec all (sans quoi rien ne se passerait, sans un mot).
     const found = findRows(data, table, column, value, text);
-    if (found.length === 0) throw new Error('Ligne introuvable dans ' + table + ' : ' + column + ' = ' + display(value));
-    if (found.length > 1) throw new Error('Plusieurs lignes dans ' + table + ' pour ' + column + ' = ' + display(value));
-    return found[0];
+    const numbers = data[column].length > 0 && data[column].every(Number.isInteger);
+    const hint = typeof value === 'string' && numbers ? ' (si c\'est une colonne Référence, elle garde le numéro de la ligne : essayez {id})' : '';
+    if (found.length === 0 && (!all || hint)) throw new Error('Ligne introuvable dans ' + table + ' : ' + column + ' = ' + display(value) + hint);
+    if (found.length > 1 && !all) throw new Error('Plusieurs lignes dans ' + table + ' pour ' + column + ' = ' + display(value));
+    return found;
   }
 
-  // Cherche l'identifiant des lignes repérées par une clé (lecture seule, aussi en test à blanc).
+  // Cherche l'identifiant des lignes repérées par une clé (lecture seule, aussi en test à blanc) ; avec match.all, une écriture par ligne trouvée, aucune s'il n'y en a pas.
   async function resolveTargets(effects, ctx) {
-    for (const effect of effects) {
+    for (const effect of effects.slice()) {
       if (!effect.match) continue;
       const columns = await readTable(ctx, effect.table);
-      effect.rowId = columns.id[findOne(columns, effect.table, effect.match.column, effect.match.value, effect.match.text)];
+      const { column, value, text, all } = effect.match;
+      const rows = findKeyed(columns, effect.table, column, value, text, all).map((index) => columns.id[index]);
+      effects.splice(effects.indexOf(effect), 1, ...rows.map((rowId) => Object.assign({}, effect, { rowId })));
     }
   }
 
-  // Valeur lue par un nœud Lecture : une cellule d'une autre table, repérée par une clé.
+  // Valeur lue par un nœud Recherche (type lookup) : une cellule d'une autre table, repérée par une clé.
   async function applyLookup(config, event, vars, currentTable, ctx) {
     const table = config.table || currentTable;
     const columns = await readTable(ctx, table);
@@ -200,7 +209,7 @@
     const text = resolveTemplate(config.matchValue, event, vars, true);
     const found = findRows(columns, table, config.matchColumn, key, text);
     if (found.length === 0 && config.onMissing === 'empty') return '';
-    const index = findOne(columns, table, config.matchColumn, key, text);
+    const [index] = findKeyed(columns, table, config.matchColumn, key, text);
     if (!Object.prototype.hasOwnProperty.call(columns, config.column)) throw new Error('Colonne inconnue dans ' + table + ' : ' + config.column);
     return columns[config.column][index];
   }
@@ -214,7 +223,7 @@
   // Parcourt le graphe depuis un déclencheur. Une condition suit sa sortie « oui » quand elle est vraie, sa sortie « sinon » sinon.
   // trace : état de chaque nœud atteint ('passed', 'else', 'blocked', 'action'), pour l'affichage du dry-run.
   // 'blocked' : condition fausse sans lien « sinon » ; 'else' : condition fausse, la branche « sinon » est suivie.
-  // ctx : { api, tables, currentTable, trace, plan } ; vars : variables des nœuds Lecture et Transformation en amont.
+  // ctx : { api, tables, currentTable, trace, plan } ; vars : variables des nœuds Recherche et Transformation en amont.
   async function walk(graph, node, event, ctx, branch, vars) {
     for (const edge of graph.edges) {
       if (edge.from !== node.id || (edge.branch || 'then') !== (branch || 'then')) continue;
@@ -259,7 +268,7 @@
         return result;
       }
       await resolveTargets(result.effects, ctx);
-      if (!dryRun) {
+      if (!dryRun && result.effects.length) {
         if (options.beforeApply) options.beforeApply(result.effects);
         await api.applyUserActions(result.effects.map(toUserAction));
       }

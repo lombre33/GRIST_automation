@@ -8,17 +8,17 @@ Widget Grist d'automatisation sans code : quand une ligne est créée, modifiée
 
 On dessine un graphe de nœuds reliés, pour la table de la vue :
 
-- **Déclencheur** : une ligne est créée, modifiée ou supprimée ; pour une modification, on peut surveiller une colonne, ou une seule ligne repérée par une clé.
-- **Condition** : une ou plusieurs vérifications (colonne, opérateur, valeur) reliées par ET ou par OU, avec une sortie « Oui » et une sortie « Sinon ». Plusieurs conditions à la suite valent un ET. Un texte ou une case à cocher se compare au texte tapé (un code `01000`, `true` ou `false` pour une case), un nombre au nombre tapé.
-- **Lecture** : va chercher une cellule d'une autre table (ligne repérée par une clé) et la rend disponible sous `{nom}`, par exemple le seuil d'un service pour le comparer à un montant.
+- **Déclencheur** : une ligne de la table de la vue (le nœud l'affiche, « Table surveillée ») est créée, modifiée ou supprimée ; pour une modification, on peut surveiller une colonne (une modification de cette colonne suffit à lancer la suite, sans Condition), et filtrer les lignes (« Filtrer sur la colonne », « Valeur attendue »).
+- **Condition** : une ou plusieurs vérifications (colonne, opérateur, valeur) reliées par ET ou par OU, avec une sortie « Oui » et une sortie « Sinon ». Plusieurs conditions à la suite valent un ET. Une case à cocher a ses opérateurs, « est coché » et « n'est pas coché » ; un texte se compare au texte tapé (un code `01000`), un nombre au nombre tapé.
+- **Recherche** (appelée Lecture jusqu'à la 0.15.0) : va chercher une cellule d'une autre table (ligne repérée par une colonne et la valeur cherchée) et la rend disponible sous `{nom}`, par exemple le seuil d'un service pour le comparer à un montant.
 - **Transformation** : calcule une valeur (accoler deux textes, + − × ÷, majuscules, minuscules, espaces retirés) et la rend disponible sous `{nom}`.
-- **Action** : ajoute une ligne, ou met à jour une ligne, dans la table de la vue ou dans une autre (la ligne est alors repérée par une colonne clé). Les valeurs acceptent `{Colonne}` et les `{nom}` des nœuds précédents.
+- **Action** : ajoute une ligne, ou modifie des lignes, dans la table de la vue ou dans une autre. Les lignes à modifier sont « la même ligne », ou celles qu'une colonne repère (« Repérer par la colonne », « Valeur cherchée ») ; s'il y en a plusieurs, une nouvelle Action les modifie toutes (« Si plusieurs lignes », une Action d'avant la 0.16.0 s'arrête en erreur). Pour une colonne Référence vers la table de la vue, la valeur cherchée se remplit seule avec `{id}`, le numéro de la ligne qui a déclenché. Les valeurs acceptent `{Colonne}` et les `{nom}` des nœuds précédents.
 
-Exemple : « quand le Statut d'un projet passe à Clos, ajouter une ligne dans Archive avec le nom du projet ».
+Exemples : « quand le Statut d'un projet passe à Clos, ajouter une ligne dans Archive avec le nom du projet » ; « quand la case d'un projet change, mettre 2 dans la colonne B de toutes ses tâches » (un Déclencheur sur la case, une Action sur les Tâches repérées par leur colonne Référence Projet, sans Condition).
 
-Sur le canevas : clic droit sur le fond (ou « Ajouter ») pour un nœud ; un lien se tire de la sortie d'un nœud jusqu'à l'entrée d'un autre, et, lâché sur le fond, il ouvre le menu d'ajout : le nœud choisi s'y pose, déjà relié. La largeur d'un nœud se règle en tirant son bord droit (au clavier, Maj + flèches gauche et droite sur son titre ; double-clic sur le bord pour la largeur d'origine) ; elle est gardée avec le workflow. La molette zoome, un glisser du fond déplace la vue.
+Sur le canevas : clic droit sur le fond (ou « Ajouter ») pour un nœud, le menu disant ce que fait chacun ; chaque champ a son libellé au-dessus de lui, un exemple grisé quand il est libre, et un champ sans objet (la valeur cherchée d'une Action qui ajoute une ligne) est caché ; un deuxième nœud du même type est numéroté (« Action 2 ») ; un lien se tire de la sortie d'un nœud jusqu'à l'entrée d'un autre, et, lâché sur le fond, il ouvre le menu d'ajout : le nœud choisi s'y pose, déjà relié. La largeur d'un nœud se règle en tirant son bord droit (au clavier, Maj + flèches gauche et droite sur son titre ; double-clic sur le bord pour la largeur d'origine) ; elle est gardée avec le workflow. La molette zoome, un glisser du fond déplace la vue.
 
-« Tester » simule le graphe sur la ligne sélectionnée dans Grist (sinon la première de la vue), sans rien écrire, et montre l'état de chaque nœud. « Activer » refuse tant que le graphe est incomplet et dit pourquoi dans le journal. Interface en français et en anglais, thèmes clair et sombre, pensée pour un panneau de 700 × 400 px.
+« Tester » simule le graphe sur la ligne sélectionnée dans Grist (sinon la première de la vue), sans rien écrire, et montre l'état de chaque nœud. « Activer » refuse tant que le graphe est incomplet : le journal dit pourquoi, et chaque nœud concerné passe en rouge avec ce qui lui manque. Un workflow actif rendu incomplet le montre de même, et le bandeau le dit (« Automation active mais incomplète »). Une erreur arrivée journal fermé met un point rouge sur le bouton du journal, jusqu'à ce qu'on l'ouvre. Interface en français et en anglais, thèmes clair et sombre, pensée pour un panneau de 700 × 400 px.
 
 Une **prise en main** de six écrans (de vraies captures du widget, en français et en anglais) s'ouvre d'elle-même à la première ouverture, pour une personne qui peut modifier le document ; **Réglages > Aide** la rouvre quand on veut.
 
@@ -36,8 +36,8 @@ Aucune colonne n'est imposée à vos tables : les listes des nœuds proposent le
 
 Le widget demande `requiredAccess: 'full'` (accès complet au document), parce qu'un niveau plus faible ne suffit à aucune de ces trois choses :
 
-- **lire les tables du document**, pas seulement celle de la vue : la liste des tables et de leurs colonnes, pour les menus des nœuds ; les lignes d'une autre table pour une Lecture ou pour repérer la ligne qu'une Action met à jour ;
-- **écrire dans les tables que vos Actions visent** (ajout ou mise à jour d'une ligne, `applyUserActions`), y compris une autre table que celle de la vue ;
+- **lire les tables du document**, pas seulement celle de la vue : la liste des tables et de leurs colonnes, pour les menus des nœuds ; le type d'une colonne choisie pour repérer des lignes (dans les tables `_grist_Tables` et `_grist_Tables_column` de Grist), pour reconnaître une colonne Référence ; les lignes d'une autre table pour une Recherche ou pour repérer les lignes qu'une Action modifie ;
+- **écrire dans les tables que vos Actions visent** (ajout d'une ligne, modification de lignes, `applyUserActions`), y compris une autre table que celle de la vue ;
 - **tenir sa table `Automation`** : la créer (une seule fois, après votre accord), y enregistrer le workflow, le journal des exécutions et le verrou qui désigne l'onglet exécutant.
 
 Le widget ne crée, ne renomme ni ne supprime aucune autre table ou colonne, et ne supprime aucune ligne. Il n'écrit que ce que vos Actions décrivent, et seulement quand le workflow est activé.
@@ -63,7 +63,7 @@ Aucune à installer : HTML, CSS et JavaScript, sans framework, sans bibliothèqu
 - **Un seul onglet exécute** les workflows d'une table, même si le document est ouvert dans plusieurs onglets ou chez plusieurs personnes : un verrou dans la table `Automation`, renouvelé toutes les 6 secondes. Si l'onglet exécutant disparaît sans libérer le verrou (fermeture brutale, panne), un autre prend le relais au bout de 20 secondes ; les modifications faites pendant ce relais ne sont exécutées par personne. Un onglet simplement rechargé reprend tout de suite.
 - **Pas de boucle** : les écritures du widget ne redéclenchent pas le workflow, et une ligne qui déclencherait trop d'exécutions rapprochées est arrêtée, avec la raison dans le journal.
 - **Le déclencheur voit les lignes de la vue** : un filtre de la vue peut faire paraître une ligne créée ou supprimée quand elle entre ou sort du filtre.
-- **Les colonnes sont lues table entière** (`fetchTable`) : sur de très grandes tables, l'ouverture et les Lectures sont plus lentes.
+- **Les colonnes sont lues table entière** (`fetchTable`) : sur de très grandes tables, l'ouverture et les Recherches sont plus lentes.
 - **Un contenu que cette version ne sait pas lire** (graphe d'une version plus récente, contenu abîmé) n'est jamais écrasé : le widget l'affiche comme « Workflow conservé tel quel » et n'exécute rien à sa place. Une table `Automation` sans les colonnes attendues, ou dont le nom est déjà pris à la casse près, n'est pas utilisée : le journal dit pourquoi.
 - **Navigateurs** : testé sous Chromium, avec une API Grist simulée et dans un vrai Grist (`docs/TESTS_GRIST_REEL.md` liste les essais à refaire à la main).
 

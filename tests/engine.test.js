@@ -438,7 +438,7 @@ test('ACT-13 autre table sans colonne clé : refusé au lieu d\'écrire sur la m
   const api = createFakeApi({ tables: archive });
   const result = await runKeyed({ matchColumn: '', matchValue: '' }, { Nom: 'a' }, api);
   assert.strictEqual(result.status, 'error');
-  assert.match(result.error, /colonne qui repère la ligne/);
+  assert.match(result.error, /choisissez « Repérer par la colonne »/);
   assert.deepStrictEqual(api.applied, []);
 });
 
@@ -544,4 +544,39 @@ test('TRG-09 une cible n\'est jamais satisfaite pour une création ou une suppre
 
 test('TRG-10 anciens graphes sans cible : comportement inchangé', () => {
   assert.strictEqual(E.matchesTrigger({ action: 'update', column: 'Statut' }, { type: 'update', rowId: 1, record: { id: 1 }, changed: { Statut: { from: 1, to: 2 } } }), true);
+});
+
+test('COND-13 « est coché » et « n\'est pas coché » : une case cochée, décochée ou vide, sans valeur à taper', () => {
+  const check = (operator, value) => E.evalCondition({ column: 'Case', operator, value: '' }, { record: { Case: value } });
+  assert.deepStrictEqual([true, false, null, 'true'].map((value) => check('checked', value)), [true, false, false, false]);
+  assert.deepStrictEqual([true, false, null].map((value) => check('unchecked', value)), [false, true, true]);
+  const N = require('../js/nodes.js');
+  assert.deepStrictEqual([N.needsValue({ operator: 'checked' }), N.needsValue({ operator: 'unchecked' }), N.needsValue({ operator: 'eq' })], [false, false, true]);
+});
+
+test('ACT-17 « Si plusieurs lignes : toutes les modifier » : une écriture par ligne trouvée, aucune sans erreur s\'il n\'y en a pas ; une action d\'avant s\'arrête toujours', async () => {
+  const all = createFakeApi({ tables: archive });
+  const result = await runKeyed({ many: 'all' }, { Nom: 'b' }, all);
+  assert.strictEqual(result.status, 'success');
+  assert.deepStrictEqual(all.applied, [['UpdateRecord', 'Archive', 11, { Source: 'vu' }], ['UpdateRecord', 'Archive', 12, { Source: 'vu' }]]);
+  const none = createFakeApi({ tables: archive });
+  const empty = await runKeyed({ many: 'all' }, { Nom: 'zzz' }, none);
+  assert.strictEqual(empty.status, 'success', 'rien à modifier n\'est pas une erreur');
+  assert.deepStrictEqual([empty.effects, none.applied], [[], []]);
+  assert.match((await runKeyed({ many: 'one' }, { Nom: 'b' })).error, /Plusieurs lignes dans Archive/);
+  assert.match((await runKeyed({}, { Nom: 'b' })).error, /Plusieurs lignes dans Archive/, 'une action enregistrée sans ce choix garde son comportement');
+  assert.strictEqual(require('../js/nodes.js').TYPES.action.defaults.many, 'all', 'une nouvelle action modifie toutes les lignes trouvées');
+});
+
+test('ACT-18 clé en texte sur une colonne de numéros (une Référence) : le message propose {id}, même avec « toutes » ; {id} trouve les lignes liées', async () => {
+  const tasks = () => createFakeApi({ tables: { Taches: { id: [1, 2, 3], Projet: [1, 1, 2], Statut: ['', '', ''] } } });
+  const config = { table: 'Taches', matchColumn: 'Projet', matchValue: '{Nom}', column: 'Statut', value: 'Actif' };
+  const wrong = await runKeyed(config, { Nom: 'Alpha' }, tasks());
+  assert.match(wrong.error, /Ligne introuvable dans Taches : Projet = Alpha \(si c'est une colonne Référence, elle garde le numéro de la ligne : essayez \{id\}\)/);
+  assert.match((await runKeyed({ ...config, many: 'all' }, { Nom: 'Alpha' }, tasks())).error, /essayez \{id\}/);
+  const right = tasks();
+  const linked = await runKeyed({ ...config, matchValue: '{id}', many: 'all' }, { id: 1, Nom: 'Alpha' }, right);
+  assert.strictEqual(linked.status, 'success');
+  assert.deepStrictEqual(right.applied, [['UpdateRecord', 'Taches', 1, { Statut: 'Actif' }], ['UpdateRecord', 'Taches', 2, { Statut: 'Actif' }]]);
+  assert.doesNotMatch((await runKeyed({ ...config, matchValue: '9' }, { Nom: 'a' }, tasks())).error, /Référence/, 'une clé en nombre n\'a pas ce conseil');
 });

@@ -5,7 +5,7 @@
 // gauche et droite sur son en-tête), double-clic sur ce bord pour la largeur d'origine ; elle est gardée dans le graphe (node.w).
 // Le canevas ne connaît pas Grist : il lit et modifie le graphe (js/graph.js) et signale chaque changement par onChange. Les champs des nœuds sont dans js/canvas-fields.js.
 // En lecture seule (la personne ne peut pas modifier le document), on déplace et on zoome le fond pour voir le graphe ; rien ne s'ajoute, ne se relie, ne se déplace ni ne se supprime.
-// cv : l'état d'un canevas, que chaque fonction reçoit (voir create) ; un nœud y est une entrée { node, element, head, body, state, pinIn, pinsOut, pickers, selects, inputs }.
+// cv : l'état d'un canevas, que chaque fonction reçoit (voir create) ; un nœud y est une entrée { node, element, head, body, issue, state, pinIn, pinsOut, pickers, selects, inputs }.
 (function (root) {
   'use strict';
   const { Graph, NodeTypes, I18n, CanvasFields } = root;
@@ -201,10 +201,14 @@
     const spec = NodeTypes.TYPES[entry.node.type];
     entry.head = make('div', 'node-head', entry.element);
     entry.head.tabIndex = 0;
+    // Le titre porte le numéro du nœud à partir du deuxième de son type (« Action 2 », d'après son identifiant action-2) : les messages désignent ainsi le bon.
     const title = make('span', 'node-title', entry.head);
     title.id = `${entry.node.id}-title`;
-    title.dataset.i18n = spec.titleKey;
-    title.textContent = t(spec.titleKey);
+    const name = make('span', '', title);
+    name.dataset.i18n = spec.titleKey;
+    name.textContent = t(spec.titleKey);
+    const number = Number((/-(\d+)$/.exec(entry.node.id) || [])[1]);
+    if (number > 1) title.append(` ${number}`);
     entry.element.setAttribute('aria-labelledby', title.id);
     const remove = iconButton('node-delete', 'node.delete', 'icon-trash', entry.head);
     remove.addEventListener('click', () => removeNode(cv, entry.node.id));
@@ -287,6 +291,8 @@
     buildGrip(cv, entry);
     buildHead(cv, entry);
     entry.body = make('div', 'node-body', element);
+    entry.issue = make('div', 'node-issue', element);
+    entry.issue.hidden = true;
     entry.state = make('div', 'node-state', element);
     entry.state.hidden = true;
     for (const field of NodeTypes.TYPES[node.type].fields) fieldRow(cv, entry, field);
@@ -393,7 +399,7 @@
     menu.style.top = (y - rect.top) + 'px';
     const list = make('select', '', menu);
     const types = NodeTypes.ORDER.filter((type) => !link || NodeTypes.TYPES[type].inputs > 0);
-    fillSelect(list, types.map((type) => [type, t(NodeTypes.TYPES[type].titleKey), NodeTypes.TYPES[type].titleKey]));
+    fillSelect(list, types.map((type) => [type, t('menu.item', { name: t(NodeTypes.TYPES[type].titleKey), hint: t(NodeTypes.TYPES[type].hintKey) })]));
     const picker = root.SearchSelect.attach(list, { menu: true, within: cv.container, onClose: () => {
       if (cv.menu === menu) closeMenu(cv);
       if (link && cv.connecting === link) stopConnecting(cv);
@@ -484,7 +490,7 @@
       connecting: null,   // { from, branch, parked } pendant la création d'un lien ; parked : lâché sur le fond, le menu d'ajout est ouvert
       menu: null,
     };
-    cv.changed = () => { clearTrace(cv); cv.onChange(cv.graph); };
+    cv.changed = () => { clearTrace(cv); cv.onChange(cv.graph); drawWires(cv); };   // un champ montré ou caché déplace les sorties du bas
     return cv;
   }
 
@@ -506,6 +512,16 @@
       openAddMenu: (clientX, clientY) => openAddMenu(cv, clientX, clientY),
       showTrace: (trace) => showTrace(cv, trace),
       setActive: (on) => container.classList.toggle('is-active', on),
+      // issues : [{ node, text }], ce qui manque à chaque nœud ; un nœud absent de la liste n'a plus rien de signalé.
+      showIssues: (issues) => {
+        cv.views.forEach((entry, id) => {
+          const texts = issues.filter((issue) => issue.node === id).map((issue) => issue.text);
+          entry.element.classList.toggle('has-issue', texts.length > 0);
+          entry.issue.hidden = !texts.length;
+          entry.issue.textContent = texts.join('\n');
+        });
+        drawWires(cv);   // le message change la hauteur du nœud, donc la place des sorties du bas
+      },
       nodeLabel: (id) => (cv.views.has(id) ? cv.views.get(id).element.querySelector('.node-title').textContent : id),
       getGraph: () => cv.graph,
       select: (next) => select(cv, next),

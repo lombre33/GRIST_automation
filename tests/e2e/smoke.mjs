@@ -348,7 +348,7 @@ await scenario('E2E-18 condition à deux vérifications (OU) et branche « sinon
   await page.fill('#condition-1-value-2', '100');
   assert.equal(await page.locator('#condition-1-join').isDisabled(), false, 'le champ « Combiner » s\'active avec deux vérifications');
   await pick(page, 'condition-1-join', 'une au moins');
-  await addNode(page, 'Action', 620, 390);
+  await addNode(page, 'Action', 620, 560);   // sous la première action, sur le fond
   await pick(page, 'action-2-type', 'ajouter');
   await pick(page, 'action-2-table', 'archive');
   await pick(page, 'action-2-column', 'motif');
@@ -424,8 +424,12 @@ await scenario('E2E-21 mise à jour d\'une ligne d\'une autre table repérée pa
   await push(page, { id: 1, Nom: 'a', Statut: 'Nouveau' }, { id: 1, Nom: 'b', Statut: 'Clos' });
   await page.waitForFunction(() => window.__stub.applied.length === 1);
   assert.deepEqual(await page.evaluate(() => window.__stub.applied[0]), ['UpdateRecord', 'Archive', 2, { Source: 'vu' }]);
+  // Par défaut, une nouvelle action modifie toutes les lignes trouvées : une clé qui ne trouve rien n'écrit rien, et le journal le dit.
   await push(page, { id: 1, Nom: 'zzz', Statut: 'Nouveau' });
   await page.click('#toggle-logs');
+  await page.waitForFunction(() => /réussi — aucune ligne à modifier/.test(document.getElementById('log-list').innerText));
+  await pick(page, 'action-1-many', 'arrêter');
+  await push(page, { id: 1, Nom: 'yyy', Statut: 'Clos' });
   await page.waitForFunction(() => /Ligne introuvable dans Archive/.test(document.getElementById('log-list').innerText));
   assert.equal(await page.evaluate(() => window.__stub.applied.length), 1);
 });
@@ -439,12 +443,12 @@ await scenario('E2E-22 mise à jour d\'une autre table sans clé : activation re
   await page.locator('.node-trigger .pin-out').click();
   await page.locator('.node-action .pin-in').click();
   await page.click('#toggle-active');
-  assert.match(await page.locator('#log-list').innerText(), /colonne qui repère la ligne/);
+  assert.match(await page.locator('#log-list').innerText(), /modifie une autre table : choisissez « Repérer par la colonne »/);
 });
 
-await scenario('E2E-23 nœud Lecture : un seuil lu dans une autre table sert dans la condition', async (page) => {
+await scenario('E2E-23 nœud Recherche : un seuil lu dans une autre table sert dans la condition', async (page) => {
   await addNode(page, 'Déclencheur', 20, 100);
-  await addNode(page, 'Lecture', 290, 100);
+  await addNode(page, 'Recherche', 290, 100);
   await addNode(page, 'Condition', 560, 100);
   await addNode(page, 'Action', 830, 100);
   await waitSchema(page);
@@ -471,7 +475,7 @@ await scenario('E2E-23 nœud Lecture : un seuil lu dans une autre table sert dan
   assert.equal(await page.evaluate(() => window.__stub.applied.length), 1, 'seuil de b = 500 : 20 ne le dépasse pas');
 }, { viewport: { width: 1400, height: 800 } });
 
-await scenario('E2E-24 déclencheur sur une ligne précise : les autres lignes sont ignorées', async (page) => {
+await scenario('E2E-24 filtre du déclencheur : les autres lignes sont ignorées', async (page) => {
   await addNode(page, 'Déclencheur', 40, 100);
   await addNode(page, 'Action', 400, 100);
   await waitSchema(page);
@@ -483,9 +487,9 @@ await scenario('E2E-24 déclencheur sur une ligne précise : les autres lignes s
   await page.locator('.node-trigger .pin-out').click();
   await page.locator('.node-action .pin-in').click();
   await pick(page, 'trigger-1-action', 'créée');
-  assert.equal(await page.locator('#trigger-1-targetColumn').isDisabled(), true, 'ligne précise grisée pour une création');
+  assert.equal(await page.locator('#trigger-1-targetColumn').isDisabled(), true, 'filtre grisé pour une création');
   await page.click('#toggle-active');
-  assert.match(await page.locator('#log-list').innerText(), /ne s'applique qu'à une modification/);
+  assert.match(await page.locator('#log-list').innerText(), /le filtre ne vaut que pour une ligne modifiée/);
   await pick(page, 'trigger-1-action', 'modifiée');
   await page.click('#toggle-active');
   const pushView = (records) => page.evaluate((r) => window.__stub.pushRecords(r), records);   // toutes les lignes de la vue à la fois
@@ -504,7 +508,7 @@ await scenario('E2E-25 test à blanc sur la ligne sélectionnée dans Grist', as
   });
   await page.click('#test-workflow');
   await page.click('#toggle-logs');
-  assert.match(await page.locator('#log-list li').first().innerText(), /Dry-run ligne 2 : réussi/, 'la ligne sélectionnée (2), pas la première');
+  assert.match(await page.locator('#log-list li').first().innerText(), /Test sur la ligne 2 : réussi/, 'la ligne sélectionnée (2), pas la première');
   assert.deepEqual(await page.evaluate(() => window.__stub.applied), []);
 });
 
@@ -1170,7 +1174,7 @@ await scenario('E2E-59 fil lâché sur le fond : menu d\'ajout à cet endroit, s
   const drop = { x: 420, y: 200 };
   await dropWire(page, '.node-trigger .pin-out', drop.x, drop.y);
   await page.waitForSelector('.add-menu .ss-panel:not([hidden])');
-  assert.deepEqual(await page.locator('.add-menu [role=option]').allInnerTexts(), ['Condition', 'Lecture', 'Transformation', 'Action'], 'seulement les nœuds qui ont une entrée');
+  assert.deepEqual(await page.locator('.add-menu [role=option]').allInnerTexts(), ['Condition : continuer seulement si…', 'Recherche : lire une valeur dans une table', 'Transformation : calculer une valeur', 'Action : écrire dans une table'], 'seulement les nœuds qui ont une entrée, chacun dit ce qu\'il fait');
   assert.equal(await page.locator('.wire-temp').getAttribute('visibility'), 'visible', 'le fil reste tracé jusqu\'au menu');
   assert.equal(await page.locator('.canvas-connect-hint').isVisible(), false, 'le menu parle à la place de l\'invite');
   assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.add-menu input')), true, 'la recherche a le focus');
@@ -1258,6 +1262,58 @@ await scenario('E2E-60 largeur d\'un nœud : son bord se tire, au clavier aussi 
   await dragEdge(copy, '.node-trigger', 80);
   assert.equal(await widthOf(copy, '.node-trigger'), 352, 'ni à la souris');
 });
+
+// Les métadonnées de Grist du document simulé : Archive.Source est une Référence vers Contacts, la table de la vue.
+const META_REF = {
+  _grist_Tables: { id: [1, 2], tableId: ['Contacts', 'Archive'] },
+  _grist_Tables_column: { id: [1, 2, 3, 4, 5], parentId: [1, 1, 1, 2, 2], colId: ['Nom', 'Statut', 'Montant', 'Motif', 'Source'], type: ['Text', 'Text', 'Numeric', 'Text', 'Ref:Contacts'] },
+};
+
+await scenario('E2E-61 votre cas guidé : table surveillée affichée, exemples dans les champs, activation refusée et workflow actif incomplet signalés sur le nœud et le bandeau, point du journal, {id} proposé pour une Référence, nœuds numérotés', async (page) => {
+  await addNode(page, 'Déclencheur', 40, 120);
+  await addNode(page, 'Action', 400, 60);
+  await waitSchema(page);
+  assert.equal(await page.locator('#trigger-1-viewTable').innerText(), 'Contacts', 'le déclencheur dit la table qu\'il surveille');
+  assert.equal(await page.locator('#trigger-1-column').locator('option').first().innerText(), '— N\'importe laquelle —');
+  assert.equal(await page.locator('#action-1-value').getAttribute('placeholder'), 'ex. Terminé, ou {Colonne}');
+  await page.click('#toggle-active');
+  assert.equal(await page.locator('#logs').isHidden(), false, 'le refus ouvre le journal');
+  assert.equal(await page.locator('.node-action .node-issue').innerText(), 'N\'est pas relié.\nChoisissez la colonne à remplir.', 'sur le nœud, un problème par ligne, sans son nom');
+  assert.equal(await page.locator('.node-action.has-issue').count(), 1);
+  await page.locator('.node-trigger .pin-out').click();
+  await page.locator('.node-action .pin-in').click();
+  await pick(page, 'trigger-1-column', 'statut');
+  await pick(page, 'action-1-column', 'nom');
+  await page.fill('#action-1-value', 'vu');
+  assert.equal(await page.locator('.node.has-issue').count(), 0, 'tout réglé : plus rien de signalé');
+  await page.click('#toggle-active');
+  assert.equal(await page.evaluate(() => document.getElementById('open-tab-warning').classList.contains('is-danger')), false);
+  // Actif, puis rendu incomplet : une autre table sans colonne qui repère la ligne.
+  await pick(page, 'action-1-table', 'archive');
+  const banner = page.locator('#open-tab-warning');
+  assert.match(await banner.innerText(), /^Automation active mais incomplète, chaque exécution échoue : « Action » modifie une autre table : choisissez « Repérer par la colonne »/);
+  assert.equal(await banner.evaluate((el) => el.classList.contains('is-danger')), true);
+  assert.equal(await page.locator('.node-action.has-issue').count(), 1);
+  await page.click('#toggle-logs');
+  assert.equal(await page.locator('#logs').isHidden(), true);
+  await push(page, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
+  await page.waitForFunction(() => document.getElementById('toggle-logs').classList.contains('has-news'));
+  assert.equal(await page.locator('#toggle-logs').getAttribute('aria-label'), 'Afficher ou masquer le journal : nouvelles erreurs');
+  await page.click('#toggle-logs');
+  assert.equal(await page.locator('#toggle-logs').evaluate((el) => el.classList.contains('has-news')), false, 'le journal ouvert, le point s\'en va');
+  assert.equal(await page.locator('#toggle-logs').getAttribute('aria-label'), 'Afficher ou masquer le journal');
+  // Une Référence vers la table de la vue : la valeur cherchée devient {id}, et le workflow est de nouveau complet.
+  await pick(page, 'action-1-matchColumn', 'source');
+  await page.waitForFunction(() => document.getElementById('action-1-matchValue').value === '{id}');
+  await pick(page, 'action-1-column', 'motif');
+  await page.waitForFunction(() => !document.getElementById('open-tab-warning').classList.contains('is-danger'));
+  assert.match(await banner.innerText(), /^Automation active : elle ne s'exécute que/);
+  assert.equal(await page.locator('#action-1-many').inputValue(), 'all', 'une nouvelle action modifie toutes les lignes trouvées');
+  await addNode(page, 'Action', 400, 560);
+  assert.equal(await page.locator('#action-2-title').innerText(), 'Action 2', 'le deuxième nœud d\'un type porte son numéro');
+  assert.equal(await page.locator('#action-1-title').innerText(), 'Action');
+  assert.match(await banner.innerText(), /« Action 2 » n'est pas relié/);
+}, { init: { __metaTables: META_REF } });
 
 await browser.close();
 server.close();

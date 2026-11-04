@@ -10,19 +10,19 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-eval' https://docs.getgrist.com/grist-plugin-api.js; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
   <title>Grist Automation Builder</title>
   <!-- ?v= : la version de l'app (js/version.js). GitHub Pages garde chaque fichier 10 minutes en cache : sans elle, une page à jour pourrait charger d'anciens scripts. -->
-  <link rel="stylesheet" href="css/tokens.css?v=0.15.0">
-  <link rel="stylesheet" href="css/style.css?v=0.15.0">
-  <link rel="stylesheet" href="css/canvas.css?v=0.15.0">
-  <link rel="stylesheet" href="css/modal.css?v=0.15.0">
-  <link rel="stylesheet" href="css/tutorial.css?v=0.15.0">
+  <link rel="stylesheet" href="css/tokens.css?v=0.16.0">
+  <link rel="stylesheet" href="css/style.css?v=0.16.0">
+  <link rel="stylesheet" href="css/canvas.css?v=0.16.0">
+  <link rel="stylesheet" href="css/modal.css?v=0.16.0">
+  <link rel="stylesheet" href="css/tutorial.css?v=0.16.0">
   <!-- Grist pousse les couleurs de son thème dans une balise <style id="grist-theme"> qu'il crée lui-même : la politique de sécurité ci-dessus la refuse
        (style-src 'self'), avec deux erreurs dans la console à chaque ouverture. Le widget a son propre thème et ne lit pas ces couleurs : l'API Grist
        trouve cet élément inerte à sa place, y écrit sans effet, et rien n'est refusé (E2E-45). -->
   <template id="grist-theme"></template>
-  <script src="js/theme.js?v=0.15.0"></script>
+  <script src="js/theme.js?v=0.16.0"></script>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <!-- Le lien avec GFS (barre à laisser libre, ambiance), pris du kit en sous-module : module à part, l'app s'ouvre sans lui si le kit manque. -->
-  <script type="module" src="js/gfs.js?v=0.15.0"></script>
+  <script type="module" src="js/gfs.js?v=0.16.0"></script>
 </head>
 <body>
   <!-- Les textes ci-dessous sont ceux du français, remplacés au démarrage par js/i18n.js (data-i18n) : la page reste lisible si un script ne se charge pas. -->
@@ -30,11 +30,11 @@
     <div class="bar-start">
       <h1 data-i18n="app.title">Grist Automation Builder</h1>
       <button id="add-node" type="button" data-i18n-label="add.nodeLabel" aria-label="Ajouter un nœud" title="Ajouter un nœud"><span class="icon icon-plus" aria-hidden="true"></span><span data-i18n="add.node">Ajouter</span></button>
-      <button id="test-workflow" type="button"><span class="icon icon-play" aria-hidden="true"></span><span data-i18n="test.run">Tester</span></button>
+      <button id="test-workflow" type="button" data-i18n-label="test.runLabel" aria-label="Tester : rejouer le workflow sur la ligne sélectionnée dans Grist, sans rien écrire" title="Tester : rejouer le workflow sur la ligne sélectionnée dans Grist, sans rien écrire"><span class="icon icon-play" aria-hidden="true"></span><span data-i18n="test.run">Tester</span></button>
     </div>
     <div class="bar-end">
       <button id="toggle-active" type="button" class="primary" aria-pressed="false">Activer</button>
-      <button id="toggle-logs" type="button" class="icon-only" data-i18n-label="logs.toggle" aria-label="Afficher ou masquer les logs" title="Afficher ou masquer les logs" aria-pressed="false"><span class="icon icon-list" aria-hidden="true"></span></button>
+      <button id="toggle-logs" type="button" class="icon-only" data-i18n-label="logs.toggle" aria-label="Afficher ou masquer le journal" title="Afficher ou masquer le journal" aria-pressed="false"><span class="icon icon-list" aria-hidden="true"></span></button>
       <button id="open-settings" type="button" class="icon-only" data-i18n-label="settings.open" aria-label="Réglages" title="Réglages" aria-haspopup="dialog"><span class="icon icon-settings" aria-hidden="true"></span></button>
     </div>
   </header>
@@ -55,27 +55,27 @@
       <p data-i18n="access.how"></p>
     </section>
     <section id="logs" class="logs" hidden>
-      <h2 data-i18n="logs.title">Logs</h2>
+      <h2 data-i18n="logs.title">Journal</h2>
       <ul id="log-list" class="log-list"><li data-i18n="logs.waiting">En attente d'événements Grist…</li></ul>
       <button id="logs-more" type="button" data-i18n="logs.more" hidden>Exécutions plus anciennes</button>
     </section>
   </main>
 
-  <script src="js/version.js?v=0.15.0"></script>
-  <script src="js/i18n-texts.js?v=0.15.0"></script>
-  <script src="js/i18n.js?v=0.15.0"></script>
-  <script src="js/modal.js?v=0.15.0"></script>
-  <script src="js/tutorial.js?v=0.15.0"></script>
-  <script src="js/search-select.js?v=0.15.0"></script>
-  <script src="js/nodes.js?v=0.15.0"></script>
-  <script src="js/graph.js?v=0.15.0"></script>
-  <script src="js/store.js?v=0.15.0"></script>
-  <script src="js/executor.js?v=0.15.0"></script>
-  <script src="js/echo.js?v=0.15.0"></script>
-  <script src="js/engine.js?v=0.15.0"></script>
-  <script src="js/canvas-fields.js?v=0.15.0"></script>
-  <script src="js/canvas.js?v=0.15.0"></script>
-  <script src="js/keep-clear.js?v=0.15.0"></script>
-  <script src="js/main.js?v=0.15.0"></script>
+  <script src="js/version.js?v=0.16.0"></script>
+  <script src="js/i18n-texts.js?v=0.16.0"></script>
+  <script src="js/i18n.js?v=0.16.0"></script>
+  <script src="js/modal.js?v=0.16.0"></script>
+  <script src="js/tutorial.js?v=0.16.0"></script>
+  <script src="js/search-select.js?v=0.16.0"></script>
+  <script src="js/nodes.js?v=0.16.0"></script>
+  <script src="js/graph.js?v=0.16.0"></script>
+  <script src="js/store.js?v=0.16.0"></script>
+  <script src="js/executor.js?v=0.16.0"></script>
+  <script src="js/echo.js?v=0.16.0"></script>
+  <script src="js/engine.js?v=0.16.0"></script>
+  <script src="js/canvas-fields.js?v=0.16.0"></script>
+  <script src="js/canvas.js?v=0.16.0"></script>
+  <script src="js/keep-clear.js?v=0.16.0"></script>
+  <script src="js/main.js?v=0.16.0"></script>
 </body>
 </html>

@@ -10,12 +10,14 @@ const I18N_TEXTS = {
     'app.title': 'Grist Automation Builder',
     'app.otherTab': 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.',
     'app.openTab': 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur, y compris si la vue du widget est réduite.',
+    'app.incomplete': 'Automation active mais incomplète, chaque exécution échoue : {issue}',
     'app.readOnly': 'Lecture seule : vous voyez ce workflow et pouvez le tester, sans le modifier ni l\'exécuter. Seule une personne qui peut modifier le document l\'active et l\'exécute.',
 
     // La barre d'outils : ajouter un nœud, tester, activer, montrer le journal.
     'add.node': 'Ajouter',
     'add.nodeLabel': 'Ajouter un nœud',
     'test.run': 'Tester',
+    'test.runLabel': 'Tester : rejouer le workflow sur la ligne sélectionnée dans Grist, sans rien écrire',
     'toggle.activate': 'Activer',
     'toggle.deactivate': 'Désactiver',
 
@@ -37,12 +39,18 @@ const I18N_TEXTS = {
     'canvas.empty': 'Clic droit sur le fond, ou « Ajouter », pour créer un premier nœud.',
     'canvas.connecting': 'Cliquez sur l\'entrée d\'un nœud pour relier (Échap pour annuler).',
 
-    // Les nœuds : titres des types, suppression, broches, sorties « oui » et « sinon » d'une condition.
+    // Les nœuds : titres des types et ce qu'en dit le menu d'ajout, suppression, broches, sorties « oui » et « sinon » d'une condition.
     'node.trigger': 'Déclencheur',
     'node.condition': 'Condition',
     'node.action': 'Action',
-    'node.lookup': 'Lecture',
+    'node.lookup': 'Recherche',
     'node.transform': 'Transformation',
+    'menu.item': '{name} : {hint}',
+    'hint.trigger': 'quand une ligne change',
+    'hint.condition': 'continuer seulement si…',
+    'hint.lookup': 'lire une valeur dans une table',
+    'hint.transform': 'calculer une valeur',
+    'hint.action': 'écrire dans une table',
     'node.delete': 'Supprimer le nœud',
     'node.resize': 'Largeur du nœud : tirez ce bord (au clavier, Maj + flèches gauche et droite sur son titre) ; double-clic pour la largeur d\'origine',
     'pin.then': 'Sortie « oui » : condition vraie',
@@ -52,17 +60,18 @@ const I18N_TEXTS = {
     'out.then': 'Oui',
     'out.else': 'Sinon',
 
-    // Le déclencheur : l'événement, la colonne surveillée, la ligne précise.
+    // Le déclencheur : sa table (celle de la vue), l'événement, la colonne surveillée, le filtre facultatif.
+    'trigger.table': 'Table surveillée',
     'trigger.when': 'Quand une ligne est',
     'trigger.update': 'modifiée',
     'trigger.create': 'créée',
     'trigger.delete': 'supprimée',
     'trigger.column': 'Colonne surveillée',
-    'trigger.targetColumn': 'Ligne précise',
-    'trigger.targetValue': 'Valeur clé',
+    'trigger.targetColumn': 'Filtrer sur la colonne',
+    'trigger.targetValue': 'Valeur attendue',
 
     // La condition : les vérifications (colonne, opérateur, valeur) et leur combinaison ET/OU.
-    'cond.join': 'Combiner',
+    'cond.join': 'Il faut',
     'cond.column': 'Colonne',
     'cond.operator': 'Opérateur',
     'cond.value': 'Valeur',
@@ -75,20 +84,22 @@ const I18N_TEXTS = {
     'op.contains': 'contient',
     'op.empty': 'est vide',
     'op.notEmpty': 'n\'est pas vide',
-    'join.and': 'Toutes (ET)',
-    'join.or': 'Une au moins (OU)',
+    'op.checked': 'est coché',
+    'op.unchecked': 'n\'est pas coché',
+    'join.and': 'toutes vraies (ET)',
+    'join.or': 'une au moins (OU)',
 
-    // La lecture d'une cellule dans une autre table.
-    'lookup.table': 'Table lue',
-    'lookup.matchColumn': 'Ligne repérée par',
-    'lookup.matchValue': 'Valeur clé',
-    'lookup.column': 'Colonne lue',
-    'lookup.onMissing': 'Si introuvable',
-    'lookup.error': 'Erreur',
-    'lookup.empty': 'Valeur vide',
+    // La recherche d'une cellule dans une table (nœud Recherche, type interne lookup).
+    'lookup.table': 'Chercher dans',
+    'lookup.matchColumn': 'Repérer par la colonne',
+    'lookup.matchValue': 'Valeur cherchée',
+    'lookup.column': 'Colonne à lire',
+    'lookup.onMissing': 'Si aucune ligne',
+    'lookup.error': 'Arrêter (erreur)',
+    'lookup.empty': 'Continuer à vide',
 
     // La transformation : une valeur calculée, rendue disponible sous {nom}.
-    'tf.name': 'Nom',
+    'tf.name': 'Nom du résultat',
     'tf.op': 'Opération',
     'tf.a': 'Valeur A',
     'tf.b': 'Valeur B',
@@ -101,38 +112,48 @@ const I18N_TEXTS = {
     'tf.lower': 'Minuscules',
     'tf.trim': 'Sans espaces autour',
 
-    // L'action : ajouter une ligne, ou mettre à jour une ligne.
-    'act.type': 'Type',
-    'act.update': 'Mettre à jour la ligne',
+    // L'action : ajouter une ligne, ou modifier des lignes (la même, ou celles qu'une colonne repère).
+    'act.type': 'Faire',
+    'act.update': 'Modifier des lignes',
     'act.add': 'Ajouter une ligne',
-    'act.table': 'Table cible',
-    'act.column': 'Colonne',
-    'act.value': 'Valeur',
-    'act.matchColumn': 'Ligne repérée par',
-    'act.matchValue': 'Valeur clé',
+    'act.table': 'Dans la table',
+    'act.column': 'Colonne à remplir',
+    'act.value': 'Nouvelle valeur',
+    'act.matchColumn': 'Repérer par la colonne',
+    'act.matchValue': 'Valeur cherchée',
+    'act.many': 'Si plusieurs lignes',
+    'act.manyAll': 'Toutes les modifier',
+    'act.manyStop': 'Arrêter (erreur)',
 
     // Les listes avec recherche (js/search-select.js) et leurs choix à part.
-    'list.eventRow': '— Ligne de l\'événement —',
+    'list.eventRow': '— La même ligne —',
     'list.choose': '— Choisir … —',
-    'list.none': '— Aucune —',
-    'list.currentTable': '— Table courante —',
+    'list.anyColumn': '— N\'importe laquelle —',
+    'list.currentTable': '— Table de la vue —',
     'list.search': 'Rechercher…',
     'list.noResult': 'Aucun résultat',
-    'list.anyRow': '— Toute ligne —',
+    'list.noFilter': '— Aucun filtre —',
 
-    // Ce qui empêche d'activer (Graph.validate), écrit dans le journal.
-    'issue.actionMatch': '« {node} » met à jour une autre table : indiquez la colonne qui repère la ligne.',
-    'issue.actionMatchValue': '« {node} » : la valeur clé qui repère la ligne est vide.',
-    'issue.lookupIncomplete': '« {node} » : indiquez la colonne qui repère la ligne, la valeur clé et la colonne lue.',
-    'issue.triggerTarget': '« {node} » : une ligne précise ne s\'applique qu\'à une modification.',
-    'issue.triggerTargetValue': '« {node} » : la valeur clé de la ligne précise est vide.',
+    // Les exemples grisés des champs libres ({Colonne} : une colonne de la ligne ; {id} : son numéro, ce que garde une colonne Référence).
+    'ph.targetValue': 'ex. Paris, ou 12',
+    'ph.condValue': 'ex. Terminé, ou 10',
+    'ph.matchValue': 'ex. {Colonne}, ou {id}',
+    'ph.value': 'ex. Terminé, ou {Colonne}',
+    'ph.operand': 'ex. {Colonne}, ou 10',
+
+    // Ce qui empêche d'activer (Graph.validate), écrit dans le journal, sur le nœud et, workflow actif, dans le bandeau : le champ à régler, par son nom.
+    'issue.actionMatch': '« {node} » modifie une autre table : choisissez « Repérer par la colonne ».',
+    'issue.actionMatchValue': '« {node} » : « Valeur cherchée » est vide. Tapez par exemple {Colonne}, ou {id} pour une colonne Référence vers cette table.',
+    'issue.lookupIncomplete': '« {node} » : choisissez « Repérer par la colonne » et « Colonne à lire », et remplissez « Valeur cherchée ».',
+    'issue.triggerTarget': '« {node} » : le filtre ne vaut que pour une ligne modifiée.',
+    'issue.triggerTargetValue': '« {node} » : la valeur attendue du filtre est vide.',
     'issue.transformName': '« {node} » : le nom doit commencer par une lettre, ne contenir que lettres, chiffres et _, et être unique.',
     'issue.transformOperand': '« {node} » : il manque une valeur.',
     'issue.noTrigger': 'Ajoutez un nœud Déclencheur.',
     'issue.noAction': 'Ajoutez un nœud Action.',
     'issue.notConnected': '« {node} » n\'est pas relié.',
-    'issue.conditionColumn': '« {node} » n\'a pas de colonne.',
-    'issue.actionColumn': '« {node} » n\'a pas de colonne.',
+    'issue.conditionColumn': '« {node} » : choisissez la colonne de chaque vérification.',
+    'issue.actionColumn': '« {node} » : choisissez la colonne à remplir.',
     'issue.noPath': 'Aucune action n\'est reliée à un déclencheur.',
 
     // Le résumé lisible du graphe, enregistré avec lui (colonne Resume de la table Automation).
@@ -148,15 +169,16 @@ const I18N_TEXTS = {
     'trace.action': 'Action prévue',
 
     // Le journal : son panneau, puis ses lignes (l'événement, son résultat, ce que le widget a fait ou refusé, et pourquoi).
-    'logs.title': 'Logs',
+    'logs.title': 'Journal',
     'logs.waiting': 'En attente d\'événements Grist…',
     'logs.more': 'Exécutions plus anciennes',
-    'logs.toggle': 'Afficher ou masquer les logs',
+    'logs.toggle': 'Afficher ou masquer le journal',
+    'logs.toggleErrors': 'Afficher ou masquer le journal : nouvelles erreurs',
     'log.deactivatedElsewhere': 'Automation désactivée depuis un autre onglet : elle est désactivée ici aussi.',
     'log.loopStopped': 'Ligne {row} : trop d\'exécutions rapprochées, arrêtée pour éviter une boucle.',
     'log.event': '{event} ligne {row} : {status}',
-    'log.dryRun': 'Dry-run ligne {row} : {status} — {n} {n|effet|effets}',
-    'log.dryNoRow': 'Dry-run impossible : aucune ligne dans la vue.',
+    'log.dryRun': 'Test sur la ligne {row} : {status} — {n} {n|écriture prévue|écritures prévues}',
+    'log.dryNoRow': 'Test impossible : aucune ligne dans la vue.',
     'log.badConfig': 'Configuration illisible : elle est conservée telle quelle, sans modification.',
     'log.schemaError': 'Colonnes de « {table} » illisibles : {error}',
     'log.cannotActivate': 'Activation impossible : {issue}',
@@ -173,6 +195,7 @@ const I18N_TEXTS = {
     'event.delete': 'suppression',
     'result.success': 'réussi',
     'result.error': 'erreur',
+    'result.noRow': 'aucune ligne à modifier',
 
     // Le relais entre onglets (js/executor.js) : lequel exécute.
     'executor.active': 'Cet onglet exécute maintenant l\'automation.',
@@ -218,7 +241,7 @@ const I18N_TEXTS = {
     'tuto.linkText': 'Tirez un lien de la sortie d\'un nœud jusqu\'à l\'entrée d\'un autre ; lâché sur le fond, il ouvre le menu d\'ajout. Une Condition a deux sorties : « Oui » et « Sinon ».',
     'tuto.linkAlt': 'Un lien tiré de la sortie du Déclencheur jusqu\'à l\'entrée de la Condition.',
     'tuto.setName': 'Régler chaque nœud',
-    'tuto.setText': 'Choisissez tables et colonnes dans les listes. Une valeur peut reprendre une colonne de la ligne, {Colonne}, ou le résultat d\'une Lecture ou d\'une Transformation, {nom}.',
+    'tuto.setText': 'Choisissez tables et colonnes dans les listes. Une valeur peut reprendre une colonne de la ligne, {Colonne}, ou le résultat d\'une Recherche ou d\'une Transformation, {nom}.',
     'tuto.setAlt': 'Une Action réglée : ajouter une ligne dans Archive, colonne Motif, valeur {Nom}.',
     'tuto.testName': 'Tester sans rien écrire',
     'tuto.testText': '« Tester » rejoue le workflow sur la ligne sélectionnée dans Grist et montre ce que fait chaque nœud. Rien n\'est écrit dans le document.',
@@ -233,12 +256,14 @@ const I18N_TEXTS = {
     'app.title': 'Grist Automation Builder',
     'app.otherTab': 'Automation is on: another tab is running it for now, this one takes over if it closes.',
     'app.openTab': 'Automation is on: it only runs while this view stays open in your browser, even when the widget is collapsed.',
+    'app.incomplete': 'Automation is on but incomplete, every run fails: {issue}',
     'app.readOnly': 'Read only: you can see this workflow and test it, but not change or run it. Only someone who can edit the document turns it on and runs it.',
 
     // La barre d'outils : ajouter un nœud, tester, activer, montrer le journal.
     'add.node': 'Add',
     'add.nodeLabel': 'Add a node',
     'test.run': 'Test',
+    'test.runLabel': 'Test: replay the workflow on the row selected in Grist, without writing anything',
     'toggle.activate': 'Turn on',
     'toggle.deactivate': 'Turn off',
 
@@ -260,12 +285,18 @@ const I18N_TEXTS = {
     'canvas.empty': 'Right-click the background, or "Add", to create a first node.',
     'canvas.connecting': 'Click a node\'s input to connect (Esc to cancel).',
 
-    // Les nœuds : titres des types, suppression, broches, sorties « oui » et « sinon » d'une condition.
+    // Les nœuds : titres des types et ce qu'en dit le menu d'ajout, suppression, broches, sorties « oui » et « sinon » d'une condition.
     'node.trigger': 'Trigger',
     'node.condition': 'Condition',
     'node.action': 'Action',
     'node.lookup': 'Lookup',
     'node.transform': 'Transform',
+    'menu.item': '{name}: {hint}',
+    'hint.trigger': 'when a row changes',
+    'hint.condition': 'go on only if…',
+    'hint.lookup': 'read a value from a table',
+    'hint.transform': 'compute a value',
+    'hint.action': 'write to a table',
     'node.delete': 'Delete node',
     'node.resize': 'Node width: drag this edge (keyboard: Shift + Left or Right arrow on its title); double-click for the original width',
     'pin.then': 'Yes output: condition is true',
@@ -275,17 +306,18 @@ const I18N_TEXTS = {
     'out.then': 'Yes',
     'out.else': 'Else',
 
-    // Le déclencheur : l'événement, la colonne surveillée, la ligne précise.
+    // Le déclencheur : sa table (celle de la vue), l'événement, la colonne surveillée, le filtre facultatif.
+    'trigger.table': 'Watched table',
     'trigger.when': 'When a row is',
     'trigger.update': 'modified',
     'trigger.create': 'created',
     'trigger.delete': 'deleted',
     'trigger.column': 'Watched column',
-    'trigger.targetColumn': 'Specific row',
-    'trigger.targetValue': 'Key value',
+    'trigger.targetColumn': 'Filter on column',
+    'trigger.targetValue': 'Expected value',
 
     // La condition : les vérifications (colonne, opérateur, valeur) et leur combinaison ET/OU.
-    'cond.join': 'Combine',
+    'cond.join': 'Require',
     'cond.column': 'Column',
     'cond.operator': 'Operator',
     'cond.value': 'Value',
@@ -298,20 +330,22 @@ const I18N_TEXTS = {
     'op.contains': 'contains',
     'op.empty': 'is empty',
     'op.notEmpty': 'is not empty',
-    'join.and': 'All (AND)',
-    'join.or': 'Any (OR)',
+    'op.checked': 'is checked',
+    'op.unchecked': 'is not checked',
+    'join.and': 'all true (AND)',
+    'join.or': 'at least one (OR)',
 
-    // La lecture d'une cellule dans une autre table.
-    'lookup.table': 'Table read',
-    'lookup.matchColumn': 'Row found by',
-    'lookup.matchValue': 'Key value',
-    'lookup.column': 'Column read',
-    'lookup.onMissing': 'If not found',
-    'lookup.error': 'Error',
-    'lookup.empty': 'Empty value',
+    // La recherche d'une cellule dans une table (nœud Recherche, type interne lookup).
+    'lookup.table': 'Search in',
+    'lookup.matchColumn': 'Find by column',
+    'lookup.matchValue': 'Value to find',
+    'lookup.column': 'Column to read',
+    'lookup.onMissing': 'If no row',
+    'lookup.error': 'Stop (error)',
+    'lookup.empty': 'Go on empty',
 
     // La transformation : une valeur calculée, rendue disponible sous {nom}.
-    'tf.name': 'Name',
+    'tf.name': 'Result name',
     'tf.op': 'Operation',
     'tf.a': 'Value A',
     'tf.b': 'Value B',
@@ -324,38 +358,48 @@ const I18N_TEXTS = {
     'tf.lower': 'Lowercase',
     'tf.trim': 'Trim spaces',
 
-    // L'action : ajouter une ligne, ou mettre à jour une ligne.
-    'act.type': 'Type',
-    'act.update': 'Update the row',
+    // L'action : ajouter une ligne, ou modifier des lignes (la même, ou celles qu'une colonne repère).
+    'act.type': 'Do',
+    'act.update': 'Update rows',
     'act.add': 'Add a row',
-    'act.table': 'Target table',
-    'act.column': 'Column',
-    'act.value': 'Value',
-    'act.matchColumn': 'Row found by',
-    'act.matchValue': 'Key value',
+    'act.table': 'In table',
+    'act.column': 'Column to fill',
+    'act.value': 'New value',
+    'act.matchColumn': 'Find by column',
+    'act.matchValue': 'Value to find',
+    'act.many': 'If several rows',
+    'act.manyAll': 'Update them all',
+    'act.manyStop': 'Stop (error)',
 
     // Les listes avec recherche (js/search-select.js) et leurs choix à part.
-    'list.eventRow': '— Row of the event —',
+    'list.eventRow': '— The same row —',
     'list.choose': '— Choose … —',
-    'list.none': '— None —',
-    'list.currentTable': '— Current table —',
+    'list.anyColumn': '— Any column —',
+    'list.currentTable': '— Table of the view —',
     'list.search': 'Search…',
     'list.noResult': 'No result',
-    'list.anyRow': '— Any row —',
+    'list.noFilter': '— No filter —',
 
-    // Ce qui empêche d'activer (Graph.validate), écrit dans le journal.
-    'issue.actionMatch': '"{node}" updates another table: pick the column that finds the row.',
-    'issue.actionMatchValue': '"{node}": the key value that finds the row is empty.',
-    'issue.lookupIncomplete': '"{node}": pick the column that finds the row, the key value and the column to read.',
-    'issue.triggerTarget': '"{node}": a specific row only applies to a modification.',
-    'issue.triggerTargetValue': '"{node}": the key value of the specific row is empty.',
+    // Les exemples grisés des champs libres ({Colonne} : une colonne de la ligne ; {id} : son numéro, ce que garde une colonne Référence).
+    'ph.targetValue': 'e.g. Paris, or 12',
+    'ph.condValue': 'e.g. Done, or 10',
+    'ph.matchValue': 'e.g. {Column}, or {id}',
+    'ph.value': 'e.g. Done, or {Column}',
+    'ph.operand': 'e.g. {Column}, or 10',
+
+    // Ce qui empêche d'activer (Graph.validate), écrit dans le journal, sur le nœud et, workflow actif, dans le bandeau : le champ à régler, par son nom.
+    'issue.actionMatch': '"{node}" updates another table: choose "Find by column".',
+    'issue.actionMatchValue': '"{node}": "Value to find" is empty. Type for instance {Column}, or {id} for a Reference column to this table.',
+    'issue.lookupIncomplete': '"{node}": choose "Find by column" and "Column to read", and fill in "Value to find".',
+    'issue.triggerTarget': '"{node}": the filter only applies to a modified row.',
+    'issue.triggerTargetValue': '"{node}": the filter\'s expected value is empty.',
     'issue.transformName': '"{node}": the name must start with a letter, contain only letters, digits and _, and be unique.',
     'issue.transformOperand': '"{node}": a value is missing.',
     'issue.noTrigger': 'Add a Trigger node.',
     'issue.noAction': 'Add an Action node.',
     'issue.notConnected': '"{node}" is not connected.',
-    'issue.conditionColumn': '"{node}" has no column.',
-    'issue.actionColumn': '"{node}" has no column.',
+    'issue.conditionColumn': '"{node}": choose the column of each check.',
+    'issue.actionColumn': '"{node}": choose the column to fill.',
     'issue.noPath': 'No action is connected to a trigger.',
 
     // Le résumé lisible du graphe, enregistré avec lui (colonne Resume de la table Automation).
@@ -371,15 +415,16 @@ const I18N_TEXTS = {
     'trace.action': 'Action planned',
 
     // Le journal : son panneau, puis ses lignes (l'événement, son résultat, ce que le widget a fait ou refusé, et pourquoi).
-    'logs.title': 'Logs',
+    'logs.title': 'Log',
     'logs.waiting': 'Waiting for Grist events…',
     'logs.more': 'Older runs',
-    'logs.toggle': 'Show or hide the logs',
+    'logs.toggle': 'Show or hide the log',
+    'logs.toggleErrors': 'Show or hide the log: new errors',
     'log.deactivatedElsewhere': 'Automation turned off from another tab: it is off here too.',
     'log.loopStopped': 'Row {row}: too many runs in a short time, stopped to avoid a loop.',
     'log.event': '{event} row {row}: {status}',
-    'log.dryRun': 'Dry run row {row}: {status} — {n} {n|effect|effects}',
-    'log.dryNoRow': 'Dry run impossible: no row in the view.',
+    'log.dryRun': 'Test on row {row}: {status} — {n} {n|planned write|planned writes}',
+    'log.dryNoRow': 'Cannot test: no row in the view.',
     'log.badConfig': 'Unreadable configuration: it is kept as is, unchanged.',
     'log.schemaError': 'Columns of "{table}" unreadable: {error}',
     'log.cannotActivate': 'Cannot turn on: {issue}',
@@ -396,6 +441,7 @@ const I18N_TEXTS = {
     'event.delete': 'deletion',
     'result.success': 'done',
     'result.error': 'error',
+    'result.noRow': 'no row to update',
 
     // Le relais entre onglets (js/executor.js) : lequel exécute.
     'executor.active': 'This tab is now running the automation.',

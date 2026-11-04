@@ -128,6 +128,6 @@ test('STORE-10 résumé lisible : un chemin par ligne, dans la langue de l\'inte
   G.connect(g, 'trigger-1', extra.id);
   const lines = G.summarize(g, t).split('\n');
   assert.strictEqual(lines.length, 2);
-  assert.match(lines[0], /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action : Ajouter une ligne|Mettre à jour la ligne/);
+  assert.match(lines[0], /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action : Ajouter une ligne|Modifier des lignes/);
   assert.match(G.summarize(g, (k, p) => I.translate(k, p, 'en')), /Trigger : modified \(Statut\)/);
 });
