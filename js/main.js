@@ -402,9 +402,17 @@ function definition(term, content) {
 function openSettings() {
   const body = document.createElement('div');
   const list = document.createElement('dl');
+  // Aide : la prise en main (js/tutorial.js), qui s'ouvre par-dessus les Réglages et leur rend le focus quand elle se ferme.
+  const help = document.createElement('button');
+  help.type = 'button';
+  help.id = 'open-tutorial';
+  help.textContent = t('tuto.title');
+  help.setAttribute('aria-haspopup', 'dialog');
+  help.addEventListener('click', () => Tutorial.open());
   list.append(
     ...definition(t('settings.language'), segmented(I18n.LANGS, I18n.lang, (code) => code.toUpperCase(), (code) => I18n.set(code))),
     ...definition(t('settings.theme'), segmented(Theme.MODES, Theme.mode, (mode) => t('theme.' + mode), (mode) => Theme.set(mode))),
+    ...definition(t('settings.help'), help),
   );
   const credits = document.createElement('dl');
   const site = document.createElement('a');
@@ -527,6 +535,8 @@ function start() {
     } finally {
       startupDone = true;
     }
+    // La prise en main, la première fois, pour qui peut modifier le document : après la question de la table (initStore l'attend), jamais par-dessus elle.
+    if (!readOnly) Tutorial.openFirstTime();
     await loadSchema();
   }).catch((err) => {
     startupDone = true;

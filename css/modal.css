@@ -3,6 +3,8 @@
 .modal { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; align-items: center; justify-content: center; padding: var(--gfs-pad-top, 0px) var(--gfs-pad-right, 0px) var(--gfs-pad-bottom, 0px) var(--gfs-pad-left, 0px); background: var(--scrim); }
 .modal-box { display: flex; flex-direction: column; width: 400px; max-width: calc(100vw - 24px - var(--gfs-pad-left, 0px) - var(--gfs-pad-right, 0px)); max-height: calc(100vh - 24px - var(--gfs-pad-top, 0px) - var(--gfs-pad-bottom, 0px)); background: var(--surface); color: var(--text); border: var(--bw) solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-float); }
 .modal-box.w-form { width: 480px; }
+/* Fenêtre à captures (la prise en main, js/tutorial.js) : 620 px, comme la fenêtre des nouveautés de la charte, pour que les captures restent lisibles. */
+.modal-box.w-media { width: 620px; }
 .modal-box.w-large { width: 960px; }
 .modal-title { margin: 0; padding: 10px 14px; font-family: var(--font-head); font-size: 14px; font-weight: var(--fw-head); letter-spacing: var(--ls-head); text-transform: var(--tt-head); border-bottom: 1px solid var(--border); }
 .modal-body { padding: 10px 14px; overflow: auto; min-height: 0; }

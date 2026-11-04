@@ -18,6 +18,7 @@ Dernière colonne : où la règle est appliquée ou vérifiée dans ce dépôt.
 | Icônes SVG en contour (`mask-image`), pas d'emoji, une icône = une fonction | `css/style.css`, HYG-05 |
 | Bilingue fr/en, même lot ; vocabulaire (« modèle », pas de pluriel entre parenthèses, vide = « — Choisir … — ») | `js/i18n.js`, I18N-01 à I18N-05 |
 | Fenêtres : base commune (3 zones, 3 largeurs, focus piégé, Échap, voile qui ne ferme rien) | `js/modal.js`, E2E-04 |
+| Prise en main (0.14.0), faite comme la fenêtre des nouveautés de la charte : de vraies captures fr et en (WebP, thème clair encadré), même hauteur pour tous les écrans, 620 px, tient dans 700×400 ; un point par écran (`tablist`, un arrêt de Tab, flèches, Début, Fin), « Fermer, Précédent, Suivant » puis « Précédent, Fermer » ; s'ouvre d'elle-même une fois pour qui peut modifier (jamais en lecture seule, sur la carte de l'accès, hors de Grist, par-dessus une autre fenêtre, ni dans un navigateur qui ne retient rien), Réglages > Aide la rouvre | `js/tutorial.js`, `css/tutorial.css`, TUTO-01 à 03, E2E-51 à 57 |
 | Pas de `prompt()` / `confirm()` natifs : fenêtres du widget | HYG-04 |
 | Choix d'une colonne ou d'une table : liste avec recherche, jamais de `<select>` natif visible (aussi dans les nœuds et le menu d'ajout) | `js/search-select.js`, SRCH-01 à SRCH-04, E2E-05 |
 | Vue nodale : fond uni, nœuds reliés par des liens, ajout par clic droit (demande d'Antoine, inspiration Blender / Unreal) | `js/canvas.js`, E2E-01, E2E-09, E2E-10 |

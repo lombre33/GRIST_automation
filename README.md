@@ -18,6 +18,8 @@ Exemple : « quand le Statut d'un projet passe à Clos, ajouter une ligne dans A
 
 « Tester » simule le graphe sur la ligne sélectionnée dans Grist (sinon la première de la vue), sans rien écrire, et montre l'état de chaque nœud. « Activer » refuse tant que le graphe est incomplet et dit pourquoi dans le journal. Interface en français et en anglais, thèmes clair et sombre, pensée pour un panneau de 700 × 400 px.
 
+Une **prise en main** de six écrans (de vraies captures du widget, en français et en anglais) s'ouvre d'elle-même à la première ouverture, pour une personne qui peut modifier le document ; **Réglages > Aide** la rouvre quand on veut.
+
 ## Installation et configuration dans Grist
 
 1. Dans le document, ajoutez une vue (widget) **Personnalisé** sur la table à surveiller.
@@ -43,8 +45,8 @@ Une personne qui n'a que la **lecture** du document voit le workflow, le déplac
 ## Ce que le widget garde, et où
 
 - **Dans le document Grist** : la table `Automation`, une seule pour tout le widget (`Type` = `Workflow` : le graphe et un résumé lisible, une ligne par table de vue ; `Log` : une ligne par exécution, avec l'adresse e-mail de la personne dont le navigateur a exécuté, colonne `Auteur`, formule `user.Email` ; `Lock` : le verrou d'exécution). Le graphe est aussi gardé dans les options de la vue. Sans la table `Automation`, le widget fonctionne mais ne garde ni le graphe dans le document ni le journal.
-- **Dans le navigateur**, deux préférences d'affichage dans `localStorage` : la langue (`ab_lang`) et le thème (`ab_theme`). Et, dans `sessionStorage`, le temps d'un rechargement de la page, l'identifiant de l'onglet pour le verrou (`ab_executor_<table>`) : un onglet rechargé reprend ainsi l'exécution tout de suite. Rien qui vienne du document.
-- **Ailleurs** : rien. Le widget n'appelle aucun service ; sa politique de sécurité (`index.html`) interdit toute requête vers un autre site que le sien, hors le script de l'API Grist.
+- **Dans le navigateur**, dans `localStorage` : deux préférences d'affichage, la langue (`ab_lang`) et le thème (`ab_theme`), et la version de la prise en main déjà vue (`ab_tuto`), pour qu'elle ne s'ouvre d'elle-même qu'une fois. Un navigateur qui ne retient rien (stockage refusé, cadre de GFS) ne l'ouvre pas de lui-même : elle reviendrait à chaque chargement. Et, dans `sessionStorage`, le temps d'un rechargement de la page, l'identifiant de l'onglet pour le verrou (`ab_executor_<table>`) : un onglet rechargé reprend ainsi l'exécution tout de suite. Rien qui vienne du document.
+- **Ailleurs** : rien. Le widget n'appelle aucun service ; sa politique de sécurité (`index.html`) interdit toute requête vers un autre site que le sien, hors le script de l'API Grist (les captures de la prise en main viennent du site du widget).
 
 ## Dépendances
 
@@ -85,8 +87,9 @@ La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages re
 | `js/main.js` | branchement sur l'API Grist : accès, lecture seule, sauvegarde, exécution |
 | `js/i18n.js`, `js/i18n-texts.js`, `js/theme.js` | langue et textes fr/en, thèmes |
 | `js/modal.js`, `js/search-select.js` | fenêtres et listes avec recherche |
+| `js/tutorial.js`, `img/tuto/` | prise en main : six écrans, leurs captures fr et en |
 | `js/gfs.js`, `js/keep-clear.js`, `kit/` | lien avec GFS : l'ambiance (par le kit) et la zone de la barre à laisser libre |
-| `css/` | jetons de la charte, styles, canevas, fenêtres |
+| `css/` | jetons de la charte, styles, canevas, fenêtres, prise en main |
 
 Périmètre : `docs/CDC_Widget_Grist_Automation_Builder.md`. Règles d'interface et de développement : `docs/REGLES_UI_UX_ET_DEV.md`. Sécurité : `SECURITY.md`.
 
@@ -95,9 +98,10 @@ Périmètre : `docs/CDC_Widget_Grist_Automation_Builder.md`. Règles d'interface
 ```
 npm test            # unitaires et vérifications statiques, sans dépendance (Node)
 npm run test:e2e    # scénarios dans Chromium avec une API Grist simulée, dont l'app dans un faux GFS (tests/e2e/gfs-host.html)
+npm run tutorial:shots   # refait les captures de la prise en main (img/tuto/), à relire avant de pousser
 ```
 
-`test:e2e` demande Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin). `E2E_ONLY='E2E-4[5-9]'` n'en joue qu'une partie ; `E2E_SHOTS=<dossier>` range des captures d'écran des scénarios dans GFS. Les tests qui lisent le kit (HYG-14 à 17, E2E-36 à 44) demandent le sous-module récupéré. Plan des tests : `docs/PLAN_TESTS.md` ; essais dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`.
+`test:e2e` et `tutorial:shots` demandent Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin) ; ce qu'ils partagent (le site servi, l'API simulée, les gestes sur le canevas) est dans `tests/e2e/harness.mjs`. Les captures sont à refaire quand l'interface qu'elles montrent change. `E2E_ONLY='E2E-4[5-9]'` n'en joue qu'une partie ; `E2E_SHOTS=<dossier>` range des captures d'écran des scénarios dans GFS. Les tests qui lisent le kit (HYG-14 à 17, E2E-36 à 44) demandent le sous-module récupéré. Plan des tests : `docs/PLAN_TESTS.md` ; essais dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`.
 
 ## Licence
 

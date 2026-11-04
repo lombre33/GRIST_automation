@@ -1,39 +1,23 @@
 // Scénario de base de bout en bout (Chromium + API Grist simulée) : npm run test:e2e
-// Prérequis : Playwright installé hors du dépôt (aucune dépendance n'est ajoutée au widget).
-import http from 'node:http';
+// Prérequis : Playwright installé hors du dépôt (tests/e2e/harness.mjs : le site servi, l'API Grist simulée, Chromium).
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { fileURLToPath } from 'node:url';
-// PLAYWRIGHT_PATH : dossier de Playwright quand il n'est pas installé à côté du dépôt.
-const { chromium } = await import(process.env.PLAYWRIGHT_PATH ? `${process.env.PLAYWRIGHT_PATH}/index.mjs` : 'playwright');
+import { root, stubSource, serve, launch, routeApi, tutorialSeen, addNode, pick, waitSchema } from './harness.mjs';
 
-const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
-const server = http.createServer((req, res) => {
-  const asked = decodeURIComponent(req.url.split('?')[0]);
-  const file = path.join(root, asked === '/' ? 'index.html' : asked);
-  if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end(); }
-  // Comme GitHub Pages : le cadre isolé de GFS (origine opaque) ne charge un module que si le site l'autorise.
-  res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream', 'access-control-allow-origin': '*' });
-  res.end(fs.readFileSync(file));
-});
-await new Promise((resolve) => server.listen(0, resolve));
-const url = `http://localhost:${server.address().port}/`;
-// Le vrai grist-plugin-api.js évalue chacun de ses modules par eval() : le simulateur fait de même, pour que la politique de sécurité de la page soit éprouvée comme en vrai.
-const stubSource = `eval(${JSON.stringify(fs.readFileSync(path.join(root, 'tests/e2e/grist-stub.js'), 'utf8'))});`;
-const API = 'https://docs.getgrist.com/grist-plugin-api.js';
-
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+const { server, url } = await serve();
+const browser = await launch();
 let failures = 0;
 // host : { context, fallback } joue l'app dans un faux GFS (tests/e2e/gfs-host.html), un cadre isolé comme chez GFS, qui rend `context` à l'appel `contexte` ; run(page, app) reçoit alors aussi le cadre de l'app
 //   (`app`), dans lequel on lit et on clique (`page` reste la page de l'hôte : souris, clavier, captures). Sans host, `app` est la page. `fallback` garde le garde-fou de 2 s de l'attente de l'ambiance.
 // blocked : adresses (globs) dont la requête échoue ; tolerated : messages de la console attendus dans ce scénario.
 // query : ce que Grist ajoute à l'adresse du cadre (`?access=none`, `?access=full&readonly=true`…), lu par js/main.js.
 // E2E_ONLY=<expression régulière> ne joue que les scénarios dont le nom lui correspond (E2E_ONLY='E2E-3[6-9]|E2E-4').
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '' } = {}) {
+// tutorial : la prise en main s'ouvre d'elle-même, comme dans un navigateur qui ne l'a jamais vue ; sinon, elle est déjà vue et ne gêne pas le scénario.
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '', tutorial = false } = {}) {
   if (process.env.E2E_ONLY && !new RegExp(process.env.E2E_ONLY).test(name)) return;
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
+  if (!tutorial) await tutorialSeen(context);
   const page = await context.newPage();
   const problems = [];
   page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) problems.push(m.text()); });
@@ -51,9 +35,7 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
     });
   }
   for (const glob of blocked) await page.route(glob, (route) => route.abort());
-  await page.route(API, (route) => (grist
-    ? route.fulfill({ contentType: 'text/javascript', body: stubSource })
-    : route.abort()));
+  await routeApi(page, grist);
   try {
     await page.goto(host ? `${url}tests/e2e/gfs-host.html` : url + query);
     let app = page;
@@ -77,25 +59,6 @@ async function shot(page, name) {
   if (!process.env.E2E_SHOTS) return;
   fs.mkdirSync(process.env.E2E_SHOTS, { recursive: true });
   await page.screenshot({ path: path.join(process.env.E2E_SHOTS, `${name}.png`) });
-}
-
-// Ajoute un nœud par le clic droit sur le fond, à (x, y) dans la fenêtre.
-async function addNode(page, label, x, y) {
-  await page.mouse.click(x, y, { button: 'right' });
-  await page.keyboard.type(label);
-  await page.keyboard.press('Enter');
-}
-
-async function pick(page, id, search) {
-  const host = page.locator(`#${id}`).locator('xpath=..');
-  await host.locator('.ss-button').click();
-  await host.locator('input').fill(search);
-  await page.keyboard.press('Enter');
-}
-
-// Attend que les listes de colonnes soient remplies depuis le document simulé.
-async function waitSchema(page) {
-  await page.waitForFunction(() => document.querySelector('.node select option[value="Statut"], .node select option[value="Archive"]'));
 }
 
 // Le nœud action-1 ajoute une ligne dans Archive, colonne Motif = value.
@@ -265,7 +228,7 @@ await scenario('E2E-11 sauvegarde automatique et rechargement du graphe', async 
   const saved = await page.evaluate(() => window.__stub.options.workflow);
   const copy = await page.context().newPage();
   await copy.addInitScript((value) => { window.__preloadOptions = { workflow: value }; }, saved);
-  await copy.route(API, (route) => route.fulfill({ contentType: 'text/javascript', body: stubSource }));
+  await routeApi(copy);
   await copy.goto(url);
   await copy.waitForSelector('.node-action');
   assert.equal(await copy.locator('.node').count(), 3);
@@ -315,7 +278,7 @@ await scenario('E2E-14 le graphe du document est relu au démarrage, avec le jou
   const tables = await page.evaluate(() => JSON.stringify(window.__stub.docTables));
   const copy = await page.context().newPage();
   await copy.addInitScript((saved) => { window.__restore = JSON.parse(saved); }, tables);
-  await copy.route(API, (route) => route.fulfill({ contentType: 'text/javascript', body: stubSource.replace('window.__stub = {', 'Object.assign(docTables, window.__restore || {}); window.__stub = {') }));
+  await routeApi(copy, true, stubSource.replace('window.__stub = {', 'Object.assign(docTables, window.__restore || {}); window.__stub = {'));
   await copy.goto(url);
   await copy.waitForSelector('.node-action');
   assert.equal(await copy.locator('.node').count(), 3);
@@ -645,7 +608,7 @@ await scenario('E2E-35 contenu du document illisible, graphe actif dans les rég
   const saved = await page.evaluate(() => window.__stub.options.workflow);
   const copy = await page.context().newPage();
   await copy.addInitScript((init) => Object.assign(window, init), { __preloadOptions: { workflow: saved }, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] });
-  await copy.route(API, (route) => route.fulfill({ contentType: 'text/javascript', body: stubSource }));
+  await routeApi(copy);
   await copy.goto(url);
   await copy.waitForSelector('#locked:not([hidden])');
   assert.equal(await copy.locator('.node').count(), 0, 'le graphe des réglages de la vue n\'est plus affiché');
@@ -980,6 +943,189 @@ await scenario('E2E-50 un onglet neuf (dupliqué, ou une autre personne) n\'hér
   await page.waitForFunction((text) => document.getElementById('open-tab-warning').textContent === text, FR.otherTab, { timeout: 3000 });
   assert.deepEqual(await page.evaluate(() => window.__stub.applied), []);
 }, { init: { __preloadRows: [...activeRows, { Type: 'Lock', Table: 'Contacts', Config: 'aaaaaaaaaaaaaaaa', Date: 1 }] } });
+
+/* ---------- La prise en main (js/tutorial.js) ---------- */
+
+// La prise en main telle qu'on la voit : l'écran affiché, ses boutons dans l'ordre (* : le principal), le focus, et de quoi vérifier qu'elle tient dans la fenêtre.
+function tutorialState(target) {
+  return target.evaluate(() => {
+    const box = document.querySelector('.modal-box.w-media');
+    if (!box) return null;
+    const body = box.querySelector('.modal-body');
+    const text = box.querySelector('.tuto-text');
+    const image = box.querySelector('.tuto-shot img');
+    const dots = [...box.querySelectorAll('[role=tab]')];
+    const rect = box.getBoundingClientRect();
+    const focus = document.activeElement;
+    return {
+      title: box.querySelector('.modal-title').textContent,
+      index: dots.findIndex((dot) => dot.getAttribute('aria-selected') === 'true'),
+      name: box.querySelector('.tuto-name').textContent,
+      footer: [...box.querySelectorAll('.modal-footer > button')].filter((b) => !b.hidden).map((b) => b.textContent + (b.classList.contains('primary') ? '*' : '')),
+      focus: focus.getAttribute('role') === 'tab' ? 'tab-' + dots.indexOf(focus) : focus.textContent,
+      tabStops: dots.filter((dot) => dot.tabIndex === 0).length,
+      fits: rect.top >= 0 && rect.left >= 0 && rect.bottom <= innerHeight && rect.right <= innerWidth && body.scrollHeight <= body.clientHeight,
+      height: box.querySelector('.tuto-screen').getBoundingClientRect().height,
+      lines: Math.round(text.getBoundingClientRect().height / parseFloat(getComputedStyle(text).lineHeight)),
+      image: { src: image.getAttribute('src'), alt: image.alt, width: image.naturalWidth, missing: image.closest('figure').classList.contains('is-missing') },
+    };
+  });
+}
+
+// La prise en main, une fois l'image de l'écran affiché venue (ou refusée).
+async function tutorialScreen(target) {
+  await target.waitForFunction(() => { const image = document.querySelector('.tuto-shot img'); return image && image.complete; });
+  return tutorialState(target);
+}
+
+// Le plus faible contraste des points de la prise en main sur le fond de la fenêtre : ce sont des commandes, 4,5:1 au moins (charte, fenêtre des nouveautés).
+const dotContrast = (target) => target.evaluate(() => {
+  const parse = (value) => value.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
+  const luminance = (rgb) => { const [r, g, b] = rgb.map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const back = luminance(parse(getComputedStyle(document.querySelector('.modal-box.w-media')).backgroundColor));
+  return Math.min(...[...document.querySelectorAll('.tuto-dot')].map((dot) => {
+    const front = luminance(parse(getComputedStyle(dot, '::before').backgroundColor));
+    return (Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05);
+  }));
+});
+
+// Le démarrage est fini (la table de la vue lue, le document examiné) ; ce que la prise en main aurait fait d'elle-même est fait.
+async function startupSettled(target) {
+  await target.waitForFunction(() => (window.__stub.calls.getTableId || 0) > 0);
+  await target.waitForTimeout(600);
+}
+
+await scenario('E2E-51 prise en main : s\'ouvre d\'elle-même une fois, après la question de la table ; souris et clavier ; tient dans 700×400 ; Réglages > Aide la rouvre', async (page) => {
+  await page.waitForSelector('[role=dialog]');
+  assert.equal(await page.locator('.modal-title').innerText(), 'Créer la table du widget dans ce document ?');
+  assert.equal(await page.locator('.modal-box.w-media').count(), 0, 'jamais par-dessus une autre fenêtre : elle attend la réponse');
+  await page.getByRole('button', { name: 'Créer la table' }).click();
+  await page.waitForSelector('.modal-box.w-media');
+  assert.equal(await page.locator('[role=dialog]').count(), 1);
+  const names = [];
+  const heights = new Set();
+  for (let i = 0; i < 6; i += 1) {
+    const state = await tutorialScreen(page);
+    assert.equal(state.title, 'Prise en main');
+    assert.equal(state.index, i);
+    assert.equal(state.fits, true, `écran ${i + 1} : la fenêtre tient dans 700×400 sans défilement`);
+    assert.ok(state.lines <= 2, `écran ${i + 1} : deux lignes de texte au plus (${state.lines})`);
+    assert.equal(state.image.width, 1200, `écran ${i + 1} : la capture est venue`);
+    assert.match(state.image.src, /^img\/tuto\/[a-z]+-fr\.webp\?v=\d+\.\d+\.\d+$/);
+    assert.equal(state.tabStops, 1, 'un seul arrêt de Tab pour les points');
+    assert.deepEqual(state.footer, i === 0 ? ['Fermer', 'Suivant*'] : i < 5 ? ['Fermer', 'Précédent', 'Suivant*'] : ['Précédent', 'Fermer*']);
+    assert.equal(state.focus, i < 5 ? 'Suivant' : 'Fermer', 'le focus reste sur le bouton pressé, ou passe au principal quand il disparaît');
+    names.push(state.name);
+    heights.add(state.height);
+    if (i < 5) await page.getByRole('button', { name: 'Suivant' }).click();
+  }
+  assert.equal(heights.size, 1, 'tous les écrans ont la même hauteur');
+  assert.deepEqual(await unreadable(page), [], 'les textes se lisent (4,5:1), dans le thème clair');
+  assert.ok(await dotContrast(page) >= 4.5, 'les points aussi');
+  assert.deepEqual(names, ['Un workflow, du déclencheur à l\'action', 'Ajouter des nœuds', 'Relier les nœuds', 'Régler chaque nœud', 'Tester sans rien écrire', 'Activer, et garder la vue ouverte']);
+  await page.getByRole('button', { name: 'Précédent' }).click();
+  assert.equal((await tutorialState(page)).focus, 'Précédent');
+  // Les points : les flèches, Début et Fin changent d'écran, le focus suit.
+  await page.getByRole('tab', { name: 'Écran 5 sur 6 : Tester sans rien écrire' }).focus();
+  await page.keyboard.press('Home');
+  assert.deepEqual(await tutorialState(page).then((s) => [s.index, s.focus, s.footer]), [0, 'tab-0', ['Fermer', 'Suivant*']]);
+  await page.keyboard.press('ArrowRight');
+  assert.deepEqual(await tutorialState(page).then((s) => [s.index, s.focus]), [1, 'tab-1']);
+  await page.keyboard.press('End');
+  assert.deepEqual(await tutorialState(page).then((s) => [s.index, s.focus, s.footer]), [5, 'tab-5', ['Précédent', 'Fermer*']]);
+  await page.keyboard.press('ArrowLeft');
+  assert.deepEqual(await tutorialState(page).then((s) => [s.index, s.focus]), [4, 'tab-4']);
+  await page.getByRole('tab', { name: 'Écran 3 sur 6 : Relier les nœuds' }).click();
+  assert.equal((await tutorialState(page)).index, 2);
+  // Échap la ferme et la retient : au rechargement, elle ne revient pas, même après la question de la table.
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('[role=dialog]').count(), 0);
+  assert.equal(await page.evaluate(() => localStorage.getItem('ab_tuto')), '1');
+  await page.reload();
+  await page.waitForSelector('[role=dialog]');
+  await page.getByRole('button', { name: 'Ne pas créer' }).click();
+  await startupSettled(page);
+  assert.equal(await page.locator('[role=dialog]').count(), 0, 'déjà vue : elle ne s\'ouvre plus d\'elle-même');
+  // Réglages > Aide : par-dessus les Réglages ; Échap ne ferme qu'elle et rend le focus au bouton qui l'a ouverte.
+  await page.click('#open-settings');
+  assert.equal(await page.locator('#open-tutorial').innerText(), 'Prise en main');
+  await page.click('#open-tutorial');
+  await page.waitForSelector('.modal-box.w-media');
+  assert.equal(await page.locator('[role=dialog]').count(), 2);
+  assert.equal((await tutorialScreen(page)).index, 0, 'elle rouvre sur son premier écran');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('[role=dialog]').count(), 1);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'open-tutorial');
+}, { tutorial: true, noTables: true, viewport: SMALL });
+
+await scenario('E2E-52 prise en main en lecture seule : jamais d\'elle-même, Réglages > Aide l\'ouvre', async (page) => {
+  await page.waitForSelector('#read-only-notice:not([hidden])');
+  await startupSettled(page);
+  assert.equal(await page.locator('[role=dialog]').count(), 0);
+  await page.click('#open-settings');
+  await page.click('#open-tutorial');
+  assert.equal((await tutorialScreen(page)).name, 'Un workflow, du déclencheur à l\'action');
+  await page.locator('.modal-box.w-media').getByRole('button', { name: 'Fermer' }).click();
+  assert.equal(await page.locator('[role=dialog]').count(), 1, 'les Réglages restent');
+}, { tutorial: true, query: '?access=full&readonly=true' });
+
+await scenario('E2E-53 prise en main : jamais sur la carte de l\'accès complet', async (page) => {
+  await page.waitForSelector('#access-needed:not([hidden])');
+  await page.waitForTimeout(800);
+  assert.equal(await page.locator('[role=dialog]').count(), 0);
+  assert.equal(await page.evaluate(() => localStorage.getItem('ab_tuto')), null, 'rien n\'est retenu : elle s\'ouvrira une fois l\'accès accordé');
+}, { tutorial: true, query: '?access=none&readonly=false' });
+
+await scenario('E2E-54 prise en main hors de Grist : seule la fenêtre qui dit quoi faire', async (page) => {
+  await page.waitForSelector('[role=dialog]');
+  await page.waitForTimeout(600);
+  assert.equal(await page.locator('[role=dialog]').count(), 1);
+  assert.equal(await page.locator('.modal-box.w-media').count(), 0);
+}, { tutorial: true, grist: false });
+
+await scenario('E2E-55 prise en main dans le cadre de GFS, qui ne retient rien : jamais d\'elle-même (elle reviendrait à chaque chargement), Réglages > Aide l\'ouvre', async (page, app) => {
+  await startupSettled(app);
+  assert.equal(await app.locator('[role=dialog]').count(), 0);
+  assert.equal(await app.evaluate(() => { try { localStorage.getItem('x'); return 'lisible'; } catch (err) { return 'refusé'; } }), 'refusé', 'le cadre isolé de GFS n\'a pas de stockage');
+  await app.click('#open-settings');
+  await app.click('#open-tutorial');
+  const state = await tutorialScreen(app);
+  assert.equal(state.image.width, 1200, 'les captures viennent du site du widget, même dans le cadre isolé');
+  assert.equal(state.fits, true);
+  await page.keyboard.press('Escape');
+  assert.equal(await app.locator('[role=dialog]').count(), 1);
+}, { tutorial: true, host: { context: { langue: 'fr', barre: null, ambiance: null } }, viewport: SMALL });
+
+await scenario('E2E-56 prise en main : jamais par-dessus une fenêtre ouverte pendant le démarrage', async (page) => {
+  await page.click('#open-settings');
+  await page.waitForFunction(() => window.__stub.calls.getTableId > 0);
+  await page.waitForTimeout(1800);   // la lecture du document (__fetchDelay) est finie
+  assert.equal(await page.locator('[role=dialog]').count(), 1, 'les Réglages seuls');
+  assert.equal(await page.locator('.modal-box.w-media').count(), 0);
+}, { tutorial: true, init: { __fetchDelay: 800 } });
+
+await scenario('E2E-57 prise en main en anglais et en sombre : captures et textes anglais ; une capture qui ne vient pas laisse sa place', async (page) => {
+  await page.click('#open-settings');
+  await page.getByRole('button', { name: 'Sombre' }).click();
+  await page.getByRole('button', { name: 'EN', exact: true }).click();
+  await page.click('#open-tutorial');
+  let state = await tutorialScreen(page);
+  assert.deepEqual([state.title, state.name, state.footer], ['Getting started', 'A workflow, from trigger to action', ['Close', 'Next*']]);
+  assert.match(state.image.src, /^img\/tuto\/graphe-en\.webp\?v=/);
+  assert.match(state.image.alt, /^Three connected nodes/);
+  const height = state.height;
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  state = await tutorialScreen(page);
+  assert.equal(state.name, 'Connect the nodes');
+  assert.equal(state.image.missing, true, 'la capture refusée disparaît');
+  assert.equal(state.height, height, 'sa place reste : la fenêtre ne saute pas');
+  assert.equal(state.lines <= 2 && state.fits, true);
+  assert.equal(await page.getByRole('tab', { name: 'Screen 3 of 6: Connect the nodes' }).getAttribute('aria-selected'), 'true');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  assert.deepEqual(await unreadable(page), [], 'les textes se lisent (4,5:1), dans le thème sombre');
+  assert.ok(await dotContrast(page) >= 4.5, 'les points aussi');
+}, { blocked: ['**/img/tuto/relier-en.webp*'], viewport: SMALL });
 
 await browser.close();
 server.close();

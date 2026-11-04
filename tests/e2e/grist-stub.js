@@ -7,8 +7,9 @@
 // Comme Grist : une écriture dans une colonne qui n'existe pas échoue en entier, et un identifiant déjà pris (sans tenir compte de la casse) devient `nom_2`.
 // Comme Grist encore : à `ready`, le thème de Grist (window.__gristAppearance, sombre par défaut) est posé dans <style id="grist-theme">, créée si la page n'a pas
 // d'élément de ce nom, et en style en ligne sur <html> ; en lecture seule (`readonly=true` dans l'adresse), toute écriture est refusée et notée dans `refused`.
-// `calls` compte les appels faits à l'API, par nom.
-const FIXED = {
+// `calls` compte les appels faits à l'API, par nom. window.__fixedTables : d'autres tables fixes à la place de Contacts et Archive (les captures de la prise en main
+// en anglais, tests/e2e/tutorial-shots.mjs : les mêmes tables, des colonnes en anglais) ; la table de la vue reste Contacts.
+const FIXED = window.__fixedTables || {
   Contacts: { id: [1], manualSort: [1], Nom: ['A'], Statut: ['Nouveau'], Montant: [10], gristHelper_Display: [''] },
   Archive: { id: [1, 2], manualSort: [1, 2], Motif: ['a', 'b'], Source: [10, 500] },
 };

@@ -49,6 +49,8 @@ test('HYG-06 la politique de sécurité n\'autorise que le widget et l\'API Gris
   assert.match(csp, /'unsafe-eval'/, 'sans lui, l\'API Grist ne démarre pas');
   assert.doesNotMatch(csp.replace(/'unsafe-eval'/, ''), /unsafe-|connect-src/);
   assert.deepStrictEqual([...csp.matchAll(/https:\/\/[^\s;]+/g)].map((m) => m[0]), ['https://docs.getgrist.com/grist-plugin-api.js']);
+  // Les images : celles du site du widget (les captures de la prise en main, img/tuto/) et celles de la page elle-même (les icônes en data:).
+  assert.match(csp, /(?:^|; )img-src 'self' data:(?:;|$)/);
 });
 
 test('HYG-07 aucune couleur en dur hors des jetons : css/tokens.css les porte toutes, le blanc du texte d\'un bouton plein comprise (--on-accent)', () => {
@@ -62,21 +64,23 @@ test('HYG-08 le compte personnel n\'apparaît nulle part dans l\'interface', () 
   assert.deepStrictEqual(offenders(everything, /lombre33/i), []);
 });
 
-test('HYG-09 le widget ne garde dans le navigateur que la langue et le thème, et le temps d\'un rechargement l\'identifiant de l\'onglet qui exécute', () => {
+test('HYG-09 le widget ne garde dans le navigateur que la langue, le thème et la prise en main vue, et le temps d\'un rechargement l\'identifiant de l\'onglet qui exécute', () => {
   const keys = new Set();
   for (const f of jsFiles) for (const m of read(f).matchAll(/(?:getItem|setItem)\(\s*(?:STORAGE_KEY|'([^']+)')/g)) keys.add(m[1] || 'STORAGE_KEY');
   assert.deepStrictEqual([...keys].sort(), ['STORAGE_KEY']);
   assert.deepStrictEqual(offenders(jsFiles, /indexedDB|document\.cookie/), []);
-  // localStorage : ab_lang (js/i18n.js) et ab_theme (js/theme.js), des préférences d'affichage.
-  assert.deepStrictEqual(offenders(jsFiles, /localStorage/), ['js/i18n.js', 'js/theme.js']);
+  // localStorage : ab_lang (js/i18n.js) et ab_theme (js/theme.js), des préférences d'affichage ; ab_tuto (js/tutorial.js), la version de la prise en main vue.
+  assert.deepStrictEqual(offenders(jsFiles, /localStorage/), ['js/i18n.js', 'js/theme.js', 'js/tutorial.js']);
   assert.match(read('js/i18n.js'), /STORAGE_KEY = 'ab_lang'/);
   assert.match(read('js/theme.js'), /STORAGE_KEY = 'ab_theme'/);
+  assert.match(read('js/tutorial.js'), /STORAGE_KEY = 'ab_tuto'/);
   // sessionStorage : l'identifiant de l'onglet pour le verrou d'exécution (Executor.tabIdentity), sous ab_executor_<table> ; rien du document.
   assert.deepStrictEqual(jsFiles.filter((f) => /sessionStorage/.test(code(f))), ['js/main.js']);
   assert.deepStrictEqual([...code('js/main.js').matchAll(/sessionStorage/g)].length, 1);
   assert.match(read('js/main.js'), /Executor\.tabIdentity\(\(\) => sessionStorage, 'ab_executor_' \+ table, randomId\)/);
   assert.match(read('README.md'), /localStorage/, 'le README dit ce que le widget garde dans le navigateur');
   assert.match(read('README.md'), /sessionStorage/);
+  assert.match(read('README.md'), /ab_tuto/);
 });
 
 test('HYG-10 aucun z-index en dur : les couches passent par les jetons --z-* de la charte (règle 12 de GFS)', () => {

@@ -1,11 +1,12 @@
 {
   "name": "grist-automation-builder",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "private": true,
   "description": "Widget Grist d'automatisation no-code (vue nodale)",
   "scripts": {
     "test": "node --test \"tests/*.test.js\"",
-    "test:e2e": "node tests/e2e/smoke.mjs"
+    "test:e2e": "node tests/e2e/smoke.mjs",
+    "tutorial:shots": "node tests/e2e/tutorial-shots.mjs"
   },
   "license": "GPL-3.0-only"
 }

@@ -10,6 +10,7 @@ Liste de scénarios manuels, à jouer par Antoine sur son Grist (instance Grist.
 
 | Date | Version du widget (Réglages > Crédits) | Testeur | ✅ | ❌ | ➖ | Remarques |
 |---|---|---|---|---|---|---|
+| 2026-11-04 | 0.14.0, copie du dépôt servie à part | Claude, joué par un script (Chromium) dans un Grist officiel local (image `gristlabs/grist`), pas Grist.Gouv | 5 | 0 | le reste | Prise en main : TUTO-01, TUTO-03, TUTO-04, TUTO-05 et TUTO-07 ✅ (après la question de la table, captures chargées depuis le site du widget sans erreur de politique de sécurité, retenue au rechargement, Réglages > Aide par-dessus les Réglages, lectrice sans ouverture d'elle-même). À rejouer sur Grist.Gouv, depuis l'adresse en ligne |
 | 2026-11-04 | 0.12.0 puis 0.13.0, copie du dépôt servie à part | Claude, joué par un script (Chromium) dans un Grist officiel local (image `gristlabs/grist`), pas Grist.Gouv | 8 | 0 | le reste | En 0.12.0 : START-03 ❌ (deux erreurs de politique de sécurité à chaque ouverture, le thème de Grist), START-04 ❌ (en lecture seule, une erreur « No write access » dans le journal toutes les 6 s), rechargement de l'onglet exécutant ❌ (environ 25 s à « un autre onglet l'exécute », et la modification faite entre-temps jamais exécutée), accès pas encore accordé ❌ (le widget avait l'air de marcher et n'enregistrait rien). Tous corrigés en 0.13.0 et rejoués ✅ : START-01, START-03, START-04, START-06, EXE-07, RUN-01, DRY-01, LOG (journal avec l'adresse e-mail). À rejouer sur Grist.Gouv, depuis l'adresse en ligne |
 
 ## Démarrage et accès
@@ -22,7 +23,7 @@ Liste de scénarios manuels, à jouer par Antoine sur son Grist (instance Grist.
 | START-02 | V0.5 | Page ouverte hors de Grist | Ouvrir l'adresse du widget directement dans un onglet | Fenêtre « Ouvrez ce widget depuis Grist » avec l'adresse et un bouton Copier | ➖ |
 | START-03 | V0.13.0 (modifié) | Politique de sécurité | Ouvrir la console et l'onglet Réseau, recharger ; changer le thème de Grist (Paramètres du compte > Apparence : sombre), recharger | Aucune erreur de politique de sécurité (en 0.12.0, deux à chaque ouverture : « Applying inline style violates… ») ; seule requête hors du widget : `docs.getgrist.com/grist-plugin-api.js` ; Grist en sombre et widget en clair : les barres de défilement et les listes du widget restent claires | ➖ |
 | START-04 | V0.13.0 (modifié) | Lecture seule | Activer un workflow avec un compte qui peut modifier, puis ouvrir la page du widget avec un compte qui n'a que la lecture du document ; attendre une minute, ouvrir le journal | Bandeau « Lecture seule : vous voyez ce workflow et pouvez le tester… » ; pas de bandeau « Automation active » ; Ajouter et Activer grisés, Tester actif ; les champs des nœuds grisés, le fond se déplace et se zoome, un nœud ne se déplace pas ; aucune erreur « No write access » dans le journal ; la table `Automation` ne change pas | ➖ |
-| START-05 | V0.11.1 | Site en ligne à jour | Ouvrir `https://lombre33.github.io/GRIST_automation/js/version.js` dans un onglet (attendre 10 minutes après un envoi : cache de GitHub Pages), puis comparer à Réglages > Crédits d'un widget ouvert par son adresse | Le numéro est celui de `package.json` (0.11.1 pour l'instant), partout le même ; s'il est plus ancien, la publication a échoué (onglet Actions du dépôt, « pages build and deployment ») | ➖ |
+| START-05 | V0.11.1 | Site en ligne à jour | Ouvrir `https://lombre33.github.io/GRIST_automation/js/version.js` dans un onglet (attendre 10 minutes après un envoi : cache de GitHub Pages), puis comparer à Réglages > Crédits d'un widget ouvert par son adresse | Le numéro est celui de `package.json`, partout le même ; s'il est plus ancien, la publication a échoué (onglet Actions du dépôt, « pages build and deployment ») | ➖ |
 
 ## Construire le graphe
 
@@ -210,6 +211,21 @@ Prérequis : document sans table `Automation` pour TAB-01 à TAB-03 ; les suivan
 | UI-06 | V0.5 | Fenêtres | Ouvrir les Réglages, Tab en boucle, Échap | Le focus reste dans la fenêtre ; Échap la ferme et le focus revient au bouton Réglages | ➖ |
 | UI-07 | V0.11.1 | Couleur du test à blanc | Tester avec le graphe de base, en clair puis en sombre | L'action prévue est signalée en bleu d'accent (barre pleine à texte blanc), plus en vert ; lisible dans les deux thèmes | ➖ |
 | UI-08 | V0.11.1 | Superpositions | Ouvrir le journal, le menu d'ajout (clic droit sur le fond), les Réglages | Même ordre qu'en 0.11 : le menu d'ajout recouvre le journal, la fenêtre des Réglages recouvre tout | ➖ |
+
+## Prise en main
+
+Pour revoir la prise en main comme à la première fois : une fenêtre de navigation privée, ou effacer les données du site `lombre33.github.io` dans le navigateur.
+
+| ID | Depuis | Scénario | Étapes | Attendu | Résultat |
+|---|---|---|---|---|---|
+| TUTO-01 | V0.14.0 | Première ouverture | Dans un navigateur qui ne l'a jamais vue, avec un compte qui peut modifier : ouvrir le widget dans un document sans table `Automation`, répondre à la question | La question d'abord, seule ; la prise en main « Prise en main » s'ouvre juste après la réponse, sur « Un workflow, du déclencheur à l'action », avec une capture du widget | ➖ |
+| TUTO-02 | V0.14.0 | Parcours | « Suivant » jusqu'au bout, « Précédent », un clic sur un point ; au clavier, Tab jusqu'aux points puis ← →, Début, Fin ; à 700 × 400 | Six écrans, chacun avec sa capture, la fenêtre ne change pas de hauteur et ne défile pas ; « Fermer, Précédent, Suivant » puis, au dernier écran, « Précédent, Fermer » (Fermer en bleu) ; un seul arrêt de Tab pour les points | ➖ |
+| TUTO-03 | V0.14.0 | Une seule fois | La fermer (Fermer, Échap ou le dernier écran), recharger la page, rouvrir le document | Elle ne revient pas d'elle-même | ➖ |
+| TUTO-04 | V0.14.0 | Réglages > Aide | Réglages, ligne « Aide », bouton « Prise en main » ; puis Échap | Elle s'ouvre par-dessus les Réglages, sur son premier écran ; Échap ne ferme qu'elle, le focus revient au bouton | ➖ |
+| TUTO-05 | V0.14.0 | Lecture seule | Avec un compte qui n'a que la lecture, dans un navigateur qui ne l'a jamais vue, ouvrir la page du widget | Elle ne s'ouvre pas d'elle-même ; Réglages > Aide l'ouvre | ➖ |
+| TUTO-06 | V0.14.0 | Anglais et sombre | Réglages > Sombre, EN, puis Aide | Textes en anglais, captures en anglais (colonnes Name, Status) ; les captures claires se lisent dans la fenêtre sombre, les points se voient | ➖ |
+| TUTO-07 | V0.14.0 | Politique de sécurité | Console et onglet Réseau ouverts, passer les six écrans | Aucune erreur de politique de sécurité ; les images viennent de `lombre33.github.io/GRIST_automation/img/tuto/` | ➖ |
+| TUTO-08 | V0.14.0 | Dans GFS | Ouvrir l'app depuis GFS, dans un navigateur qui ne l'a jamais vue | Elle ne s'ouvre pas d'elle-même (le cadre de GFS ne retient rien : elle reviendrait à chaque chargement) ; Réglages > Aide l'ouvre, captures comprises | ➖ |
 
 ## Dans Grist Factory Suite (GFS) : la barre et l'ambiance
 

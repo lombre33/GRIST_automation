@@ -29,14 +29,15 @@
     }
   }
 
-  // width : 'narrow' (400 px, questions), 'form' (480 px, formulaires) ou 'large' (960 px plafonnés au panneau).
-  // body : nœud DOM ; buttons : [{ label, primary, onClick }] — « Fermer » est ajouté si la liste est vide.
-  function create({ title, width = 'narrow', body, buttons = [], onClose }) {
+  // width : 'narrow' (400 px, questions), 'form' (480 px, formulaires), 'media' (620 px, fenêtre à captures, comme celle des nouveautés de la charte) ou 'large' (960 px plafonnés au panneau).
+  // body : nœud DOM ; buttons : [{ label, primary, onClick }] — « Fermer » est ajouté si la liste est vide ; actions : nœuds posés à la place des boutons, pour une fenêtre
+  // qui tient elle-même les siens (la prise en main : ses points, « Précédent », « Suivant »).
+  function create({ title, width = 'narrow', body, buttons = [], actions = null, onClose }) {
     const opener = document.activeElement;
     const overlay = document.createElement('div');
     overlay.className = 'modal';
     const box = document.createElement('div');
-    box.className = 'modal-box' + (width === 'form' ? ' w-form' : width === 'large' ? ' w-large' : '');
+    box.className = 'modal-box' + ({ form: ' w-form', media: ' w-media', large: ' w-large' }[width] || '');
     box.setAttribute('role', 'dialog');
     box.setAttribute('aria-modal', 'true');
     box.tabIndex = -1;
@@ -54,7 +55,8 @@
     const footer = document.createElement('div');
     footer.className = 'modal-footer';
     const win = { box, close };
-    const list = buttons.length ? buttons : [{ label: root.I18n.t('modal.close') }];
+    const list = actions ? [] : buttons.length ? buttons : [{ label: root.I18n.t('modal.close') }];
+    if (actions) footer.append(...actions);
     for (const spec of list) {
       const button = document.createElement('button');
       button.type = 'button';
@@ -80,7 +82,7 @@
       if (onClose) onClose();
       if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
     }
-    return { close, box };
+    return { close, box, footer };
   }
 
   // Question à deux boutons (Annuler, puis l'action) : rend une promesse qui vaut true pour l'action, false pour Annuler ou Échap.
@@ -97,5 +99,8 @@
     });
   }
 
-  root.Modal = { create, confirm };
+  // Une fenêtre est-elle ouverte ? (la prise en main ne s'ouvre jamais d'elle-même par-dessus une autre)
+  const isOpen = () => stack.length > 0;
+
+  root.Modal = { create, confirm, isOpen };
 })(window);
