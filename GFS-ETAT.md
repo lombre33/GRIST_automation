@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-11-02, au commit `941eafd` (le dernier commit de code que cette page décrit).
+Mis à jour le 2026-11-04, au commit `941eafd` (le dernier commit de code que cette page décrit).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -14,6 +14,7 @@ Mis à jour le 2026-11-02, au commit `941eafd` (le dernier commit de code que ce
 - 003 · lue · la barre de GFS recouvre « Ajouter » (barre en haut) et le début du journal (barre en bas) ; rien ne change avant le lot qui prend le lien avec GFS du kit (guide 1.2, point 4) : `GfsLink.onBar` écartera alors la barre d'outils (haut) et le journal (bas), puis les menus et fenêtres se caleront sur la zone libre, jamais écrite en dur
 - 004 · faite · lue, aucun code · la clé `workflow` n'est écrite que sur un geste de la personne (modifier le graphe, l'activer, accepter la création de la table : `save` de `js/main.js`, appelé par `scheduleSave`), jamais au démarrage ni à l'ouverture de la vue ; à garder ainsi
 - 005 · faite · lue, aucun code · le site est publié à l'adresse indiquée, `https://lombre33.github.io/GRIST_automation/index.html`, entrée `index.html` à la racine, adresse inchangée (rien à reporter dans le catalogue) ; vu en ligne le 2026-11-02, mais il servait encore la 0.9.0 : voir le premier changement ci-dessous
+- 006 · lue · les cinq ambiances de GFS et la couleur de la personne arrivent par le lien avec GFS du kit ; rien ne change avant le lot qui le prend (le même que la 003) : le kit à `8afa569` ou plus récent, `Ambiance.start()` une fois dans `js/main.js` (ou `createAmbiance({ link: GfsLink, isDark })` si l'app garde sa clé `ab_theme`), les feuilles écrites avec les jetons ; les couleurs des nœuds (type, état) restent celles d'Automation+, contraste compris ; « 006 · faite » viendra avec les deux essais demandés
 
 ## Changements qui touchent GFS
 - 2026-11-02 · `941eafd` · le site en ligne sert de nouveau la dernière version, la 0.11.1 : la publication de GitHub Pages échouait depuis le 21/10 (Jekyll refusait une accolade double non fermée dans un fichier de documentation), le site était resté à la 0.9.0 ; `.nojekyll` à la racine le fait publier les fichiers tels quels (test HYG-12) ; rien d'autre ne change : ni table, ni colonne, ni clé de réglages, ni adresse, ni bibliothèque, ni permission
