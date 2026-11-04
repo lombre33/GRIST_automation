@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-11-04, au commit `3f7d45a` (le dernier commit de code que cette page décrit).
+Mis à jour le 2026-11-04, au commit `7350a5c` (le dernier commit de code que cette page décrit).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -13,10 +13,16 @@ Mis à jour le 2026-11-04, au commit `3f7d45a` (le dernier commit de code que ce
 - 002 · faite · `e356021` · `LICENSE` ajouté, texte officiel de la GPL 3.0, SHA-256 `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986`
 - 003 · faite · `3f7d45a` · la barre est lue par le lien du kit (`GfsLink.bar()` et `onBar`, `js/gfs.js`) et `js/keep-clear.js` laisse sa zone libre aux quatre bords, jamais écrite en dur : barre en haut, la barre d'outils se partage autour de la zone (à 700 × 400 le titre est coupé par « … ») ; barre en bas, le journal remonte du juste nécessaire ; le menu d'ajout, les listes et les bulles s'écartent (échelle du canevas comptée), une fenêtre trop haute se réduit dans le reste du cadre ; seule, rien ne change (BAR-01 à 06, E2E-36 à 44) ; la langue de GFS (guide 1.2, point 8) n'est pas dans ce lot : FR et EN restent actifs
 - 004 · faite · lue, aucun code · la clé `workflow` n'est écrite que sur un geste de la personne (modifier le graphe, l'activer, accepter la création de la table : `save` de `js/main.js`, appelé par `scheduleSave`), jamais au démarrage ni à l'ouverture de la vue ; à garder ainsi
-- 005 · faite · lue, aucun code · le site est publié à l'adresse indiquée, `https://lombre33.github.io/GRIST_automation/index.html`, entrée `index.html` à la racine, adresse inchangée (rien à reporter dans le catalogue) ; vu en ligne le 2026-11-02, mais il servait encore la 0.9.0 : voir le premier changement ci-dessous
+- 005 · faite · lue, aucun code · le site est publié à l'adresse indiquée, `https://lombre33.github.io/GRIST_automation/index.html`, entrée `index.html` à la racine, adresse inchangée (rien à reporter dans le catalogue) ; vu en ligne le 2026-11-02, mais il servait encore la 0.9.0 : voir le changement `941eafd` ci-dessous
 - 006 · faite · `3f7d45a` · `createAmbiance({ link: GfsLink, isDark })` de `kit/js/ambiance-pose.js` (l'app garde sa clé `ab_theme`), démarré par `js/gfs.js` (module chargé dans `<head>`, pas dans `js/main.js` : la page attend l'ambiance, 2 s au plus, pour ne pas changer de couleurs sous les yeux) ; feuilles sur les jetons de couleur et de forme, valeurs d'origine dans `css/tokens.css`, fond `--bg` sur `body` (`min-height: 100vh`) avec `--wash` ; les deux essais : E2E-37 (message d'exemple du kit : fond, carte, bandeau, bouton plein en dégradé, clair et sombre, 4,5:1 ; `null` rend les couleurs de l'app) et HYG-07, 13 et 17 (aucune couleur en dur hors de `css/tokens.css`, exceptions écrites et justifiées : le rouge, l'ambre, le voile) ; mesuré aussi, hors dépôt, avec les messages que fabrique `prototype/js/ambiance.js` : les cinq ambiances et une couleur libre, clair et sombre, aucun texte sous 4,62:1
+- 007 · faite · lue, aucun code · le sous-module `kit/` reste à `db14544`, étiquette ou non ; les couleurs de type et d'état des nœuds restent sur l'accent et les paires de la règle 15, le rouge et l'ambre à nous ; les deux questions sont retirées
+- 008 · faite · lue, aucun code · le rejeu de GFS avec l'app à `3f7d45a` tient (quatre ambiances, deux modes, couleur libre, retour aux couleurs de l'app) et le déclencheur et l'action restent distincts ; rien à changer
 
 ## Changements qui touchent GFS
+- 2026-11-04 · `7350a5c` · l'app seule dans Grist, avant sa sortie publique en pré-alpha (0.13.0) :
+  - l'app lit `access` et `readonly` dans son adresse, que Grist ou GFS y mettent (contrats 1.3, point 3) : un niveau autre que `full` affiche ce qu'il faut accorder à la place du canevas, et seul `ready` est appelé (E2E-46) ; `readonly=true` : rien ne s'écrit (ni réglages de la vue, ni `Automation`, ni verrou) et rien ne s'exécute, le graphe se voit et se teste (E2E-47 et 48) ; sans `access` dans l'adresse, rien ne change
+  - stockage du navigateur en plus : `sessionStorage`, clé `ab_executor_<table>`, l'identifiant de l'onglet pour le verrou, gardé le temps d'un rechargement, dans des `try/catch` ; dans le cadre de GFS, sans stockage, il est neuf à chaque ouverture, comme avant (MUL-10 à 13, E2E-49)
+  - le thème que pose Grist arrive dans un `<template id="grist-theme">` inerte au lieu d'être refusé par la CSP (E2E-45) ; CSP, table `Automation`, colonnes, clé `workflow`, kit à `db14544`, adresse d'entrée : rien ne change ; deux scripts du même site en plus (`js/canvas-fields.js`, `js/i18n-texts.js`), fichiers locaux demandés avec `?v=0.13.0` ; le reste, dans GFS, est celui de la 0.12.0 (E2E-36 à 44)
 - 2026-11-04 · `3f7d45a` · la barre et l'ambiance de GFS suivies par le lien du kit (0.12.0) :
   - nouveau : sous-module `kit/` (`https://github.com/lombre33/grist-factory-kit.git`, commit `db14544`, version 0.7.0, le même que GFS), publié avec le site (vérifié en ligne) ; un clone sans ses sous-modules ouvre l'app avec ses couleurs, 2 s au plus après (E2E-44) : cloner avec `--recursive`
   - lectures de GFS en plus : le contexte et les événements `barre` et `ambiance`, par `window.parent` (le kit n'accepte un message que du cadre parent) ; l'app ne dit à GFS que la demande `contexte` (E2E-36) ; aucune action `ouvrir`, `choisir`, `insérer` ni `ranger`
@@ -34,13 +40,9 @@ Mis à jour le 2026-11-04, au commit `3f7d45a` (le dernier commit de code que ce
   - accès `full` ; lit (`listTables`, `fetchTable`, `onRecords`, `onRecord`) et écrit (`AddRecord`, `UpdateRecord`) des tables de la personne selon le graphe (`*`), plus `AddTable` pour `Automation`
   - aucune bibliothèque ; seul script externe, `https://docs.getgrist.com/grist-plugin-api.js`, avec `'unsafe-eval'` à cause de lui (`SECURITY.md`)
   - stockage du navigateur : `ab_lang` et `ab_theme`, dans des `try/catch` ; actions ouvrir, choisir, insérer, fermer : aucune ; pas de `gfs.json`
-- 2026-10-21 · `064edcf` · lignes `Type = Lock` dans `Automation` : verrou d'exécution entre onglets, une par table de vue, relais après 20 s (0.6.2)
-- 2026-10-21 · `5a166f4` · une seule table, `Automation`, remplace `Automation_Workflows` et `Automation_Logs` : les deux anciennes ne sont plus créées ni lues, et ne sont pas migrées (0.6.1)
-- 2026-10-21 · `7dae9e3` · première table dans le document, avec l'accord de la personne : `Automation_Workflows` et `Automation_Logs`, `Auteur` en formule déclenchée (0.6.0)
 
 ## Questions pour GFS
-- le dépôt du kit n'a aucune étiquette alors que son README parle de la v0.7.0 : nous référençons le commit `db14544` (celui que GFS référence, `6a3e2bd`) ; une étiquette `v0.7.0` dessus permettrait de nommer la version sans ambiguïté, à vous de voir
-- types et états des nœuds (consigne 006, point 5) : le déclencheur (accent doux), l'action (accent plein) et les états du test à blanc (passé, action prévue) s'écrivent avec l'accent de la charte, donc suivent l'ambiance, contraste tenu par les paires de la règle 15 ; seuls le rouge de l'échec et l'ambre de l'avertissement (`--danger*`, `--warn-*`) sont à nous et ne bougent pas ; si vous attendez que le type reste bleu d'une ambiance à l'autre, dites-le : ce serait trois jetons de plus à nous, contraste à notre charge
+- aucune
 
 ## Demandes à GFS
 - aucune
