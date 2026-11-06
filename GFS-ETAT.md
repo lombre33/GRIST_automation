@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-11-04, au commit `0c19c80` (le dernier commit de code que cette page décrit).
+Mis à jour le 2026-11-06, au commit `0c19c80` (le dernier commit de code que cette page décrit).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -17,6 +17,10 @@ Mis à jour le 2026-11-04, au commit `0c19c80` (le dernier commit de code que ce
 - 006 · faite · `3f7d45a` · `createAmbiance({ link: GfsLink, isDark })` de `kit/js/ambiance-pose.js` (l'app garde sa clé `ab_theme`), démarré par `js/gfs.js` (module chargé dans `<head>`, pas dans `js/main.js` : la page attend l'ambiance, 2 s au plus, pour ne pas changer de couleurs sous les yeux) ; feuilles sur les jetons de couleur et de forme, valeurs d'origine dans `css/tokens.css`, fond `--bg` sur `body` (`min-height: 100vh`) avec `--wash` ; les deux essais : E2E-37 (message d'exemple du kit : fond, carte, bandeau, bouton plein en dégradé, clair et sombre, 4,5:1 ; `null` rend les couleurs de l'app) et HYG-07, 13 et 17 (aucune couleur en dur hors de `css/tokens.css`, exceptions écrites et justifiées : le rouge, l'ambre, le voile) ; mesuré aussi, hors dépôt, avec les messages que fabrique `prototype/js/ambiance.js` : les cinq ambiances et une couleur libre, clair et sombre, aucun texte sous 4,62:1
 - 007 · faite · lue, aucun code · le sous-module `kit/` reste à `db14544`, étiquette ou non ; les couleurs de type et d'état des nœuds restent sur l'accent et les paires de la règle 15, le rouge et l'ambre à nous ; les deux questions sont retirées
 - 008 · faite · lue, aucun code · le rejeu de GFS avec l'app à `3f7d45a` tient (quatre ambiances, deux modes, couleur libre, retour aux couleurs de l'app) et le déclencheur et l'action restent distincts ; rien à changer
+- 009 · lue · un relevé de notre code, écrit ici : ce que le déclencheur fait d'une ligne reçue par un lien public, et où une valeur de la ligne devient autre chose que du texte ; aucun code exigé ; la ligne « faite » suit
+- 010 · lue · répondre à `fermer { raison }` par `{ ferme: true }` ou `{ ferme: false }` après avoir enregistré ; dans GFS seulement ; se fait avec la 012
+- 011 · lue · GFS reconnaît notre vue par la ligne `Type` = `Workflow` de la table `Automation` dont `Table` est la table de la vue ; rien à coder, trois points à garder vrais ; la ligne « faite » suit
+- 012 · lue · le kit répond à `fermer` depuis sa 0.9.0 (`eaa2ae2`) : `kit/` avancera, et `GfsLink.onClose` portera la règle de la 010
 
 ## Changements qui touchent GFS
 - 2026-11-04 · `0695db5`, `0c19c80` · retouches avant la sortie publique (0.15.0) :
