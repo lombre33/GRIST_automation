@@ -14,6 +14,7 @@ let failures = 0;
 // query : ce que Grist ajoute à l'adresse du cadre (`?access=none`, `?access=full&readonly=true`…), lu par js/main.js.
 // E2E_ONLY=<expression régulière> ne joue que les scénarios dont le nom lui correspond (E2E_ONLY='E2E-3[6-9]|E2E-4').
 // tutorial : la prise en main s'ouvre d'elle-même, comme dans un navigateur qui ne l'a jamais vue ; sinon, elle est déjà vue et ne gêne pas le scénario.
+// E2E_TIMEOUT=<millisecondes> : le temps qu'un scénario a pour finir (90 s par défaut) ; au-delà il échoue avec un message, au lieu de laisser tout l'essai suspendu (une app muette, une attente sans fin).
 async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '', tutorial = false } = {}) {
   if (process.env.E2E_ONLY && !new RegExp(process.env.E2E_ONLY).test(name)) return;
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
@@ -37,6 +38,8 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
   }
   for (const glob of blocked) await page.route(glob, (route) => route.abort());
   await routeApi(page, grist);
+  const limit = Number(process.env.E2E_TIMEOUT) || 90000;
+  let timer = null;
   try {
     await page.goto(host ? `${url}tests/e2e/gfs-host.html` : url + query);
     let app = page;
@@ -44,7 +47,11 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
       app = await (await page.waitForSelector('#app')).contentFrame();
       await app.waitForSelector('#add-node');
     }
-    await run(page, app);
+    await Promise.race([
+      run(page, app),
+      new Promise((resolve, reject) => { timer = setTimeout(() => reject(new Error(`Le scénario dépasse ${limit / 1000} s : une attente qui ne finit pas ?`)), limit); }),
+    ]);
+    clearTimeout(timer);
     assert.deepEqual(problems.filter((p) => !/Failed to load resource/.test(p) && !tolerated.some((t) => t.test(p))), [], 'erreurs console ou violations de la politique de sécurité');
     console.log('ok   ', name);
   } catch (err) {
@@ -52,6 +59,7 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
     console.log('FAIL ', name, '\n', err.message);
     await shot(page, `echec-${name.slice(0, 6)}`).catch(() => {});
   }
+  clearTimeout(timer);
   await context.close();
 }
 
