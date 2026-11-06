@@ -32,6 +32,11 @@ const I18N_TEXTS = {
     'consent.body': 'Le widget range ses workflows et son journal dans une seule table du document, nommée Automation, visible dans la liste des pages de Grist. Sans elle, le graphe n\'est gardé que dans ce widget et le journal n\'est pas enregistré.',
     'consent.create': 'Créer la table',
     'consent.decline': 'Ne pas créer',
+    'close.title': 'Modifications non enregistrées',
+    'close.body': 'Le workflow a changé, mais son enregistrement dans le document n\'a pas abouti. Si vous quittez Automation+ maintenant, ces changements seront perdus.',
+    'close.save': 'Enregistrer',
+    'close.discard': 'Abandonner',
+    'close.cancel': 'Annuler',
 
     // Le canevas : l'aide quand il est vide, et pendant la création d'un lien.
     'canvas.empty': 'Clic droit sur le fond, ou « Ajouter », pour créer un premier nœud.',
@@ -255,6 +260,11 @@ const I18N_TEXTS = {
     'consent.body': 'The widget keeps its workflows and its log in a single table of the document, named Automation, listed among Grist\'s pages. Without it, the graph is only kept in this widget and the log is not saved.',
     'consent.create': 'Create the table',
     'consent.decline': 'Do not create',
+    'close.title': 'Unsaved changes',
+    'close.body': 'The workflow changed, but saving it to the document did not succeed. If you leave Automation+ now, these changes will be lost.',
+    'close.save': 'Save',
+    'close.discard': 'Discard',
+    'close.cancel': 'Cancel',
 
     // Le canevas : l'aide quand il est vide, et pendant la création d'un lien.
     'canvas.empty': 'Right-click the background, or "Add", to create a first node.',

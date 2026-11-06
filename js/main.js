@@ -32,7 +32,9 @@ const frameParams = new URLSearchParams(location.search);
 const accessGranted = !frameParams.has('access') || frameParams.get('access') === 'full';
 const readOnly = frameParams.get('readonly') === 'true';
 
-const gristApi = { fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: (actions) => grist.docApi.applyUserActions(actions) };
+// Les écritures dans le document et les exécutions en cours sont suivies : GFS qui demande à l'app de partir (`fermer`, js/closing.js) attend leur fin avant de répondre.
+const busy = Closing.tracker();
+const gristApi = { fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: (actions) => busy.track(grist.docApi.applyUserActions(actions)) };
 const docApi = Object.assign({ listTables: () => grist.docApi.listTables() }, gristApi);
 
 // append : entrée de l'historique relue du document (plus ancienne que celles déjà affichées) ; sinon la plus récente va en haut.
@@ -112,14 +114,22 @@ function storeMessage(err) {
 let saveTimer = null;
 let savePending = false;
 let startupDone = false;   // le contenu déjà enregistré a été examiné : avant, on ne sait pas encore s'il faut le laisser intact
+// Ce que GFS qui demande à l'app de partir (`fermer`, js/closing.js) veut savoir : editGen compte les modifications du graphe, savedGen la dernière dont l'écriture a réussi
+// (les modifications ne sont pas écrites tant que savedGen est en retard), lastSaveError le dernier message d'échec. Les écritures du graphe se font une à la fois (writing).
+let editGen = 0;
+let savedGen = 0;
+let lastSaveError = '';
+let writing = Promise.resolve();
 
-// Une constante plutôt qu'une fonction déclarée : rien d'autre dans la page ne peut la remplacer avant que la minuterie ne l'appelle.
-const save = async () => {
+// Une écriture du graphe. Réussie quand le document l'a reçue, ou, sans table Automation, quand les réglages de la vue l'ont reçue.
+async function persist() {
   if (!startupDone) {
     saveTimer = setTimeout(save, 300);
     return;
   }
+  const generation = editGen;
   let stored = false;
+  let failed = false;
   if (!locked) {
     try {
       if (tablesAvailable) {
@@ -127,14 +137,35 @@ const save = async () => {
         stored = true;
       }
     } catch (err) {
-      addLog(storeMessage(err));
+      failed = true;
+      lastSaveError = storeMessage(err);
+      addLog(lastSaveError);
       if (err.code === 'unreadable-graph') setLocked(true);   // un autre onglet vient d'y mettre un contenu que cette version ne lit pas
     }
   }
   // Les réglages de la vue ne prennent le graphe que s'il n'a pas pu aller dans la table : Grist y voit une modification de la vue à enregistrer
   // (son bouton « Enregistrer », en haut de la vue), que la personne devrait sinon presser à chaque changement.
-  if (!locked && !stored) grist.setOption('workflow', JSON.stringify(graph));
+  let kept = stored;
+  if (!locked && !stored) {
+    try {
+      await Promise.race([grist.setOption('workflow', JSON.stringify(graph)), new Promise((resolve) => setTimeout(resolve, 2000))]);
+      kept = !failed;   // si la table existe mais n'a rien reçu, le graphe du document, que la relecture préfère, reste l'ancien : ce n'est pas enregistré
+    } catch (err) {
+      lastSaveError = storeMessage(err);
+    }
+  }
+  if (kept) {
+    savedGen = Math.max(savedGen, generation);
+    lastSaveError = '';
+  }
   savePending = false;
+}
+
+// Une constante plutôt qu'une fonction déclarée : rien d'autre dans la page ne peut la remplacer avant que la minuterie ne l'appelle.
+const save = () => {
+  const run = writing.then(persist).catch((err) => { lastSaveError = storeMessage(err); addLog(lastSaveError); });
+  writing = run;
+  return run;
 };
 
 // Le graphe est toujours gardé dans les options du widget ; il l'est aussi dans le document quand la table existe.
@@ -142,7 +173,19 @@ function scheduleSave() {
   if (locked || readOnly) return;
   clearTimeout(saveTimer);
   savePending = true;
+  editGen += 1;
   saveTimer = setTimeout(save, 300);
+}
+
+// Enregistre tout de suite ce qui attend, sans la minuterie, et rend quand l'écriture est finie ; vrai quand tout est écrit (pour `fermer`, js/closing.js).
+async function flushSave() {
+  // Avant la fin du démarrage rien ne s'écrit (persist attend) : on lui laisse le temps de finir, mais seulement s'il y a quelque chose à écrire.
+  if (editGen > savedGen) for (let waited = 0; !startupDone && waited < 5000; waited += 100) await new Promise((resolve) => setTimeout(resolve, 100));
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (editGen > savedGen && !locked && !readOnly) await save();
+  else await writing;
+  return editGen <= savedGen;
 }
 
 // Dit dans le journal pourquoi la table du document ne peut pas servir (nom déjà pris, colonnes absentes) ; true s'il y a un problème.
@@ -174,6 +217,25 @@ async function ensureStore() {
     addLog(storeMessage(err));
   }
   return tablesAvailable;
+}
+
+// La question de l'app quand GFS va la remplacer (`fermer`, js/closing.js) et que le graphe n'a pas pu être enregistré : 'save', 'discard' ou 'cancel'.
+// Annuler et Échap gardent l'app telle qu'elle est ; GFS laisse la question à l'écran tant que la personne n'y a pas répondu.
+function askBeforeLeaving() {
+  return new Promise((resolve) => {
+    const body = document.createElement('p');
+    body.textContent = t('close.body') + (lastSaveError ? ' ' + lastSaveError : '');
+    Modal.create({
+      title: t('close.title'),
+      body,
+      buttons: [
+        { label: t('close.cancel'), onClick: () => resolve('cancel') },
+        { label: t('close.discard'), onClick: () => resolve('discard') },
+        { label: t('close.save'), primary: true, onClick: () => resolve('save') },
+      ],
+      onClose: () => resolve('cancel'),
+    });
+  });
 }
 
 // Au démarrage : lit le graphe du document s'il y est, sinon pose la question une fois.
@@ -288,6 +350,14 @@ function startExecutor() {
   if (!tablesAvailable || executor || readOnly) return;
   executor = Executor.create(docApi, tableId, tab.id, { onChange: onExecutorChange });
   heartbeat = setInterval(electExecutor, HEARTBEAT_MS);
+}
+
+// Pour `fermer` (js/closing.js) : le verrou d'exécution est rendu tout de suite, pour que l'onglet qui attend reprenne sans attendre son expiration, et le battement s'arrête.
+async function releaseExecutor() {
+  clearInterval(heartbeat);
+  heartbeat = null;
+  if (electing) await electing;
+  if (executor) await executor.release();
 }
 
 function refreshState() {
@@ -532,8 +602,17 @@ function start() {
     canvas.load(graph);
     refreshState();
   });
-  grist.onRecords(onRecords, { includeColumns: 'all' });
+  grist.onRecords(busy.wrap(onRecords), { includeColumns: 'all' });
   grist.onRecord((record) => { cursorRecord = record; }, { includeColumns: 'all' });
+  // GFS qui va remplacer l'app (`fermer`, répondu par js/gfs.js) : ce qui attend est écrit, et ce qui s'écrit est fini, avant de répondre oui (js/closing.js).
+  Closing.install(Closing.create({
+    flush: flushSave,
+    unsaved: () => editGen > savedGen,
+    busy: busy.idle,
+    ask: askBeforeLeaving,
+    release: releaseExecutor,
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  }));
   grist.selectedTable.getTableId().then(async (id) => {
     tableId = id;
     rememberTab(id);

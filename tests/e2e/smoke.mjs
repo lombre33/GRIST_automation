@@ -8,7 +8,7 @@ import { root, stubSource, serve, launch, routeApi, tutorialSeen, addNode, pick,
 const { server, url } = await serve();
 const browser = await launch();
 let failures = 0;
-// host : { context, fallback } joue l'app dans un faux GFS (tests/e2e/gfs-host.html), un cadre isolé comme chez GFS, qui rend `context` à l'appel `contexte` ; run(page, app) reçoit alors aussi le cadre de l'app
+// host : { context, fallback, query } joue l'app dans un faux GFS (tests/e2e/gfs-host.html), un cadre isolé comme chez GFS, qui rend `context` à l'appel `contexte` (query : ce qui s'ajoute à l'adresse du cadre) ; run(page, app) reçoit alors aussi le cadre de l'app
 //   (`app`), dans lequel on lit et on clique (`page` reste la page de l'hôte : souris, clavier, captures). Sans host, `app` est la page. `fallback` garde le garde-fou de 2 s de l'attente de l'ambiance.
 // blocked : adresses (globs) dont la requête échoue ; tolerated : messages de la console attendus dans ce scénario.
 // query : ce que Grist ajoute à l'adresse du cadre (`?access=none`, `?access=full&readonly=true`…), lu par js/main.js.
@@ -27,6 +27,7 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
   if (noTables) await page.addInitScript(() => { window.__noTables = true; });
   if (init) await page.addInitScript((values) => Object.assign(window, values), init);
   if (host) await page.addInitScript((value) => { window.__context = value; }, host.context ?? {});
+  if (host && host.query) await page.addInitScript((value) => { window.__frameQuery = value; }, host.query);
   if (host && !host.fallback) {
     // Le garde-fou de 2 s de js/theme.js est coupé : si l'ambiance ne levait pas l'attente, la page resterait cachée et l'essai échouerait, au lieu de passer grâce au garde-fou.
     await page.addInitScript(() => {
@@ -1277,6 +1278,111 @@ await scenario('E2E-62 une ligne reçue dont les valeurs sont du HTML (un lien p
   const details = await page.evaluate(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').map((r) => r.Detail));
   assert.ok(details.some((text) => text.includes(JSON.stringify(hostile).slice(1, -1))), 'le journal du document garde la valeur comme texte');
 });
+
+/* ---------- L'appel `fermer` de GFS (consigne 010), joué dans le faux GFS (tests/e2e/gfs-host.html) ---------- */
+
+// La réponse de l'app à `fermer` (type, data et l'heure à laquelle elle est venue) ; holdClose laisse l'appel en route, pour répondre à la question de l'app, et closeAnswer en rend la réponse.
+const askClose = (page, raison = 'app') => page.evaluate((reason) => window.hote.call('fermer', { raison: reason }), raison);
+const holdClose = (page, raison = 'app') => page.evaluate((reason) => { window.__closing = window.hote.call('fermer', { raison: reason }); }, raison);
+const closeAnswer = (page) => page.evaluate(() => window.__closing);
+// Une modification du graphe : un nœud Déclencheur posé au clic droit sur le fond.
+async function addTrigger(page, app) {
+  await page.mouse.click(300, 300, { button: 'right' });
+  await app.waitForSelector('.ss-panel');
+  await page.keyboard.type('Déclencheur');
+  await page.keyboard.press('Enter');
+  await app.waitForSelector('.node-trigger');
+}
+const workflowRow = (app) => app.evaluate(() => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Workflow') || null);
+const hasTrigger = (row) => Boolean(row) && JSON.parse(row.Config).nodes.some((node) => node.type === 'trigger');
+
+await scenario('E2E-63 GFS demande de fermer et rien n\'attend : oui tout de suite, sans question, quelle que soit la raison', async (page, app) => {
+  const reply = await askClose(page, 'app');
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  for (const raison of ['explorateur', 'nouveau', 'importer', 'lire', 'lien', '']) assert.equal((await askClose(page, raison)).data.ferme, true, `raison « ${raison} »`);
+  assert.equal(await app.locator('.modal').count(), 0, 'aucune question');
+}, { host: { context: {} } });
+
+await scenario('E2E-64 en lecture seule, GFS demande de fermer : oui tout de suite, rien n\'est écrit', async (page, app) => {
+  assert.equal(await app.locator('#add-node').isDisabled(), true, 'lecture seule');
+  const reply = await askClose(page);
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  assert.deepEqual(await app.evaluate(() => [window.__stub.writes.length, window.__stub.refused.length]), [0, 0], 'ni écriture ni refus, pas même le verrou');
+}, { host: { context: {}, query: '&access=full&readonly=true' } });
+
+await scenario('E2E-65 une modification attend (enregistrement automatique) : GFS demande de fermer, elle est écrite, le oui vient après l\'écriture, sans question', async (page, app) => {
+  await app.evaluate(() => { window.__stub.writeDelay = 1500; });
+  await addTrigger(page, app);
+  assert.equal(await workflowRow(app), null, 'le document est lent : rien n\'y est encore écrit');
+  const reply = await askClose(page, 'app');
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  assert.equal(hasTrigger(await workflowRow(app)), true, 'le graphe est dans le document au moment du oui');
+  const lastWrite = await app.evaluate(() => Math.max(...window.__stub.writes.map((write) => write.at)));
+  assert.ok(lastWrite <= reply.at, 'aucune écriture après le oui');
+  assert.equal(await app.locator('.modal').count(), 0, 'pas de question : l\'enregistrement automatique décide seul');
+}, { host: { context: {} } });
+
+await scenario('E2E-66 l\'écriture échoue : GFS qui demande de fermer reçoit la question de l\'app, Annuler et Échap gardent l\'app, Enregistrer réessaie', async (page, app) => {
+  await app.evaluate(() => { window.__stub.failWith = 'Droits insuffisants'; });
+  await addTrigger(page, app);
+  await holdClose(page, 'lien');
+  await app.waitForSelector('.modal-box');
+  assert.equal(await app.locator('.modal-title').innerText(), 'Modifications non enregistrées');
+  assert.deepEqual(await app.locator('.modal-footer button').allInnerTexts(), ['Annuler', 'Abandonner', 'Enregistrer']);
+  assert.match(await app.locator('.modal-body').innerText(), /Droits insuffisants/, 'la question dit pourquoi');
+  assert.equal(await app.evaluate(() => document.activeElement.textContent), 'Enregistrer', 'le focus est sur Enregistrer');
+  await app.locator('.modal-footer button', { hasText: 'Annuler' }).click();
+  assert.equal((await closeAnswer(page)).data.ferme, false, 'Annuler : l\'app reste');
+  assert.equal(await app.locator('.modal').count(), 0);
+  assert.equal(await app.locator('.node-trigger').count(), 1, 'tout reste en place');
+
+  await holdClose(page, 'app');
+  await app.waitForSelector('.modal-box');
+  await page.keyboard.press('Escape');
+  assert.equal((await closeAnswer(page)).data.ferme, false, 'Échap : l\'app reste aussi');
+
+  await holdClose(page, 'app');
+  await app.waitForSelector('.modal-box');
+  await app.locator('.modal-footer button', { hasText: 'Enregistrer' }).click();
+  await app.waitForSelector('.modal-box');
+  assert.equal(await workflowRow(app), null, 'le document refuse encore : Enregistrer a réessayé, la question revient');
+  await app.evaluate(() => { window.__stub.failWith = ''; });
+  await app.locator('.modal-footer button', { hasText: 'Enregistrer' }).click();
+  const reply = await closeAnswer(page);
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  assert.equal(hasTrigger(await workflowRow(app)), true, 'écrit avant le oui');
+  assert.equal(await app.locator('.modal').count(), 0);
+}, { host: { context: {} } });
+
+await scenario('E2E-67 l\'écriture échoue : Abandonner laisse partir l\'app, sans rien écrire', async (page, app) => {
+  await app.evaluate(() => { window.__stub.failWith = 'Droits insuffisants'; });
+  await addTrigger(page, app);
+  await holdClose(page, 'nouveau');
+  await app.waitForSelector('.modal-box');
+  await app.locator('.modal-footer button', { hasText: 'Abandonner' }).click();
+  const reply = await closeAnswer(page);
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  assert.equal(await workflowRow(app), null, 'rien n\'a été écrit');
+}, { host: { context: {} } });
+
+const activeGraph = JSON.stringify({ version: 3, active: true, nodes: [
+  { id: 'trigger-1', type: 'trigger', x: 40, y: 120, config: { action: 'update', column: 'Statut' } },
+  { id: 'action-1', type: 'action', x: 400, y: 120, config: { type: 'AddRecord', table: 'Archive', column: 'Motif', value: 'fait' } },
+], edges: [{ from: 'trigger-1', to: 'action-1' }] });
+await scenario('E2E-68 un workflow actif : GFS demande de fermer pendant une exécution, l\'effet et le journal sont écrits avant le oui, et le verrou est rendu', async (page, app) => {
+  await app.waitForFunction(() => /exécute maintenant/.test(document.getElementById('log-list').innerText));
+  await app.evaluate(() => {
+    window.__stub.writeDelay = 500;
+    window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Nouveau' }]);
+    window.__stub.pushRecords([{ id: 1, Nom: 'A', Statut: 'Clos' }]);
+  });
+  const reply = await askClose(page, 'app');
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  const state = await app.evaluate(() => ({ applied: window.__stub.applied, rows: window.__stub.docTables.Automation.rows }));
+  assert.deepEqual(state.applied, [['AddRecord', 'Archive', null, { Motif: 'fait' }]], 'l\'effet du workflow est écrit avant le oui');
+  assert.equal(state.rows.filter((row) => row.Type === 'Log').length, 1, 'la ligne du journal aussi');
+  assert.equal(state.rows.find((row) => row.Type === 'Lock').Config, '', 'le verrou est rendu : un autre onglet reprend sans attendre son expiration');
+}, { host: { context: {} }, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeGraph }] } });
 
 await browser.close();
 server.close();

@@ -62,17 +62,18 @@ Aucune à installer : HTML, CSS et JavaScript, sans framework, sans bibliothèqu
 - **L'automation tourne dans un navigateur.** Si aucune vue du widget n'est ouverte (une vue réduite compte comme ouverte), rien ne s'exécute, et les modifications faites entre-temps ne sont pas rattrapées à la réouverture.
 - **Un seul onglet exécute** les workflows d'une table, même si le document est ouvert dans plusieurs onglets ou chez plusieurs personnes : un verrou dans la table `Automation`, renouvelé toutes les 6 secondes. Si l'onglet exécutant disparaît sans libérer le verrou (fermeture brutale, panne), un autre prend le relais au bout de 20 secondes ; les modifications faites pendant ce relais ne sont exécutées par personne. Un onglet simplement rechargé reprend tout de suite.
 - **Pas de boucle** : les écritures du widget ne redéclenchent pas le workflow, et une ligne qui déclencherait trop d'exécutions rapprochées est arrêtée, avec la raison dans le journal.
-- **Le déclencheur voit les lignes de la vue** : un filtre de la vue peut faire paraître une ligne créée ou supprimée quand elle entre ou sort du filtre.
+- **Le déclencheur voit les lignes de la vue** : un filtre de la vue peut faire paraître une ligne créée ou supprimée quand elle entre ou sort du filtre. Un workflow actif réagit à toute ligne que la vue reçoit, d'où qu'elle vienne (formulaire public, autre personne, API), avec les droits de la personne dont l'onglet exécute ; la valeur d'une ligne n'est jamais lue comme du code (`SECURITY.md`).
 - **Les colonnes sont lues table entière** (`fetchTable`) : sur de très grandes tables, l'ouverture et les Lectures sont plus lentes.
 - **Un contenu que cette version ne sait pas lire** (graphe d'une version plus récente, contenu abîmé) n'est jamais écrasé : le widget l'affiche comme « Workflow conservé tel quel » et n'exécute rien à sa place. Une table `Automation` sans les colonnes attendues, ou dont le nom est déjà pris à la casse près, n'est pas utilisée : le journal dit pourquoi.
 - **Navigateurs** : testé sous Chromium, avec une API Grist simulée et dans un vrai Grist (`docs/TESTS_GRIST_REEL.md` liste les essais à refaire à la main).
 
 ## Dans Grist Factory Suite (GFS)
 
-Quand GFS ouvre l'app dans l'un de ses cadres (`?gfs=<n>` dans l'adresse), l'app parle à GFS par le lien du kit commun et en prend deux choses ; seule, dans Grist, rien de cela ne joue.
+Quand GFS ouvre l'app dans l'un de ses cadres (`?gfs=<n>` dans l'adresse), l'app parle à GFS par le lien du kit commun et en prend trois choses ; seule, dans Grist, rien de cela ne joue.
 
 - **La barre de GFS** se pose par-dessus le cadre, au bord que la personne choisit. L'app laisse libre la zone que GFS donne (`js/keep-clear.js`) : la barre d'outils se partage autour d'elle quand la barre est en haut ; le journal, le menu d'ajout, les listes et les bulles qui la recouvriraient s'en écartent du juste nécessaire ; une fenêtre se place dans le reste du cadre.
 - **L'ambiance** que la personne a choisie dans GFS : le kit pose les jetons de couleur et de forme sur `<html>` (`js/gfs.js`), les feuilles de `css/` les lisent, jamais une couleur écrite en dur. Le rouge de l'échec et l'ambre de l'avertissement restent ceux de l'app (HYG-17).
+- **La fermeture** : avant de détruire le cadre de l'app (la personne ouvre une autre app, un autre fichier, un import, un lien), GFS lui demande si elle peut partir (`fermer`) et ne le détruit qu'après son oui (`js/closing.js`). Ce qui peut attendre, c'est le graphe modifié (écrit 300 ms après la dernière modification) et les écritures en cours dans le document, celles d'un workflow actif comprises : l'app les enregistre, les laisse finir, rend le verrou d'exécution à l'onglet suivant, puis répond oui sans question. Elle ne pose sa question (« Enregistrer, Abandonner, Annuler ») que si l'écriture échoue ; Annuler et Échap la gardent ouverte. En lecture seule, ou quand rien n'attend, le oui est immédiat. Un workflow actif n'empêche pas de partir : il passe la main à un autre onglet.
 
 La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages restent actifs.
 
@@ -90,7 +91,8 @@ La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages re
 | `js/i18n.js`, `js/i18n-texts.js`, `js/theme.js` | langue et textes fr/en, thèmes |
 | `js/modal.js`, `js/search-select.js` | fenêtres et listes avec recherche |
 | `js/tutorial.js`, `img/tuto/` | prise en main : six écrans, leurs captures fr et en |
-| `js/gfs.js`, `js/keep-clear.js`, `kit/` | lien avec GFS : l'ambiance (par le kit) et la zone de la barre à laisser libre |
+| `js/gfs.js`, `js/keep-clear.js`, `kit/` | lien avec GFS : l'ambiance (par le kit), la zone de la barre à laisser libre et le branchement de `fermer` |
+| `js/closing.js` | réponse à `fermer` : enregistrer ce qui attend, laisser finir les écritures, rendre le verrou, ne poser la question que si l'écriture échoue (sans DOM ni Grist) |
 | `css/` | jetons de la charte, styles, canevas, fenêtres, prise en main |
 
 Périmètre : `docs/CDC_Widget_Grist_Automation_Builder.md`. Règles d'interface et de développement : `docs/REGLES_UI_UX_ET_DEV.md`. Sécurité : `SECURITY.md`.
@@ -103,7 +105,7 @@ npm run test:e2e    # scénarios dans Chromium avec une API Grist simulée, dont
 npm run tutorial:shots   # refait les captures de la prise en main (img/tuto/), à relire avant de pousser
 ```
 
-`test:e2e` et `tutorial:shots` demandent Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin) ; ce qu'ils partagent (le site servi, l'API simulée, les gestes sur le canevas) est dans `tests/e2e/harness.mjs`. Les captures sont à refaire quand l'interface qu'elles montrent change. `E2E_ONLY='E2E-4[5-9]'` n'en joue qu'une partie ; `E2E_SHOTS=<dossier>` range des captures d'écran des scénarios dans GFS. Les tests qui lisent le kit (HYG-14 à 17, E2E-36 à 44) demandent le sous-module récupéré. Plan des tests : `docs/PLAN_TESTS.md` ; essais dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`.
+`test:e2e` et `tutorial:shots` demandent Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin) ; ce qu'ils partagent (le site servi, l'API simulée, les gestes sur le canevas) est dans `tests/e2e/harness.mjs`. Les captures sont à refaire quand l'interface qu'elles montrent change. `E2E_ONLY='E2E-4[5-9]'` n'en joue qu'une partie ; `E2E_SHOTS=<dossier>` range des captures d'écran des scénarios dans GFS. Les tests qui lisent le kit (HYG-14 à 17, E2E-36 à 44, E2E-63 à 68) demandent le sous-module récupéré. Plan des tests : `docs/PLAN_TESTS.md` ; essais dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`.
 
 ## Licence
 

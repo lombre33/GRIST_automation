@@ -34,7 +34,8 @@ if (window.__foreignLock) {
   docTables.Automation.nextId = 2;
   setInterval(() => { lock.Date += 1; }, 1000);
 }
-window.__stub = { applied: [], refused: [], calls: {}, options: window.__preloadOptions || {}, pushRecords: null, docTables };
+// window.__stub.writeDelay (ms) ralentit chaque écriture ; window.__stub.failWith (un message) fait échouer chaque écriture ; writes : chaque action reçue, avec l'heure à laquelle elle a eu lieu (Date.now()).
+window.__stub = { applied: [], refused: [], calls: {}, options: window.__preloadOptions || {}, pushRecords: null, docTables, writes: [], writeDelay: 0, failWith: '' };
 const readOnly = new URLSearchParams(location.search).get('readonly') === 'true';
 const count = (name) => { window.__stub.calls[name] = (window.__stub.calls[name] || 0) + 1; };
 const refuse = (what) => { window.__stub.refused.push(what); return Promise.reject(new Error('No write access')); };
@@ -75,23 +76,30 @@ window.grist = {
     },
     applyUserActions: (actions) => {
       if (readOnly) return refuse(actions);
+      if (window.__stub.failWith) return Promise.reject(new Error(window.__stub.failWith));
       for (const [kind, name, , values] of actions) {
         const unknown = docTables[name] && values && Object.keys(values).find((column) => !docTables[name].columns.includes(column));
         if (unknown) return Promise.reject(new Error(`Invalid column "${unknown}"`));
       }
-      for (const [kind, name, rowId, values] of actions) {
-        if (kind === 'AddTable') {
-          let id = name;
-          for (let n = 2; Object.keys(docTables).some((existing) => existing.toLowerCase() === id.toLowerCase()); n += 1) id = `${name}_${n}`;
-          createTable(id, rowId);
-          continue;
+      const apply = () => {
+        for (const [kind, name, rowId, values] of actions) {
+          window.__stub.writes.push({ kind, table: name, at: Date.now() });
+          if (kind === 'AddTable') {
+            let id = name;
+            for (let n = 2; Object.keys(docTables).some((existing) => existing.toLowerCase() === id.toLowerCase()); n += 1) id = `${name}_${n}`;
+            createTable(id, rowId);
+            continue;
+          }
+          const own = docTables[name];
+          if (!own) { window.__stub.applied.push([kind, name, rowId, values]); continue; }
+          if (kind === 'AddRecord') own.rows.push({ id: own.nextId++, ...values });
+          else if (kind === 'UpdateRecord') Object.assign(own.rows.find((r) => r.id === rowId), values);
         }
-        const own = docTables[name];
-        if (!own) { window.__stub.applied.push([kind, name, rowId, values]); continue; }
-        if (kind === 'AddRecord') own.rows.push({ id: own.nextId++, ...values });
-        else if (kind === 'UpdateRecord') Object.assign(own.rows.find((r) => r.id === rowId), values);
-      }
-      return Promise.resolve([]);
+        return [];
+      };
+      // writeDelay : l'écriture n'a lieu, et ne répond, qu'au bout de ce délai (ms), comme un document lent ; elle ne se voit pas avant.
+      if (!window.__stub.writeDelay) return Promise.resolve(apply());
+      return new Promise((resolve) => setTimeout(() => resolve(apply()), window.__stub.writeDelay));
     },
   },
 };

@@ -7,11 +7,14 @@
 </head>
 <body>
   <!-- Joue GFS comme navigateur/gfs-hote.js du kit : le cadre de l'app est isolé comme chez GFS (sandbox="allow-scripts", sans allow-same-origin), le contexte lui est rendu, et l'essai
-       lui envoie des événements (barre, ambiance). window.__context est posé par l'essai avant le chargement ; `hote` est ce que l'essai appelle. -->
+       lui envoie des événements (barre, ambiance) et des appels (`fermer`). window.__context est posé par l'essai avant le chargement, window.__frameQuery ce qu'il ajoute à l'adresse du
+       cadre (`&readonly=true`) ; `hote` est ce que l'essai appelle. -->
   <iframe id="app" title="app" sandbox="allow-scripts"></iframe>
   <script>
     const frame = document.getElementById('app');
     const received = [];
+    const waiting = new Map();
+    let lastCall = 900;
     window.addEventListener('message', (event) => {
       if (event.source !== frame.contentWindow) return;
       const message = event.data;
@@ -19,12 +22,26 @@
       if (message && message.type === 'appel' && message.nom === 'contexte') {
         frame.contentWindow.postMessage({ gfs: 0, type: 'reponse', id: message.id, data: window.__context || {} }, '*');
       }
+      // La réponse de l'app à un appel de l'essai, avec l'heure (Date.now()) à laquelle elle est arrivée.
+      if (message && (message.type === 'reponse' || message.type === 'erreur') && waiting.has(message.id)) {
+        waiting.get(message.id)({ ...message, at: Date.now() });
+        waiting.delete(message.id);
+      }
     });
     window.hote = {
       received: () => received.slice(),
       event: (nom, data) => frame.contentWindow.postMessage({ gfs: 0, type: 'evenement', nom, data }, '*'),
+      // Un appel de GFS à l'app (`fermer` avec sa raison) : rend sa réponse, ou son erreur, quand elle vient ; au bout de `patience` millisecondes sans réponse, rend { type: 'sans-reponse' }
+      // (un essai qui attend une app muette échoue sur une assertion au lieu de rester suspendu).
+      call: (nom, args, patience = 20000) => new Promise((resolve) => {
+        lastCall += 1;
+        const id = lastCall;
+        const timer = setTimeout(() => { waiting.delete(id); resolve({ type: 'sans-reponse', at: Date.now() }); }, patience);
+        waiting.set(id, (message) => { clearTimeout(timer); resolve(message); });
+        frame.contentWindow.postMessage({ gfs: 0, type: 'appel', id, nom, args }, '*');
+      }),
     };
-    frame.src = '/index.html?gfs=0';
+    frame.src = '/index.html?gfs=0' + (window.__frameQuery || '');
   </script>
 </body>
 </html>
