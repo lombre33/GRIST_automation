@@ -55,7 +55,7 @@ Une personne qui n'a que la **lecture** du document voit le workflow, le déplac
 Aucune à installer : HTML, CSS et JavaScript, sans framework, sans bibliothèque ni étape de construction.
 
 - **`grist-plugin-api.js`**, le script de l'API des widgets, est chargé depuis `docs.getgrist.com` : c'est l'adresse validée par la DINUM pour Grist.Gouv, et le widget, publié sur GitHub Pages, ne peut pas le prendre en relatif (GitHub Pages ne le sert pas). Ce script s'évalue par `eval()`, d'où le seul assouplissement de la politique de sécurité, `'unsafe-eval'` ; le code du widget n'utilise pas `eval` (test HYG-01).
-- **Le kit commun des apps Grist Factory** (`lombre33/grist-factory-kit`), en sous-module `kit/` (version 0.7.0, commit `db14544`) : il ne sert que dans Grist Factory Suite (plus bas) ; seule dans Grist, l'app ne l'utilise pas, et s'ouvre même s'il manque. Cloner avec `git clone --recursive`, ou, après un clone simple, `git submodule update --init`. GitHub Pages publie le sous-module avec le site.
+- **Le kit commun des apps Grist Factory** (`lombre33/grist-factory-kit`), en sous-module `kit/` (version 0.9.0, commit `eaa2ae2`) : il ne sert que dans Grist Factory Suite (plus bas) ; seule dans Grist, l'app ne l'utilise pas, et s'ouvre même s'il manque. Cloner avec `git clone --recursive`, ou, après un clone simple, `git submodule update --init`. GitHub Pages publie le sous-module avec le site.
 
 ## Fonctionnement et limites de la pré-alpha
 
