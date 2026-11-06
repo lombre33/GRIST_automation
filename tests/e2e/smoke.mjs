@@ -1259,6 +1259,25 @@ await scenario('E2E-60 largeur d\'un nœud : son bord se tire, au clavier aussi 
   assert.equal(await widthOf(copy, '.node-trigger'), 352, 'ni à la souris');
 });
 
+await scenario('E2E-62 une ligne reçue dont les valeurs sont du HTML (un lien public) : écrite telle quelle, journal et test à blanc la montrent en texte, rien n\'entre dans la page', async (page) => {
+  const hostile = '<img src=x onerror="document.title=\'pwned\'"><script>document.title=\'pwned\'</script> {Statut}';
+  await buildFlow(page);
+  await page.fill('#action-1-value', '{Nom}');
+  await page.click('#toggle-active');
+  await push(page, { id: 1, Nom: hostile, Statut: 'Nouveau' }, { id: 1, Nom: hostile, Statut: 'Clos' });
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  assert.deepEqual(await page.evaluate(() => window.__stub.applied), [['AddRecord', 'Archive', null, { Motif: hostile }]], 'écrite telle quelle : ni évaluée, ni substituée une seconde fois');
+  await page.click('#toggle-logs');
+  await page.click('#test-workflow');
+  await page.waitForFunction(() => /Dry-run ligne 1/.test(document.getElementById('log-list').innerText));
+  assert.ok((await page.locator('#log-list').innerText()).includes('<img src=x onerror='), 'le texte reçu se lit dans le journal, balises comprises');
+  assert.equal(await page.evaluate(() => document.querySelectorAll('img[src="x"]').length), 0, 'aucune image n\'est née du texte');
+  assert.equal(await page.locator('#log-list img, #log-list script').count(), 0, 'ni balise dans le journal');
+  assert.notEqual(await page.title(), 'pwned');
+  const details = await page.evaluate(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').map((r) => r.Detail));
+  assert.ok(details.some((text) => text.includes(JSON.stringify(hostile).slice(1, -1))), 'le journal du document garde la valeur comme texte');
+});
+
 await browser.close();
 server.close();
 process.exit(failures ? 1 : 0);

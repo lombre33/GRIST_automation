@@ -118,14 +118,18 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - SEC-01 aucun appel réseau sortant (`fetch`, `XMLHttpRequest`, `WebSocket`, `sendBeacon`, images externes) : analyse statique du code livré.
 - SEC-02 aucun `eval`, `new Function`, `setTimeout` avec chaîne.
 - SEC-03 liste des dépendances tierces figée et comparée à la liste justifiée.
-- SEC-04 injection (HTML, formule Grist `=...`, valeurs très longues) dans les valeurs écrites par les actions.
-- SEC-05 les droits de l'utilisateur Grist sont respectés (jamais d'élévation).
+- SEC-04 injection (HTML, formule Grist `=...`, valeurs très longues) dans les valeurs écrites par les actions : écrite (consigne 009 de GFS), valeur seule, dans un texte, reprise par deux transformations ; un texte qui n'est pas un nombre dans une opération est une erreur lisible. `{Autre}` dans une valeur reçue n'est jamais substitué.
+- SEC-05 les droits de l'utilisateur Grist sont respectés (jamais d'élévation) : à jouer dans un vrai Grist (`docs/TESTS_GRIST_REEL.md`).
+- SEC-06 la valeur reçue qui repère une ligne ne choisit que la ligne : la table lue et écrite est celle du graphe, jamais une table que la valeur nomme.
+- SEC-07 une condition compare, elle n'évalue pas : « contient » ne lit pas son texte comme une expression régulière.
+- SEC-08 un texte qui se lit « Infinity » ou « 1e999 » reste un texte, un calcul qui sort des nombres est une erreur (JSON écrirait une cellule vide).
 
 ### Tests déjà écrits (état au 2026-10-12)
 
 | Groupe | Contenu | Où |
 |---|---|---|
 | DIFF, TRG, COND, ACT, DRY, SEC-02 | moteur (voir plus haut), tests listés comme « partiels » ; le moteur parcourt un graphe (conditions en série = ET) | `tests/engine.test.js` |
+| SEC-04, 06 à 08, E2E-62 | une ligne reçue par un lien public est du texte non fiable (consigne 009 de GFS, 0.15.1) : écrite telle quelle, jamais évaluée ni substituée deux fois, une clé qui ne vise que la table du graphe, des comparaisons sans expression régulière, « Infinity » qui reste un texte ; dans Chromium, un texte en HTML se lit dans le journal et le test à blanc sans qu'aucune balise naisse | `tests/engine.test.js`, `tests/e2e/smoke.mjs` |
 | GRAPH-01 à 10 | ajout, liens (sortie vers entrée, pas de cycle, une entrée = un lien), suppression, validation, aller-retour JSON | `tests/graph.test.js` |
 | I18N-01 à 08 | clés fr/en identiques et dans le même ordre (`js/i18n-texts.js`), clés utilisées existantes, aucune clé inutilisée, pluriels, langue initiale, vocabulaire ; textes écrits en dur dans `index.html` égaux à ceux du français (depuis la 0.13.0) | `tests/i18n.test.js` |
 | SRCH-01 à 04 | recherche par mots (ordre libre, accents, ponctuation) | `tests/search-select.test.js` |

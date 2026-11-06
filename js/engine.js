@@ -65,8 +65,9 @@
     return { events, next };
   }
 
+  // Un texte qui se lit comme un nombre fini devient ce nombre ; « Infinity » ou « 1e999 » restent des textes (un nombre infini serait écrit vide : JSON n'en a pas).
   function parseValue(text) {
-    return text !== '' && text !== null && text !== undefined && !isNaN(Number(text)) ? Number(text) : text;
+    return text !== '' && text !== null && text !== undefined && Number.isFinite(Number(text)) ? Number(text) : text;
   }
 
   // Cible optionnelle (modification seulement) : la ligne modifiée doit avoir targetValue dans la colonne targetColumn.
@@ -108,11 +109,15 @@
 
   function toNumber(value) {
     const number = typeof value === 'number' ? value : (typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN);
-    if (Number.isNaN(number)) throw new Error('Valeur non numérique : « ' + display(value) + ' »');
+    if (!Number.isFinite(number)) throw new Error('Valeur non numérique : « ' + display(value) + ' »');
     return number;
   }
 
-  const round = (number) => Number(number.toFixed(10));   // 0.1 + 0.2 donne 0.3
+  // 0.1 + 0.2 donne 0.3 ; un résultat trop grand pour un nombre (1e308 × 10) est une erreur, pas une cellule vide.
+  const round = (number) => {
+    if (!Number.isFinite(number)) throw new Error('Résultat hors limites');
+    return Number(number.toFixed(10));
+  };
 
   const TRANSFORMS = {
     concat: (a, b) => display(a) + display(b),

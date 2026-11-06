@@ -545,3 +545,69 @@ test('TRG-09 une cible n\'est jamais satisfaite pour une création ou une suppre
 test('TRG-10 anciens graphes sans cible : comportement inchangé', () => {
   assert.strictEqual(E.matchesTrigger({ action: 'update', column: 'Statut' }, { type: 'update', rowId: 1, record: { id: 1 }, changed: { Statut: { from: 1, to: 2 } } }), true);
 });
+
+// Une ligne reçue par un lien public est du texte non fiable (consigne 009 de GFS) : ces essais jouent contre le moteur ce que GFS-ETAT.md en affirme.
+const HOSTILE = ['<img src=x onerror=alert(1)>', '=HYPERLINK("http://example.org","x")', '\'; DROP TABLE Archive; --', '${process.exit(1)}', '{Secret}', '{{Secret}}', '__proto__', 'constructor', 'x'.repeat(100000)];
+const hostileRecord = (value) => ({ Nom: value, Secret: 'ne-doit-pas-sortir', Statut: 'Clos' });
+
+test('SEC-04 une valeur reçue est écrite telle quelle : ni évaluée, ni lue comme une formule, ni substituée une seconde fois', async () => {
+  for (const hostile of HOSTILE) {
+    const record = hostileRecord(hostile);
+    assert.strictEqual((await written(withTransforms([], '{Nom}'), record)).value, hostile, 'seule');
+    assert.strictEqual((await written(withTransforms([], 'avant {Nom} après'), record)).value, 'avant ' + hostile + ' après', 'dans un texte');
+    const chained = await written(withTransforms([tf('concat', '{Nom}', '', 'v'), tf('concat', '{v}', '!', 'w')], '[{w}]'), record);
+    assert.strictEqual(chained.value, '[' + hostile + '!]', 'reprise par deux transformations puis par l\'action');
+    assert.strictEqual(chained.result.effects.length, 1, 'une seule écriture');
+    assert.deepStrictEqual(Object.keys(chained.result.effects[0].values), ['Motif'], 'dans la seule colonne que le graphe nomme');
+  }
+});
+
+test('SEC-04 (suite) le texte reçu qui n\'est pas un nombre fait une erreur lisible dans une opération, qui l\'écrit comme texte dans le journal', async () => {
+  for (const hostile of HOSTILE.slice(0, 4)) {
+    const sum = await written(withTransforms([tf('add', '{Nom}', '1')], '{r}'), hostileRecord(hostile));
+    assert.strictEqual(sum.result.status, 'error');
+    assert.strictEqual(sum.result.error, 'Valeur non numérique : « ' + hostile + ' »');
+    assert.strictEqual(sum.value, undefined, 'rien n\'est écrit');
+  }
+});
+
+test('SEC-06 la valeur reçue qui repère une ligne ne choisit que la ligne : la table et la colonne sont celles du graphe', async () => {
+  for (const hostile of ['Contacts', 'Automation', '_grist_Tables', '../Archive', '1 OR 1=1', '{Secret}', 'b', 'a']) {
+    const fetched = [];
+    const api = createFakeApi({ tables: { ...archive, Contacts: { id: [1], Motif: [hostile] } } });
+    const read = api.fetchTable;
+    api.fetchTable = async (name) => { fetched.push(name); return read(name); };
+    await runKeyed({}, hostileRecord(hostile), api);
+    assert.ok(fetched.length > 0 && fetched.every((name) => name === 'Archive'), `seule Archive est lue (${hostile}) : ${fetched}`);
+    assert.ok(api.applied.every(([, table]) => table === 'Archive'), `seule Archive est écrite (${hostile})`);
+    assert.ok(api.applied.every(([, , rowId]) => archive.Archive.id.includes(rowId)), `la ligne écrite est une ligne d'Archive (${hostile})`);
+  }
+  const twice = createFakeApi({ tables: archive });
+  assert.match((await runKeyed({}, hostileRecord('b'), twice)).error, /Plusieurs lignes/, 'deux lignes pour la clé : rien n\'est écrit');
+  assert.deepStrictEqual(twice.applied, []);
+});
+
+test('SEC-07 une condition compare, elle n\'évalue pas : « contient » ne lit pas son texte comme une expression régulière', () => {
+  const check = (operator, value, record) => E.evalCondition({ column: 'Nom', operator, value }, { type: 'create', rowId: 1, record }, {});
+  for (const hostile of ['(', '[', '.*', '\\', '^$', '(a+)+$', '<script>']) {
+    assert.strictEqual(check('contains', hostile, { Nom: 'abc' }), false, `« ${hostile} » ne correspond pas à abc`);
+    assert.strictEqual(check('contains', hostile, { Nom: 'a' + hostile + 'b' }), true);
+    assert.strictEqual(check('eq', hostile, { Nom: hostile }), true);
+    assert.strictEqual(check('contains', '{Autre}', { Nom: 'abc', Autre: hostile }), false, 'la valeur reçue sert de comparant, sans plus');
+  }
+});
+
+test('SEC-08 un texte qui se lit « Infinity » ou « 1e999 » reste un texte (JSON écrirait un nombre infini vide) ; un calcul qui sort des nombres est une erreur', async () => {
+  for (const text of ['Infinity', '-Infinity', '1e999']) {
+    assert.strictEqual(E.parseValue(text), text);
+    assert.strictEqual((await written(withTransforms([], '{Nom} '), { Nom: text })).value, text + ' ', 'assemblé avec du texte');
+    const sum = await written(withTransforms([tf('add', '{Nom}', '1')], '{r}'), { Nom: text });
+    assert.match(sum.result.error, /non numérique/);
+    assert.strictEqual(sum.value, undefined);
+  }
+  const big = await written(withTransforms([tf('mul', '1e308', '10')], '{r}'), {});
+  assert.match(big.result.error, /hors limites/);
+  assert.strictEqual(big.value, undefined);
+  assert.strictEqual(E.parseValue('12.50'), 12.5, 'un nombre ordinaire se lit toujours comme un nombre');
+  assert.strictEqual(E.parseValue('-3'), -3);
+});
