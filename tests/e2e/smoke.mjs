@@ -1384,6 +1384,25 @@ await scenario('E2E-68 un workflow actif : GFS demande de fermer pendant une ex�
   assert.equal(state.rows.find((row) => row.Type === 'Lock').Config, '', 'le verrou est rendu : un autre onglet reprend sans attendre son expiration');
 }, { host: { context: {} }, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeGraph }] } });
 
+await scenario('E2E-69 une colonne indispensable de la table disparaît pendant la session : la question de l\'app dit laquelle, et Enregistrer écrit dès qu\'elle est revenue', async (page, app) => {
+  const columns = await app.evaluate(() => {
+    const table = window.__stub.docTables.Automation;
+    const all = table.columns.slice();
+    table.columns = all.filter((column) => column !== 'Config');   // comme une colonne renommée dans Grist
+    return all;
+  });
+  await addTrigger(page, app);
+  await holdClose(page, 'importer');
+  await app.waitForSelector('.modal-box');
+  assert.match(await app.locator('.modal-body').innerText(), /Config/, 'la question dit quelle colonne manque');
+  assert.equal(await workflowRow(app), null, 'rien n\'est écrit tant qu\'elle manque');
+  await app.evaluate((all) => { window.__stub.docTables.Automation.columns = all; }, columns);
+  await app.locator('.modal-footer button', { hasText: 'Enregistrer' }).click();
+  const reply = await closeAnswer(page);
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  assert.equal(hasTrigger(await workflowRow(app)), true, 'écrit une fois la colonne revenue, avant le oui');
+}, { host: { context: {} } });
+
 await browser.close();
 server.close();
 process.exit(failures ? 1 : 0);

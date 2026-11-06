@@ -135,14 +135,14 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - CLOSE-08 des écritures qui ne s'arrêtent jamais n'attendent pas sans fin (dix tours au plus ; GFS propose lui-même « Fermer quand même » après 10 s).
 - CLOSE-09 le suivi des promesses en cours (`Closing.tracker`) : rien quand tout est fini, une attente tant que l'une dure, un échec compte comme fini.
 - CLOSE-10 la réponse donnée à GFS : seul « vrai » ferme, une erreur part chez GFS (qui demande à la personne), sans gestionnaire l'app peut partir.
-- (E2E-63 à 68, dans un faux GFS : le tableau ci-dessous ; le vrai GFS : `docs/TESTS_GRIST_REEL.md`, LIEN-12 à LIEN-19.)
+- (E2E-63 à 69, dans un faux GFS : le tableau ci-dessous ; le vrai GFS : `docs/TESTS_GRIST_REEL.md`, LIEN-12 à LIEN-19.)
 
 ### Tests déjà écrits (état au 2026-10-12)
 
 | Groupe | Contenu | Où |
 |---|---|---|
 | CLOSE-01 à 10 | `fermer` de GFS (consigne 010, 0.15.1) : rien n'attend (oui tout de suite), une écriture ou une exécution en cours attendue avant le oui, l'écriture qui échoue (question, Annuler, Échap, Abandonner, Enregistrer qui réessaie), verrou rendu sans retenir l'app, attente bornée, suivi des promesses, réponse stricte | `tests/closing.test.js` |
-| E2E-63 à 68 | l'app dans un faux GFS (cadre isolé) à qui GFS demande `fermer` : rien n'attend (oui pour chaque raison, sans fenêtre), lecture seule (oui, rien d'écrit), une modification en attente (écrite avant le oui, sans question, écriture plus longue que la réponse), écriture refusée (la question, Annuler et Échap gardent l'app, Enregistrer réessaie), Abandonner, un workflow actif pendant une exécution (effet et journal écrits avant le oui, verrou rendu) | `tests/e2e/smoke.mjs` |
+| E2E-63 à 69 | l'app dans un faux GFS (cadre isolé) à qui GFS demande `fermer` : rien n'attend (oui pour chaque raison, sans fenêtre), lecture seule (oui, rien d'écrit), une modification en attente (écrite avant le oui, sans question, écriture plus longue que la réponse), écriture refusée (la question, Annuler et Échap gardent l'app, Enregistrer réessaie), Abandonner, une colonne indispensable disparue puis revenue (la question dit laquelle, Enregistrer écrit), un workflow actif pendant une exécution (effet et journal écrits avant le oui, verrou rendu) | `tests/e2e/smoke.mjs` |
 | DIFF, TRG, COND, ACT, DRY, SEC-02 | moteur (voir plus haut), tests listés comme « partiels » ; le moteur parcourt un graphe (conditions en série = ET) | `tests/engine.test.js` |
 | SEC-04, 06 à 08, E2E-62 | une ligne reçue par un lien public est du texte non fiable (consigne 009 de GFS, 0.15.1) : écrite telle quelle, jamais évaluée ni substituée deux fois, une clé qui ne vise que la table du graphe, des comparaisons sans expression régulière, « Infinity » qui reste un texte ; dans Chromium, un texte en HTML se lit dans le journal et le test à blanc sans qu'aucune balise naisse | `tests/engine.test.js`, `tests/e2e/smoke.mjs` |
 | GRAPH-01 à 10 | ajout, liens (sortie vers entrée, pas de cycle, une entrée = un lien), suppression, validation, aller-retour JSON | `tests/graph.test.js` |

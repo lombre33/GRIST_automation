@@ -105,7 +105,7 @@ npm run test:e2e    # scénarios dans Chromium avec une API Grist simulée, dont
 npm run tutorial:shots   # refait les captures de la prise en main (img/tuto/), à relire avant de pousser
 ```
 
-`test:e2e` et `tutorial:shots` demandent Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin) ; ce qu'ils partagent (le site servi, l'API simulée, les gestes sur le canevas) est dans `tests/e2e/harness.mjs`. Les captures sont à refaire quand l'interface qu'elles montrent change. `E2E_ONLY='E2E-4[5-9]'` n'en joue qu'une partie ; `E2E_SHOTS=<dossier>` range des captures d'écran des scénarios dans GFS. Les tests qui lisent le kit (HYG-14 à 17, E2E-36 à 44, E2E-63 à 68) demandent le sous-module récupéré. Plan des tests : `docs/PLAN_TESTS.md` ; essais dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`.
+`test:e2e` et `tutorial:shots` demandent Playwright, installé hors du dépôt (variable `PLAYWRIGHT_PATH` si besoin) ; ce qu'ils partagent (le site servi, l'API simulée, les gestes sur le canevas) est dans `tests/e2e/harness.mjs`. Les captures sont à refaire quand l'interface qu'elles montrent change. `E2E_ONLY='E2E-4[5-9]'` n'en joue qu'une partie ; `E2E_SHOTS=<dossier>` range des captures d'écran des scénarios dans GFS. Les tests qui lisent le kit (HYG-14 à 17, E2E-36 à 44, E2E-63 à 69) demandent le sous-module récupéré. Plan des tests : `docs/PLAN_TESTS.md` ; essais dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`.
 
 ## Licence
 
