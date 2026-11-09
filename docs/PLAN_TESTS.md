@@ -137,10 +137,33 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - CLOSE-10 la réponse donnée à GFS : seul « vrai » ferme, une erreur part chez GFS (qui demande à la personne), sans gestionnaire l'app peut partir.
 - (E2E-63 à 69, dans un faux GFS : le tableau ci-dessous ; le vrai GFS : `docs/TESTS_GRIST_REEL.md`, LIEN-12 à LIEN-19.)
 
+### DIAG — Diagnostic pour demander de l'aide (0.15.2, `js/diagnostic.js`)
+- DIAG-01 un bloc de code JSON prêt à coller : format, mode (anonymisé sans autre précision), date, widget, état, workflow, tables, journal.
+- DIAG-02 anonymisé : aucun nom de table ou de colonne, aucune valeur saisie, aucun contenu de ligne, dans le workflow, le résumé, les tables et le journal (les messages sont ceux que le vrai moteur produit, avec le contenu de la ligne dans l'erreur).
+- DIAG-03 un même nom a le même pseudonyme partout (T1, C1, V1…), dans l'ordre du document ; une valeur de nœud n'est pas prise pour une colonne.
+- DIAG-04 complet : noms et textes saisis lisibles, jamais le contenu d'une ligne.
+- DIAG-05 types des colonnes : référence (pseudonyme de la table visée), formule, fuseau d'une date (complet seulement).
+- DIAG-06 ce qui ne va pas : problèmes d'activation, table ou colonne que le document n'a plus, sans doublon.
+- DIAG-07 tables illisibles : `null`, sans accuser le workflow ; type que Grist n'a pas donné : `null`.
+- DIAG-08 table très large : seules les colonnes que le workflow nomme, et le nombre des autres.
+- DIAG-09 journal : 30 lignes, les plus récentes d'abord, dates illisibles écartées, 400 caractères au plus.
+- DIAG-10 messages de Grist : guillemets « », " " et ' ', apostrophes du français qui n'en sont pas, nom d'un nœud conservé.
+- DIAG-11 contenu illisible : sa nature (JSON ou non, version, types de nœud inconnus), jamais ses mots.
+- DIAG-12 clôture du bloc plus longue que toute suite d'accents graves ; le JSON se relit à l'identique.
+- DIAG-13 rien n'est modifié dans ce que le module lit, même texte deux fois, très peu d'entrée suffit.
+- DIAG-14 une partie impossible (graphe en boucle, nœud abîmé) se dit `not-built` ou `null` sans arrêter le reste.
+- DIAG-15 champ inconnu d'une version plus récente : masqué, ni recopié ni perdu.
+- DIAG-16 lecture statique : le module ne lit ni Grist ni la page, ni rien du contenu d'une ligne.
+- DIAG-17 mise en page : ce qui tient sur une ligne y reste, toute structure se relit à l'identique.
+- (E2E-70 à 77 et STORE-13 : le tableau ci-dessous ; dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`, DIAG-R1 à DIAG-R10.)
+
 ### Tests déjà écrits (état au 2026-10-12)
 
 | Groupe | Contenu | Où |
 |---|---|---|
+| DIAG-01 à 17 | diagnostic (0.15.2) : forme du texte, anonymisation (aucun nom, aucune valeur saisie, aucun contenu de ligne, avec les vrais messages du moteur), pseudonymes constants, mode complet, types de colonnes, problèmes dits, tables illisibles ou très larges, journal, contenu illisible, clôture du bloc, rien de modifié, parties impossibles, champs inconnus, module qui ne lit ni Grist ni la page, mise en page | `tests/diagnostic.test.js` |
+| STORE-13 | le contenu enregistré d'une table de vue, tel quel (`Store.configText`), pour dire la nature d'un contenu illisible | `tests/store.test.js` |
+| E2E-70 à 77 | Réglages > Diagnostic dans Chromium : anonymisé à l'ouverture (aucun nom du document, aucune valeur de ligne, effets du test absents du texte alors qu'ils sont dans le journal à l'écran), « Complet », Copier (presse-papiers, puis copie refusée : texte sélectionné et dit), focus sur Copier puis rendu à l'ouvreur, rien d'écrit ni de journalisé ; workflow illisible (table, réglages de la vue) dit par sa nature ; types lus dans les métadonnées de Grist (référence, formule, colonne vide) et colonne disparue ; hors de Grist ; lecture seule ; petit cadre (700×400) en anglais | `tests/e2e/smoke.mjs` |
 | CLOSE-01 à 10 | `fermer` de GFS (consigne 010, 0.15.1) : rien n'attend (oui tout de suite), une écriture ou une exécution en cours attendue avant le oui, l'écriture qui échoue (question, Annuler, Échap, Abandonner, Enregistrer qui réessaie), verrou rendu sans retenir l'app, attente bornée, suivi des promesses, réponse stricte | `tests/closing.test.js` |
 | E2E-63 à 69 | l'app dans un faux GFS (cadre isolé) à qui GFS demande `fermer` : rien n'attend (oui pour chaque raison, sans fenêtre), lecture seule (oui, rien d'écrit), une modification en attente (écrite avant le oui, sans question, écriture plus longue que la réponse), écriture refusée (la question, Annuler et Échap gardent l'app, Enregistrer réessaie), Abandonner, une colonne indispensable disparue puis revenue (la question dit laquelle, Enregistrer écrit), un workflow actif pendant une exécution (effet et journal écrits avant le oui, verrou rendu) | `tests/e2e/smoke.mjs` |
 | DIFF, TRG, COND, ACT, DRY, SEC-02 | moteur (voir plus haut), tests listés comme « partiels » ; le moteur parcourt un graphe (conditions en série = ET) | `tests/engine.test.js` |

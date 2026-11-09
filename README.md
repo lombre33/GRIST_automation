@@ -20,7 +20,7 @@ Sur le canevas : clic droit sur le fond (ou « Ajouter ») pour un nœud ; un li
 
 « Tester » simule le graphe sur la ligne sélectionnée dans Grist (sinon la première de la vue), sans rien écrire, et montre l'état de chaque nœud. « Activer » refuse tant que le graphe est incomplet et dit pourquoi dans le journal. Interface en français et en anglais, thèmes clair et sombre, pensée pour un panneau de 700 × 400 px.
 
-Une **prise en main** de six écrans (de vraies captures du widget, en français et en anglais) s'ouvre d'elle-même à la première ouverture, pour une personne qui peut modifier le document ; **Réglages > Aide** la rouvre quand on veut.
+Une **prise en main** de six écrans (de vraies captures du widget, en français et en anglais) s'ouvre d'elle-même à la première ouverture, pour une personne qui peut modifier le document ; **Réglages > Aide** la rouvre quand on veut. **Réglages > Diagnostic** donne, à copier, un résumé technique du widget pour demander de l'aide (plus bas).
 
 ## Installation et configuration dans Grist
 
@@ -48,7 +48,32 @@ Une personne qui n'a que la **lecture** du document voit le workflow, le déplac
 
 - **Dans le document Grist** : la table `Automation`, une seule pour tout le widget (`Type` = `Workflow` : le graphe et un résumé lisible, une ligne par table de vue ; `Log` : une ligne par exécution, avec l'adresse e-mail de la personne dont le navigateur a exécuté, colonne `Auteur`, formule `user.Email` ; `Lock` : le verrou d'exécution). Sans la table `Automation` (accord refusé, table inutilisable), le widget fonctionne mais ne garde pas le journal, et garde le graphe dans les options de la vue (`grist.setOption`) : Grist y voit alors une modification de la vue, à enregistrer par son bouton « Enregistrer », en haut de la vue. Avec la table, rien n'est écrit dans les options de la vue, et ce bouton n'apparaît pas ; un graphe que des options déjà enregistrées gardent (version 0.14.0 ou plus ancienne) se relit toujours.
 - **Dans le navigateur**, dans `localStorage` : deux préférences d'affichage, la langue (`ab_lang`) et le thème (`ab_theme`), et la version de la prise en main déjà vue (`ab_tuto`), pour qu'elle ne s'ouvre d'elle-même qu'une fois. Un navigateur qui ne retient rien (stockage refusé, cadre de GFS) ne l'ouvre pas de lui-même : elle reviendrait à chaque chargement. Et, dans `sessionStorage`, le temps d'un rechargement de la page, l'identifiant de l'onglet pour le verrou (`ab_executor_<table>`) : un onglet rechargé reprend ainsi l'exécution tout de suite. Rien qui vienne du document.
+- **Le diagnostic** n'est gardé nulle part : il se refait à chaque ouverture de la fenêtre (plus bas).
 - **Ailleurs** : rien. Le widget n'appelle aucun service ; sa politique de sécurité (`index.html`) interdit toute requête vers un autre site que le sien, hors le script de l'API Grist (les captures de la prise en main viennent du site du widget).
+
+## Le diagnostic, pour demander de l'aide
+
+**Réglages > Diagnostic** ouvre une fenêtre qui donne, à copier, un résumé technique du widget en JSON, dans un bloc de code prêt à coller sur le forum ou à donner à l'assistance (format `automation-builder-diagnostic/1`, `js/diagnostic.js`). Il dit :
+
+- **le widget** : version, langue, navigateur, si l'API de Grist est là, si GFS héberge l'app, l'accès accordé, la lecture seule ;
+- **l'état** : le workflow (`present`, `empty` ou `unreadable`, et s'il a été relu de l'enregistrement), qui exécuterait (`this-tab`, `other-tab`, `alone` sans table `Automation`, `none`, `read-only`), la table `Automation` (présente, et le dernier problème que le journal a dit : `name-taken` ou `missing-columns`), les modifications pas encore écrites, le nombre de lignes de la vue ;
+- **le workflow** : actif ou non, son résumé lisible (un chemin par ligne), les nœuds avec leurs réglages, les liens, et **ce qui ne va pas** : d'abord ce qui empêche d'activer (les mêmes codes que le journal, `noTrigger`, `notConnected`…), puis les tables et les colonnes que le workflow nomme et que le document n'a plus (`unknown-table`, `unknown-column`) : un déclencheur sur une colonne renommée ne se déclenche plus, sans qu'aucune erreur ne le dise ;
+- **les tables que le workflow touche** (celle de la vue et celles des nœuds), avec leurs colonnes et leur type (`Text`, `Ref:Table`, `Numeric, formula`…), lus dans les tables de métadonnées de Grist (`_grist_Tables`, `_grist_Tables_column`) ; si elles ne se lisent pas, les colonnes seules ; une table de plus de 60 colonnes ne donne que celles que le workflow nomme ;
+- **les 30 derniers messages du journal**, les plus récents d'abord ;
+- pour un workflow que cette version ne sait pas lire : sa nature (version, nombre de nœuds, types de nœud inconnus), jamais son contenu.
+
+Deux modes, **Anonymisé** à chaque ouverture (le choix « Complet » n'est pas retenu) :
+
+| | Anonymisé | Complet |
+|---|---|---|
+| Noms de tables, de colonnes, valeurs `{nom}` des nœuds | `T1`, `C1`, `V1`… : un même nom a le même pseudonyme partout (nœuds, résumé, tables, problèmes, journal) | lisibles |
+| Texte saisi dans un nœud | `<text>` ou `<number>` (`true` et `false` restent : ils changent le sens d'une comparaison) ; les `{valeurs}` gardent leur pseudonyme | lisible |
+| Types de nœuds, liens, opérateurs, identifiants de nœuds, versions | lisibles | lisibles |
+| Contenu d'une ligne du document | **jamais** | **jamais** |
+
+Dans les deux modes, le diagnostic ne contient ni le contenu d'une ligne, ni l'adresse e-mail d'un auteur, ni ce que les exécutions ont écrit (les effets d'un test sont dans le journal à l'écran, pas dans le diagnostic) : une valeur que le journal cite (`Ligne introuvable dans T : C = valeur`, `Valeur non numérique : « valeur »`) n'est reprise que par sa nature, `<empty>`, `<number>` ou `<text>`. En mode anonymisé, les messages de Grist passent par les mêmes pseudonymes (un nom connu du document devient le sien, ce qui est entre guillemets n'est repris que s'il nomme quelque chose que le workflow connaît). **Relisez le texte avant de le publier** : l'anonymisation n'a pas vu ce qu'elle ne connaît pas (le navigateur, par exemple, est dit tel quel).
+
+Le diagnostic se fait à l'ouverture de la fenêtre et n'écrit rien : ni dans le document, ni dans le journal, ni dans le navigateur ; il ne part nulle part, c'est la personne qui le copie (`Copier`, ou le texte sélectionné à la main si le navigateur refuse la copie). Il se fait aussi hors de Grist et en lecture seule.
 
 ## Dépendances
 
@@ -87,9 +112,10 @@ La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages re
 | `js/store.js` | table `Automation` : workflow, journal, verrou |
 | `js/executor.js`, `js/echo.js` | un seul onglet exécutant ; les écritures du widget ne le redéclenchent pas |
 | `js/canvas.js`, `js/canvas-fields.js` | canevas nodal (déplacement, zoom, nœuds, liens) et champs des nœuds |
-| `js/main.js` | branchement sur l'API Grist : accès, lecture seule, sauvegarde, exécution |
+| `js/main.js` | branchement sur l'API Grist : accès, lecture seule, sauvegarde, exécution, ce que lit le diagnostic |
 | `js/i18n.js`, `js/i18n-texts.js`, `js/theme.js` | langue et textes fr/en, thèmes |
 | `js/modal.js`, `js/search-select.js` | fenêtres et listes avec recherche |
+| `js/diagnostic.js`, `js/diagnostic-window.js` | diagnostic : le texte JSON à copier, anonymisé ou complet (sans DOM ni Grist) ; la fenêtre de Réglages > Diagnostic |
 | `js/tutorial.js`, `img/tuto/` | prise en main : six écrans, leurs captures fr et en |
 | `js/gfs.js`, `js/keep-clear.js`, `kit/` | lien avec GFS : l'ambiance (par le kit), la zone de la barre à laisser libre et le branchement de `fermer` |
 | `js/closing.js` | réponse à `fermer` : enregistrer ce qui attend, laisser finir les écritures, rendre le verrou, ne poser la question que si l'écriture échoue (sans DOM ni Grist) |

@@ -131,6 +131,13 @@
     return (await readGraph(api, tableId)).graph;
   }
 
+  // Le contenu enregistré du workflow d'une table de vue, tel quel (null : pas de ligne Workflow, ou une Config vide) : le diagnostic (js/diagnostic.js) en dit la nature
+  // quand cette version ne sait pas le lire, sans le recopier.
+  async function configText(api, tableId) {
+    const row = workflowRow(await load(api), tableId);
+    return row && !blank(row.Config) ? String(row.Config) : null;
+  }
+
   async function saveGraph(api, graph, tableId, summary) {
     const values = { Type: WORKFLOW, Table: tableId, Actif: graph.active, Version: graph.version, Resume: summary, Config: JSON.stringify(graph) };
     const row = workflowRow(await load(api), tableId);
@@ -169,7 +176,7 @@
     await put(api, LOCK, rowId, { Type: LOCK, Table: tableId, Config: owner, Date: date });
   }
 
-  const api = { TABLE, WORKFLOW, LOG, LOCK, readLock, writeLock, COLUMNS, isOwnTable, missingTables, problem, ensureTables, readGraph, loadGraph, saveGraph, appendLog, logsPage };
+  const api = { TABLE, WORKFLOW, LOG, LOCK, readLock, writeLock, COLUMNS, isOwnTable, missingTables, problem, ensureTables, readGraph, loadGraph, saveGraph, configText, appendLog, logsPage };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Store = api;
 })(typeof window !== 'undefined' ? window : globalThis);

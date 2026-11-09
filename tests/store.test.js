@@ -87,6 +87,18 @@ test('STORE-07 configuration illisible dans la table : ignorée sans erreur', as
   assert.strictEqual(await S.loadGraph(doc, 'Contacts'), null);
 });
 
+test('STORE-13 le contenu enregistré d\'une table de vue, tel quel, pour que le diagnostic dise ce qu\'il contient quand il est illisible', async () => {
+  const doc = createFakeDoc();
+  await S.ensureTables(doc);
+  assert.strictEqual(await S.configText(doc, 'Contacts'), null, 'rien d\'enregistré');
+  await doc.applyUserActions([['AddRecord', S.TABLE, null, { Type: S.WORKFLOW, Table: 'Contacts', Config: '   ' }]]);
+  assert.strictEqual(await S.configText(doc, 'Contacts'), null, 'une Config vide n\'est rien');
+  await doc.applyUserActions([['AddRecord', S.TABLE, null, { Type: S.WORKFLOW, Table: 'Services', Config: '{"version":4,"nodes":[]}' }]]);
+  assert.strictEqual(await S.configText(doc, 'Services'), '{"version":4,"nodes":[]}');
+  assert.strictEqual(await S.configText(doc, 'Contacts'), null, 'celui d\'une autre table n\'est pas lu');
+  assert.deepStrictEqual([...doc.tables.get(S.TABLE).rows].map((row) => row.Type), [S.WORKFLOW, S.WORKFLOW], 'lire n\'écrit rien');
+});
+
 test('STORE-08 journal : une ligne par exécution, pages de la plus récente à la plus ancienne', async () => {
   const doc = createFakeDoc();
   await S.ensureTables(doc);

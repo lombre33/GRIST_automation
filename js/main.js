@@ -37,12 +37,19 @@ const busy = Closing.tracker();
 const gristApi = { fetchTable: (name) => grist.docApi.fetchTable(name), applyUserActions: (actions) => busy.track(grist.docApi.applyUserActions(actions)) };
 const docApi = Object.assign({ listTables: () => grist.docApi.listTables() }, gristApi);
 
+// Les lignes du journal telles que le diagnostic (js/diagnostic.js) les reprend : les plus récentes seulement, et sans ce qui touche aux données du document.
+const diagnosticLog = [];
+const DIAGNOSTIC_LOG_MAX = 200;
+
 // append : entrée de l'historique relue du document (plus ancienne que celles déjà affichées) ; sinon la plus récente va en haut.
-function addLog(message, date = new Date(), append = false) {
+// forDiagnostic : ce que le diagnostic retient de la ligne quand elle montre plus que ça (l'auteur d'une exécution, les effets d'un test).
+function addLog(message, date = new Date(), append = false, forDiagnostic = message) {
   const li = document.createElement('li');
   li.textContent = `[${date.toLocaleString()}] ${message}`;
   if (append) $('log-list').append(li);
   else $('log-list').prepend(li);
+  diagnosticLog.push({ date, message: forDiagnostic });
+  if (diagnosticLog.length > DIAGNOSTIC_LOG_MAX) diagnosticLog.shift();
 }
 
 /* ---------- Schéma du document (colonnes et tables proposées dans les nœuds) ---------- */
@@ -188,9 +195,12 @@ async function flushSave() {
   return editGen <= savedGen;
 }
 
+let lastStoreIssue = null;   // le code du dernier problème de la table du document (Store.problem), que le diagnostic redit
+
 // Dit dans le journal pourquoi la table du document ne peut pas servir (nom déjà pris, colonnes absentes) ; true s'il y a un problème.
 async function storeProblem() {
   const problem = await Store.problem(docApi);
+  lastStoreIssue = problem ? problem.code : null;
   if (problem) addLog(storeMessage(problem));
   return Boolean(problem);
 }
@@ -267,11 +277,11 @@ async function loadOlderLogs() {
   try {
     const page = await Store.logsPage(docApi, tableId, LOG_PAGE, oldestLogId);
     for (const entry of page.rows) {
-      const author = entry.Auteur ? ` (${entry.Auteur})` : '';
-      const message = entry.Evenement === 'activate' || entry.Evenement === 'deactivate'
+      // Le diagnostic ne reprend pas l'auteur (une adresse e-mail) : line('') donne la ligne sans lui.
+      const line = (author) => (entry.Evenement === 'activate' || entry.Evenement === 'deactivate'
         ? t(entry.Evenement === 'activate' ? 'log.activated' : 'log.deactivated') + author
-        : t('log.event', { event: t('event.' + entry.Evenement), row: entry.Ligne, status: t('result.' + entry.Resultat) + author });
-      addLog(message, new Date(entry.Date * 1000), true);
+        : t('log.event', { event: t('event.' + entry.Evenement), row: entry.Ligne, status: t('result.' + entry.Resultat) + author }));
+      addLog(line(entry.Auteur ? ` (${entry.Auteur})` : ''), new Date(entry.Date * 1000), true, line(''));
       oldestLogId = entry.id;
     }
     $('logs-more').hidden = !page.more;
@@ -421,7 +431,8 @@ async function dryRun() {
   const result = await Engine.runWorkflow(graph, event, gristApi, { dryRun: true, currentTable: tableId });
   canvas.showTrace(result.trace);
   const status = t('result.' + result.status) + (result.error ? ' — ' + result.error : '');
-  addLog(t('log.dryRun', { row: record.id, status, n: result.effects.length }) + ' ' + JSON.stringify(result.effects));
+  const summary = t('log.dryRun', { row: record.id, status, n: result.effects.length });
+  addLog(summary + ' ' + JSON.stringify(result.effects), new Date(), false, summary);   // le diagnostic n'a pas les effets : ce sont des valeurs de la ligne
 }
 
 async function toggleActive() {
@@ -486,10 +497,18 @@ function openSettings() {
   help.textContent = t('tuto.title');
   help.setAttribute('aria-haspopup', 'dialog');
   help.addEventListener('click', () => Tutorial.open());
+  // Diagnostic : la fenêtre du texte à copier pour demander de l'aide (js/diagnostic-window.js), par-dessus les Réglages.
+  const diagnostic = document.createElement('button');
+  diagnostic.type = 'button';
+  diagnostic.id = 'open-diagnostic';
+  diagnostic.textContent = t('diag.open');
+  diagnostic.setAttribute('aria-haspopup', 'dialog');
+  diagnostic.addEventListener('click', openDiagnostic);
   list.append(
     ...definition(t('settings.language'), segmented(I18n.LANGS, I18n.lang, (code) => code.toUpperCase(), (code) => I18n.set(code))),
     ...definition(t('settings.theme'), segmented(Theme.MODES, Theme.mode, (mode) => t('theme.' + mode), (mode) => Theme.set(mode))),
     ...definition(t('settings.help'), help),
+    ...definition(t('settings.diagnostic'), diagnostic),
   );
   const credits = document.createElement('dl');
   const site = document.createElement('a');
@@ -507,6 +526,94 @@ function openSettings() {
   );
   body.append(list, heading, credits);
   Modal.create({ title: t('settings.title'), width: 'form', body });
+}
+
+/* ---------- Diagnostic (Réglages > Diagnostic) ---------- */
+
+let lastOptionsWorkflow = '';   // le workflow que les réglages de la vue ont donné, lisible ou non : pour dire ce qu'un contenu illisible contient
+
+// Une lecture dans Grist qui ne répond pas ne doit pas empêcher d'obtenir le reste du diagnostic.
+function within(read, ms = 4000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    Promise.resolve().then(read).then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
+
+// Les tables du document et, pour celles que le workflow nomme (used), leurs colonnes et leur type, lus dans les tables de métadonnées de Grist (_grist_Tables, _grist_Tables_column).
+// Si elles ne se lisent pas, les colonnes seules, lues dans les tables. Ce qui ne se lit pas du tout manque (tables : null) ; rien ne s'écrit dans le journal.
+async function readSchema(used) {
+  const info = { tables: null, columns: {}, types: {} };
+  try {
+    info.tables = (await within(() => grist.docApi.listTables())).filter((name) => !Store.isOwnTable(name));
+  } catch (err) {
+    return info;
+  }
+  const present = used.filter((table) => info.tables.includes(table));
+  try {
+    const [metaTables, metaColumns] = await within(() => Promise.all([grist.docApi.fetchTable('_grist_Tables'), grist.docApi.fetchTable('_grist_Tables_column')]));
+    for (const table of present) {
+      const parent = metaTables.id[metaTables.tableId.indexOf(table)];
+      const rows = metaColumns.id.map((id, at) => at).filter((at) => metaColumns.parentId[at] === parent && isUserColumn(String(metaColumns.colId[at])));
+      if (metaColumns.parentPos) rows.sort((a, b) => metaColumns.parentPos[a] - metaColumns.parentPos[b]);
+      info.columns[table] = rows.map((at) => metaColumns.colId[at]);
+      // Une colonne « formule » dont la formule est vide est une colonne vide de Grist (pas encore de type de saisie) : elle ne compte pas comme une formule.
+      const isFormula = (at) => Boolean(metaColumns.isFormula && metaColumns.isFormula[at]) && String((metaColumns.formula || [])[at] || '') !== '';
+      info.types[table] = Object.fromEntries(rows.map((at) => [metaColumns.colId[at], { type: String(metaColumns.type[at]), formula: isFormula(at) }]));
+    }
+  } catch (err) {
+    await Promise.all(present.map(async (table) => {
+      try {
+        info.columns[table] = columnsByTable.has(table) ? columnsByTable.get(table) : Object.keys(await within(() => grist.docApi.fetchTable(table))).filter(isUserColumn);
+      } catch (error) { /* colonnes illisibles : la table est citée sans elles */ }
+    }));
+  }
+  return info;
+}
+
+// Ce que dit le contenu enregistré que cette version ne sait pas lire, sans le recopier (Diagnostic.inspectConfig) : celui du document, sinon celui des réglages de la vue.
+async function unreadableContent() {
+  const stored = tablesAvailable ? await Store.configText(docApi, tableId) : null;
+  const fromDocument = stored !== null && !Graph.parse(stored);
+  return { source: fromDocument ? 'document' : 'widget-options', ...Diagnostic.inspectConfig(fromDocument ? stored : lastOptionsWorkflow) };
+}
+
+// Qui exécuterait les workflows actifs : 'read-only' (jamais), 'alone' (pas de table Automation, donc pas de verrou partagé), 'this-tab', 'other-tab' ou 'none' (personne ne tient le verrou).
+const executorState = () => (readOnly ? 'read-only' : !executor ? 'alone' : executor.isExecutor() ? 'this-tab' : executor.holder() !== '' ? 'other-tab' : 'none');
+
+// Ce que le widget sait de lui-même, dans la forme que Diagnostic.build lit (js/diagnostic.js). Le graphe est copié : le diagnostic ne change rien au widget.
+async function collectDiagnostic() {
+  const shown = locked ? null : JSON.parse(JSON.stringify(graph));
+  const [schemaInfo, unreadable] = await Promise.all([
+    readSchema(Diagnostic.tablesUsed(shown, tableId)),
+    locked ? within(unreadableContent).catch(() => ({ source: 'unknown' })) : null,
+  ]);
+  return {
+    version: window.APP_VERSION,
+    language: I18n.lang,
+    browser: navigator.userAgent,
+    generatedAt: new Date(),
+    viewTable: tableId,
+    graph: shown,
+    unreadable,
+    journal: diagnosticLog.slice(),
+    t,
+    frame: { grist: typeof grist !== 'undefined', gfs: /[?&]gfs=\d/.test(location.search), access: frameParams.get('access') || 'unspecified', readOnly },
+    state: {
+      workflow: locked ? 'unreadable' : graph.nodes.length ? 'present' : 'empty',
+      loadedFromStorage: loaded,
+      executor: executorState(),
+      automationTable: tablesAvailable,
+      storeIssue: lastStoreIssue,
+      unsaved: editGen > savedGen,
+      rowsInView: lastRecords.length,
+    },
+    schema: schemaInfo,
+  };
+}
+
+function openDiagnostic() {
+  DiagnosticWindow.open({ collect: collectDiagnostic, segmented, definition });
 }
 
 /* ---------- Démarrage ---------- */
@@ -594,6 +701,7 @@ function start() {
   if (!accessGranted) return showAccessNeeded();
   if (readOnly) showReadOnly();
   grist.onOptions((options) => {
+    if (options && options.workflow) lastOptionsWorkflow = options.workflow;
     if (loaded || locked || !options || !options.workflow) return;
     const saved = Graph.parse(options.workflow);
     if (!saved) return lockWorkflow();

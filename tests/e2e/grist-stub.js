@@ -13,6 +13,8 @@ const FIXED = window.__fixedTables || {
   Contacts: { id: [1], manualSort: [1], Nom: ['A'], Statut: ['Nouveau'], Montant: [10], gristHelper_Display: [''] },
   Archive: { id: [1, 2], manualSort: [1, 2], Motif: ['a', 'b'], Source: [10, 500] },
 };
+// window.__metaTables : des tables de métadonnées de Grist (_grist_Tables, _grist_Tables_column), lues par fetchTable sans paraître dans listTables, comme dans Grist.
+const META = window.__metaTables || {};
 const docTables = {};
 function createTable(name, columns) { docTables[name] = { columns: columns.map((c) => c.id), rows: [], nextId: 1 }; }
 if (!window.__noTables && !window.__foreignLock) {
@@ -69,6 +71,8 @@ window.grist = {
     listTables: () => Promise.resolve([...Object.keys(FIXED), ...Object.keys(docTables)]),
     fetchTable: (name) => {
       if (FIXED[name]) return Promise.resolve(FIXED[name]);
+      if (META[name]) return Promise.resolve(META[name]);
+      if (!docTables[name]) return Promise.reject(new Error(`Table not found "${name}"`));
       const table = docTables[name];
       const data = { id: table.rows.map((r) => r.id) };
       for (const column of table.columns) data[column] = table.rows.map((r) => r[column]);

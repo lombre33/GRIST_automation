@@ -17,3 +17,7 @@
 .segmented { display: flex; gap: 4px; }
 .segmented button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--accent-ink); font-weight: 600; }
 .copy-row { display: flex; gap: 6px; }
+/* Le diagnostic (js/diagnostic-window.js) : le texte à copier, en chasse fixe et sans retour à la ligne (une ligne du JSON reste une ligne), la note du mode choisi et l'état de la copie. */
+.diag-text { display: block; width: 100%; box-sizing: border-box; min-height: 12em; margin: 0 0 6px; padding: 6px 8px; resize: vertical; font-family: var(--font-mono); font-size: 12px; line-height: 1.45; color: var(--text); background: var(--surface); border: var(--bw) solid var(--border-strong); border-radius: var(--radius-input); }
+.diag-note { margin: 0 0 6px; color: var(--text-muted); font-size: 12px; }
+.diag-status { min-height: 1.4em; margin: 0; font-size: 12px; }

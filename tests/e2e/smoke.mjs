@@ -1411,6 +1411,205 @@ await scenario('E2E-69 une colonne indispensable de la table disparaît pendant 
   assert.equal(hasTrigger(await workflowRow(app)), true, 'écrit une fois la colonne revenue, avant le oui');
 }, { host: { context: {} } });
 
+/* ---------- Le diagnostic (Réglages > Diagnostic, js/diagnostic.js) ---------- */
+
+// Ouvre Réglages > Diagnostic et rend la main quand le texte est prêt (Copier n'est plus grisé).
+async function openDiagnostic(target) {
+  await target.click('#open-settings');
+  await target.click('#open-diagnostic');
+  await target.waitForSelector('#diagnostic-copy:not([disabled])');
+}
+// Le diagnostic affiché : le texte tel qu'il se copie, et son JSON (sans la clôture du bloc de code).
+async function diagnosticShown(target) {
+  const text = await target.locator('#diagnostic-text').inputValue();
+  const lines = text.split('\n');
+  assert.match(lines[0], /^`{3,}json$/, 'un bloc de code JSON');
+  assert.match(lines[lines.length - 1], /^`{3,}$/);
+  return { text, json: JSON.parse(lines.slice(1, -1).join('\n')) };
+}
+const pressed = (target, name) => target.getByRole('button', { name, exact: true }).getAttribute('aria-pressed');
+const NAMES = /\b(Contacts|Archive|Statut|Motif|Nom|Montant|Source|Clos|Nouveau|SECRET-LIGNE)\b/;
+
+await scenario('E2E-70 Réglages > Diagnostic : anonymisé d\'abord (ni nom du document ni contenu de ligne), « Complet » rend les noms, Copier met le texte dans le presse-papiers, Échap rend le focus', async (page) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin });
+  await buildFlow(page);
+  await page.fill('#action-1-value', '{Nom}');
+  await page.click('#toggle-active');
+  await push(page, { id: 1, Nom: 'SECRET-LIGNE', Statut: 'Nouveau' }, { id: 1, Nom: 'SECRET-LIGNE', Statut: 'Clos' });
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  await page.click('#toggle-logs');
+  await page.click('#test-workflow');
+  await page.waitForFunction(() => /(Dry-run ligne|Test sur la ligne) 1/.test(document.getElementById('log-list').innerText));   // « Test sur la ligne » depuis la 0.16.0
+  assert.ok((await page.locator('#log-list').innerText()).includes('SECRET-LIGNE'), 'le journal à l\'écran montre les effets du test, valeur de la ligne comprise');
+  const before = await page.evaluate(() => [window.__stub.writes.length, document.querySelectorAll('#log-list li').length]);
+
+  await openDiagnostic(page);
+  assert.equal(await page.locator('[role=dialog]').count(), 2, 'par-dessus les Réglages');
+  assert.equal(await page.locator('#open-diagnostic').getAttribute('aria-haspopup'), 'dialog');
+  assert.equal(await page.locator('.modal-title').last().innerText(), 'Diagnostic');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'diagnostic-copy', 'le focus est sur Copier quand le texte est prêt');
+  assert.equal(await page.locator('#diagnostic-text').getAttribute('readonly'), '');
+  const { text, json } = await diagnosticShown(page);
+  assert.equal(json.mode, 'anonymized', 'anonymisé à l\'ouverture');
+  assert.equal(await pressed(page, 'Anonymisé'), 'true');
+  assert.equal(await pressed(page, 'Complet'), 'false');
+  assert.equal(json.widget.version, await page.evaluate(() => window.APP_VERSION));
+  assert.deepEqual([json.widget.grist, json.widget.readOnly, json.state.workflow, json.state.loadedFromStorage, json.state.automationTable, json.state.executor], [true, false, 'present', false, true, 'this-tab']);
+  assert.equal(json.viewTable, 'T1');
+  assert.deepEqual(Object.keys(json.tables), ['T1', 'T2']);
+  assert.equal(Object.keys(json.tables.T1).length, 3, 'les trois colonnes de Contacts, sans id ni colonnes internes de Grist');
+  assert.equal(json.workflow.active, true);
+  assert.deepEqual(json.workflow.problems, []);
+  assert.deepEqual(json.workflow.nodes.map((node) => node.type), ['trigger', 'condition', 'action']);
+  assert.doesNotMatch(text, NAMES, 'aucun nom de table ou de colonne, aucune valeur saisie, aucun contenu de ligne');
+  const lines = json.journal.map((entry) => entry.message);
+  assert.ok(lines.some((line) => /^(Dry-run ligne|Test sur la ligne) 1 : réussi — 1 (effet|écriture prévue)$/.test(line)), `le test à blanc, sans ses effets : ${lines.join(' | ')}`);
+  assert.ok(lines.some((line) => /^modification ligne 1 : réussi$/i.test(line)), 'l\'exécution, sans l\'auteur');
+  assert.match(await page.locator('.diag-note').innerText(), /Relisez le texte avant de le publier/);
+
+  // « Complet » : les noms et les valeurs saisies reviennent, le contenu des lignes jamais.
+  await page.getByRole('button', { name: 'Complet', exact: true }).click();
+  const full = await diagnosticShown(page);
+  assert.equal(full.json.mode, 'full');
+  assert.equal(await pressed(page, 'Complet'), 'true');
+  assert.equal(full.json.viewTable, 'Contacts');
+  assert.deepEqual(Object.keys(full.json.tables), ['Contacts', 'Archive']);
+  assert.ok(Object.keys(full.json.tables.Contacts).includes('Statut'));
+  assert.equal(full.json.workflow.nodes[2].config.table, 'Archive');
+  assert.equal(full.json.workflow.nodes[2].config.value, '{Nom}');
+  assert.doesNotMatch(full.text, /SECRET-LIGNE/, 'même complet, aucune valeur d\'une ligne');
+  assert.match(await page.locator('.diag-note').innerText(), /à réserver à une personne qui vous aide en privé/);
+  await page.getByRole('button', { name: 'Anonymisé', exact: true }).click();
+  assert.equal((await diagnosticShown(page)).text, text, 'revenir à anonymisé redonne le même texte');
+
+  // Copier : le texte du champ, dans le presse-papiers, et la fenêtre le dit.
+  await page.click('#diagnostic-copy');
+  await page.waitForFunction(() => /Copié/.test(document.querySelector('.diag-status').innerText));
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), text);
+
+  // Échap ne ferme que le diagnostic et rend le focus au bouton qui l'a ouvert ; ouvrir le diagnostic n'a rien écrit ni rien ajouté au journal.
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('[role=dialog]').count(), 1);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'open-diagnostic');
+  assert.deepEqual(await page.evaluate(() => [window.__stub.writes.length, document.querySelectorAll('#log-list li').length]), before, 'rien d\'écrit, rien dans le journal');
+});
+
+await scenario('E2E-71 Diagnostic : le navigateur refuse la copie — le texte reste sélectionné et la fenêtre le dit ; changer de mode efface le message', async (page) => {
+  await page.evaluate(() => {
+    navigator.clipboard.writeText = () => Promise.reject(new Error('refusé'));
+    document.execCommand = () => false;
+  });
+  await openDiagnostic(page);
+  await page.click('#diagnostic-copy');
+  assert.match(await page.locator('.diag-status').innerText(), /Le navigateur refuse la copie : le texte est sélectionné, copiez-le avec Ctrl\+C/);
+  const selection = await page.locator('#diagnostic-text').evaluate((area) => ({ start: area.selectionStart, end: area.selectionEnd, length: area.value.length, focused: document.activeElement === area }));
+  assert.deepEqual(selection, { start: 0, end: selection.length, length: selection.length, focused: true });
+  assert.ok(selection.length > 100);
+  await page.getByRole('button', { name: 'Complet', exact: true }).click();
+  assert.equal(await page.locator('.diag-status').innerText(), '', 'le message de la copie d\'avant ne vaut plus pour le nouveau texte');
+});
+
+await scenario('E2E-72 Diagnostic d\'un workflow écrit par une version plus récente, dans la table : sa nature (version, types inconnus), jamais ses mots, et la ligne n\'est pas touchée', async (page) => {
+  await page.waitForSelector('#locked:not([hidden])');
+  await openDiagnostic(page);
+  const { text, json } = await diagnosticShown(page);
+  assert.equal(json.state.workflow, 'unreadable');
+  assert.deepEqual(json.unreadable, { source: 'document', json: true, version: 4, nodes: 1, unknownTypes: ['boucle'] });
+  assert.equal('workflow' in json, false, 'pas de workflow : cette version ne sait pas le lire');
+  assert.doesNotMatch(text, /boucle-1|zoom/, 'ni identifiant de nœud ni réglage de la vue');
+  await page.keyboard.press('Escape');
+  await assertUntouched(page, 'le diagnostic n\'écrit rien dans la ligne illisible');
+}, { init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+
+await scenario('E2E-73 Diagnostic d\'un workflow illisible dans les réglages de la vue : la nature de ce contenu, sans le recopier', async (page) => {
+  await page.waitForSelector('#locked:not([hidden])');
+  await openDiagnostic(page);
+  const { json } = await diagnosticShown(page);
+  assert.deepEqual(json.unreadable, { source: 'widget-options', json: true, version: 4, nodes: 1, unknownTypes: ['boucle'] });
+  assert.equal(json.state.workflow, 'unreadable');
+}, { init: { __preloadOptions: { workflow: newerGraph } } });
+
+// Les tables de métadonnées de Grist telles que l'API les rend (colonne par colonne) : Contacts (Nom, Statut, Montant en formule), Archive (Motif, Source, une référence vers Contacts, une colonne vide).
+const metaTables = {
+  _grist_Tables: { id: [1, 2], tableId: ['Contacts', 'Archive'] },
+  _grist_Tables_column: {
+    id: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    parentId: [1, 1, 1, 1, 1, 2, 2, 2, 2],
+    parentPos: [1, 2, 3, 4, 5, 1, 2, 3, 4],
+    colId: ['manualSort', 'Nom', 'Statut', 'Montant', 'gristHelper_Display', 'Motif', 'Source', 'Lien', 'Vide'],
+    type: ['ManualSortPos', 'Text', 'Choice', 'Numeric', 'Any', 'Text', 'Int', 'Ref:Contacts', 'Any'],
+    isFormula: [false, false, false, true, true, false, false, false, true],
+    formula: ['', '', '', 'SUM($Source)', '$Nom', '', '', '', ''],
+  },
+};
+const oldColumnGraph = JSON.stringify({ version: 3, active: false, nodes: [
+  { id: 'trigger-1', type: 'trigger', x: 40, y: 120, config: { action: 'update', column: 'Ancienne', targetColumn: '', targetValue: '' } },
+  { id: 'action-1', type: 'action', x: 400, y: 120, config: { type: 'AddRecord', table: 'Archive', matchColumn: '', matchValue: '', column: 'Motif', value: 'x' } },
+], edges: [{ from: 'trigger-1', to: 'action-1' }] });
+
+await scenario('E2E-74 Diagnostic : les types lus dans les métadonnées de Grist (référence, formule, colonne vide), une colonne disparue du document dite avec les mêmes pseudonymes', async (page) => {
+  await page.waitForSelector('.node-trigger');
+  await openDiagnostic(page);
+  const anonymized = (await diagnosticShown(page)).json;
+  assert.deepEqual(anonymized.tables, {
+    T1: { C1: 'Text', C2: 'Choice', C3: 'Numeric, formula' },
+    T2: { C4: 'Text', C5: 'Int', C6: 'Ref:T1', C7: 'Any' },
+  }, 'les colonnes dans l\'ordre de la table, sans les colonnes internes ; une colonne vide n\'est pas une formule ; la référence dit la table par son pseudonyme');
+  assert.deepEqual(anonymized.workflow.problems, [{ node: 'trigger-1', code: 'unknown-column', field: 'column', table: 'T1', name: 'C8' }]);
+  assert.deepEqual([anonymized.state.workflow, anonymized.state.loadedFromStorage], ['present', true]);
+  await page.getByRole('button', { name: 'Complet', exact: true }).click();
+  const full = (await diagnosticShown(page)).json;
+  assert.equal(full.tables.Archive.Lien, 'Ref:Contacts');
+  assert.deepEqual(full.workflow.problems, [{ node: 'trigger-1', code: 'unknown-column', field: 'column', table: 'Contacts', name: 'Ancienne' }]);
+}, { init: { __metaTables: metaTables, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: oldColumnGraph }] } });
+
+await scenario('E2E-75 Diagnostic hors de Grist : il s\'ouvre quand même, et dit que l\'API de Grist manque et que les tables ne sont pas lues', async (page) => {
+  await page.getByRole('button', { name: 'Fermer' }).click();
+  await openDiagnostic(page);
+  const { json } = await diagnosticShown(page);
+  assert.deepEqual([json.widget.grist, json.viewTable, json.tables, json.state.workflow], [false, null, null, 'empty']);
+  assert.deepEqual(json.journal, []);
+}, { grist: false });
+
+await scenario('E2E-76 Diagnostic en lecture seule : il dit l\'accès et que cet onglet n\'exécute jamais, et ne tente aucune écriture', async (page) => {
+  await page.waitForSelector('#read-only-notice:not([hidden])');
+  await openDiagnostic(page);
+  const { json } = await diagnosticShown(page);
+  assert.deepEqual([json.widget.access, json.widget.readOnly, json.state.executor], ['full', true, 'read-only']);
+  await page.keyboard.press('Escape');
+  assert.deepEqual(await page.evaluate(() => window.__stub.refused), [], 'aucune écriture tentée');
+}, { query: '?access=full&readonly=true' });
+
+await scenario('E2E-77 Diagnostic dans un petit cadre et en anglais : la fenêtre reste dans le cadre, le texte défile, Copy et Close restent visibles ; pas de défilement de la page', async (page) => {
+  await page.click('#open-settings');
+  await page.getByRole('button', { name: 'EN', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.click('#open-settings');
+  assert.equal(await page.locator('#open-diagnostic').innerText(), 'Copy the diagnostic…');
+  await page.click('#open-diagnostic');
+  await page.waitForSelector('#diagnostic-copy:not([disabled])');
+  assert.equal(await page.locator('.modal-title').last().innerText(), 'Diagnostic');
+  assert.deepEqual(await page.locator('.diag-text').evaluate((area) => [area.getAttribute('aria-label'), area.wrap]), ['Diagnostic text', 'off']);
+  await page.getByRole('button', { name: 'Full', exact: true }).click();
+  assert.match(await page.locator('.diag-note').innerText(), /keep this for someone helping you in private/);
+  const fit = await page.evaluate(() => {
+    const boxes = document.querySelectorAll('.modal-box');
+    const inside = (element) => {
+      const box = element.getBoundingClientRect();
+      return box.left >= 0 && box.top >= 0 && box.right <= document.documentElement.clientWidth && box.bottom <= document.documentElement.clientHeight;
+    };
+    const area = document.querySelector('#diagnostic-text');
+    return {
+      box: inside(boxes[boxes.length - 1]), copy: inside(document.querySelector('#diagnostic-copy')), close: inside(boxes[boxes.length - 1].querySelector('.modal-footer').firstElementChild),
+      pageScroll: document.documentElement.scrollWidth > document.documentElement.clientWidth || document.documentElement.scrollHeight > document.documentElement.clientHeight,
+      scrolls: area.scrollHeight > area.clientHeight || boxes[boxes.length - 1].querySelector('.modal-body').scrollHeight > boxes[boxes.length - 1].querySelector('.modal-body').clientHeight,
+    };
+  });
+  assert.deepEqual(fit, { box: true, copy: true, close: true, pageScroll: false, scrolls: true });
+  await page.click('#diagnostic-copy');
+  await page.waitForFunction(() => /Copied|refuses to copy/.test(document.querySelector('.diag-status').innerText));
+}, { viewport: SMALL });
+
 await browser.close();
 server.close();
 process.exit(failures ? 1 : 0);

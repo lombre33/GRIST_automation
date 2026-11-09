@@ -189,6 +189,7 @@ const I18N_TEXTS = {
     'settings.language': 'Langue',
     'settings.theme': 'Thème',
     'settings.help': 'Aide',
+    'settings.diagnostic': 'Diagnostic',
     'theme.system': 'Système',
     'theme.light': 'Clair',
     'theme.dark': 'Sombre',
@@ -198,6 +199,20 @@ const I18N_TEXTS = {
     'credits.license': 'Licence',
     'credits.version': 'Version',
     'credits.versionValue': 'pré-alpha {version}',
+
+    // Le diagnostic (js/diagnostic-window.js) : le bouton des Réglages qui l'ouvre, la fenêtre, ses deux modes et ce que la copie dit.
+    'diag.open': 'Copier le diagnostic…',
+    'diag.title': 'Diagnostic',
+    'diag.intro': 'Un résumé technique de ce widget pour demander de l\'aide : sa version, son état, le workflow, les tables et colonnes qu\'il touche et les derniers messages du journal. Aucune ligne du document n\'est copiée.',
+    'diag.mode': 'Mode',
+    'diag.anonymized': 'Anonymisé',
+    'diag.full': 'Complet',
+    'diag.noteAnonymized': 'Les noms de tables et de colonnes et les valeurs saisies dans les nœuds sont remplacés (T1, C1…) : à coller sur le forum. Relisez le texte avant de le publier.',
+    'diag.noteFull': 'Les noms et les valeurs saisies dans les nœuds restent lisibles : à réserver à une personne qui vous aide en privé.',
+    'diag.label': 'Texte du diagnostic',
+    'diag.preparing': 'Préparation du diagnostic…',
+    'diag.selected': 'Le navigateur refuse la copie : le texte est sélectionné, copiez-le avec Ctrl+C.',
+    'diag.failed': 'Diagnostic impossible : {error}',
 
     // Les fenêtres, et la page ouverte hors de Grist.
     'modal.close': 'Fermer',
@@ -417,6 +432,7 @@ const I18N_TEXTS = {
     'settings.language': 'Language',
     'settings.theme': 'Theme',
     'settings.help': 'Help',
+    'settings.diagnostic': 'Diagnostic',
     'theme.system': 'System',
     'theme.light': 'Light',
     'theme.dark': 'Dark',
@@ -426,6 +442,20 @@ const I18N_TEXTS = {
     'credits.license': 'License',
     'credits.version': 'Version',
     'credits.versionValue': 'pre-alpha {version}',
+
+    // Le diagnostic (js/diagnostic-window.js) : le bouton des Réglages qui l'ouvre, la fenêtre, ses deux modes et ce que la copie dit.
+    'diag.open': 'Copy the diagnostic…',
+    'diag.title': 'Diagnostic',
+    'diag.intro': 'A technical summary of this widget to ask for help: its version, its state, the workflow, the tables and columns it touches and the latest log messages. No row of the document is copied.',
+    'diag.mode': 'Mode',
+    'diag.anonymized': 'Anonymized',
+    'diag.full': 'Full',
+    'diag.noteAnonymized': 'Table and column names and the values typed in nodes are replaced (T1, C1…): to paste on the forum. Read the text again before publishing it.',
+    'diag.noteFull': 'Names and the values typed in nodes stay readable: keep this for someone helping you in private.',
+    'diag.label': 'Diagnostic text',
+    'diag.preparing': 'Preparing the diagnostic…',
+    'diag.selected': 'The browser refuses to copy: the text is selected, copy it with Ctrl+C.',
+    'diag.failed': 'Could not prepare the diagnostic: {error}',
 
     // Les fenêtres, et la page ouverte hors de Grist.
     'modal.close': 'Close',
