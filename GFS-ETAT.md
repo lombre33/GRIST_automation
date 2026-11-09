@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-11-07, au commit `56b41dc` (le dernier commit de code que cette page décrit).
+Mis à jour le 2026-11-09, au commit `34bce8f` (le dernier commit de code que cette page décrit).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -42,6 +42,10 @@ Mis à jour le 2026-11-07, au commit `56b41dc` (le dernier commit de code que ce
   - pour le jour où une table de fichiers sera déclarée (lu dans le code, pas essayé sous partage) : `exclure` devra écarter les lignes `Log` et `Lock`, que toute personne qui a la vue ouverte écrit (`{ "Type": ["Log", "Lock"] }`, contrats 2.4) ; la ligne `Workflow` est unique par table de vue (`workflowRow`, `js/store.js:115`) : si le partage la cache à qui n'en est pas l'auteur, l'app la croirait absente et en écrirait une seconde ; ce que serait un « fichier » d'Automation+ est à décider avant de déclarer
 
 ## Changements qui touchent GFS
+- 2026-11-09 · `34bce8f` · un diagnostic à copier pour demander de l'aide, Réglages > Diagnostic (0.15.2) :
+  - lectures en plus, sur geste seulement (la personne ouvre la fenêtre) : les tables de métadonnées de Grist `_grist_Tables` et `_grist_Tables_column` (`fetchTable`, accès `full`) pour dire les colonnes et leur type des tables que le workflow touche, et le contenu enregistré dans `Automation` quand l'app ne sait pas le lire (`Store.configText`) ; c'est la première lecture d'une table `_grist_*` par l'app ; rien de plus n'est écrit ni envoyé : ni dans le document, ni dans les réglages de la vue, ni dans le navigateur, ni à GFS
+  - le texte est copié par la personne elle-même (API du presse-papiers, puis la commande du navigateur, sinon le texte reste sélectionné et la fenêtre le dit) ; anonymisé à l'ouverture, sans contenu de ligne ni adresse e-mail dans aucun mode ; il dit `gfs: true` quand l'adresse du cadre porte `gfs=<n>`, rien d'autre de GFS ; deux scripts du même site en plus (`js/diagnostic.js`, `js/diagnostic-window.js`), fichiers locaux demandés avec `?v=0.15.2`
+  - table `Automation`, colonnes, clé `workflow`, CSP, kit (`eaa2ae2`), stockage du navigateur, adresse d'entrée : rien ne change ; essais : DIAG-01 à 17, E2E-70 à 77, et DIAG-R1 à 10 dans `docs/TESTS_GRIST_REEL.md` (joués dans un Grist local, sauf DIAG-R10 qui se joue dans GFS)
 - 2026-11-06 · `6459b2f`, `56b41dc` · l'app répond à `fermer` de GFS (0.15.1) :
   - nouveau : sous-module `kit/` à `eaa2ae2` (version 0.9.0, avant `db14544`) ; l'app répond à l'appel `fermer` de GFS (`reponse`, ou `erreur` si sa réponse échouait) après avoir enregistré ; toujours aucun appel de sa part que `contexte` ; un script du même site en plus, `js/closing.js` ; fichiers locaux demandés avec `?v=0.15.1`
   - écritures : aucune sorte nouvelle ; sur `fermer`, le graphe qui attend est écrit tout de suite au lieu d'attendre 300 ms et le verrou est rendu (`Config` de la ligne `Lock` vidée) avant le oui ; le graphe s'écrit désormais une écriture à la fois ; table `Automation`, colonnes, clé `workflow`, CSP, stockage du navigateur, adresse d'entrée : rien ne change
@@ -62,7 +66,8 @@ Mis à jour le 2026-11-07, au commit `56b41dc` (le dernier commit de code que ce
   - aucune bibliothèque ; seul script externe, `https://docs.getgrist.com/grist-plugin-api.js`, avec `'unsafe-eval'` à cause de lui (`SECURITY.md`) ; stockage du navigateur : `ab_lang` et `ab_theme`, dans des `try/catch` ; actions ouvrir, choisir, insérer, fermer : aucune ; pas de `gfs.json`
 
 ## Questions pour GFS
-- aucune (les questions 009 et 010 ont leur réponse, voir « 013 » ci-dessus)
+- diagnostic (0.15.2) : le cadre de l'app dans GFS laisse-t-il écrire dans le presse-papiers (`allow="clipboard-write"` sur le cadre) ? « Copier » essaie l'API du presse-papiers, puis la commande du navigateur ; si les deux sont refusées, le texte reste sélectionné et un message le dit : rien à changer de notre côté, c'est pour savoir quel cas se présente (DIAG-R10)
+- (les questions 009 et 010 ont leur réponse, voir « 013 » ci-dessus)
 
 ## Demandes à GFS
 - aucune
