@@ -2,7 +2,8 @@
 // porte tout le dialogue ; ce module n'en prend que trois choses :
 //  - la barre de GFS, que l'app laisse libre (js/keep-clear.js) : { bord, epaisseur, zone } en pixels du cadre, ou null ;
 //  - l'ambiance que la personne a choisie dans GFS pour GFS et pour toutes ses apps, posée par le kit sur <html> (les jetons de la charte et de forme que lisent les feuilles de css/) ;
-//  - l'appel `fermer` (consigne 010) : GFS ne détruit le cadre de l'app qu'après son oui ; js/closing.js enregistre ce qui attend, laisse finir ce qui s'écrit, et ne pose sa question que si l'écriture échoue.
+//  - l'appel `fermer` (consigne 010) : GFS ne détruit le cadre de l'app qu'après son oui ; js/closing.js enregistre ce qui attend, laisse finir ce qui s'écrit, et ne pose sa question que si l'écriture échoue ;
+//  - l'appel `rester` (consigne 016) : après ce oui, la personne est revenue avant la destruction du cadre ; js/closing.js reprend ce que `fermer` avait arrêté (le battement, le verrou, les lignes reçues).
 // Seule, l'app n'a ni barre ni ambiance ni appel : le kit ne dit rien et ne pose rien. Module à part, chargé en plus des scripts de l'app : si le kit manque (une copie du dépôt sans ses sous-modules),
 // ce module échoue seul, l'attente de js/theme.js se lève d'elle-même et l'app s'ouvre avec ses couleurs.
 // Le mode (clair ou sombre) est celui de js/theme.js, qui pose data-theme sur <html> et garde son propre choix (ab_theme) : on donne donc son `isDark` à la pose de l'ambiance, au lieu du `Theme` du kit.
@@ -19,3 +20,5 @@ if (window.KeepClear) {
 ambiance.ready.then(() => { delete root.dataset.gfsPending; });
 // Le kit pose l'enveloppe et l'id de la réponse : seul « vrai » ferme, une erreur part chez GFS, qui demande à la personne. Sans js/closing.js, rien n'attend.
 GfsLink.onClose((request) => (window.Closing ? window.Closing.answer(request) : true));
+// Vrai quand l'app a repris (`{ repris: true }`), faux sinon ; sans js/closing.js, elle n'a rien arrêté ni rien à reprendre.
+GfsLink.onStay((request) => (window.Closing ? window.Closing.answerStay(request) : false));

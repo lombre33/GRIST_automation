@@ -14,6 +14,7 @@ const FIXED = window.__fixedTables || {
   Archive: { id: [1, 2], manualSort: [1, 2], Motif: ['a', 'b'], Source: [10, 500] },
 };
 // window.__metaTables : des tables de métadonnées de Grist (_grist_Tables, _grist_Tables_column), lues par fetchTable sans paraître dans listTables, comme dans Grist.
+// window.__refuseGristInternal : le courtier de GFS refuse toute lecture d'une table `_grist_*` que le manifeste de l'app ne déclare pas (permissions.gristInterne), avec le message qu'il donne (prototype/js/filter.js de GFS).
 const META = window.__metaTables || {};
 const docTables = {};
 function createTable(name, columns) { docTables[name] = { columns: columns.map((c) => c.id), rows: [], nextId: 1 }; }
@@ -36,7 +37,7 @@ if (window.__foreignLock) {
   docTables.Automation.nextId = 2;
   setInterval(() => { lock.Date += 1; }, 1000);
 }
-// window.__stub.writeDelay (ms) ralentit chaque écriture ; window.__stub.failWith (un message) fait échouer chaque écriture ; writes : chaque action reçue, avec l'heure à laquelle elle a eu lieu (Date.now()).
+// window.__stub.writeDelay (ms) ralentit chaque écriture ; window.__stub.failWith (un message) fait échouer chaque écriture ; writes : chaque action reçue (genre, table, ligne, valeurs), avec l'heure à laquelle elle a eu lieu (Date.now()).
 window.__stub = { applied: [], refused: [], calls: {}, options: window.__preloadOptions || {}, pushRecords: null, docTables, writes: [], writeDelay: 0, failWith: '' };
 const readOnly = new URLSearchParams(location.search).get('readonly') === 'true';
 const count = (name) => { window.__stub.calls[name] = (window.__stub.calls[name] || 0) + 1; };
@@ -70,6 +71,7 @@ window.grist = {
   docApi: {
     listTables: () => Promise.resolve([...Object.keys(FIXED), ...Object.keys(docTables)]),
     fetchTable: (name) => {
+      if (window.__refuseGristInternal && /^_grist_/.test(name)) return Promise.reject(new Error(`Lecture de ${name} non déclarée (permissions.gristInterne).`));
       if (FIXED[name]) return Promise.resolve(FIXED[name]);
       if (META[name]) return Promise.resolve(META[name]);
       if (!docTables[name]) return Promise.reject(new Error(`Table not found "${name}"`));
@@ -87,7 +89,7 @@ window.grist = {
       }
       const apply = () => {
         for (const [kind, name, rowId, values] of actions) {
-          window.__stub.writes.push({ kind, table: name, at: Date.now() });
+          window.__stub.writes.push({ kind, table: name, row: rowId, values, at: Date.now() });
           if (kind === 'AddTable') {
             let id = name;
             for (let n = 2; Object.keys(docTables).some((existing) => existing.toLowerCase() === id.toLowerCase()); n += 1) id = `${name}_${n}`;

@@ -14,8 +14,9 @@ let failures = 0;
 // query : ce que Grist ajoute à l'adresse du cadre (`?access=none`, `?access=full&readonly=true`…), lu par js/main.js.
 // E2E_ONLY=<expression régulière> ne joue que les scénarios dont le nom lui correspond (E2E_ONLY='E2E-3[6-9]|E2E-4').
 // tutorial : la prise en main s'ouvre d'elle-même, comme dans un navigateur qui ne l'a jamais vue ; sinon, elle est déjà vue et ne gêne pas le scénario.
+// intervals : les minuteries du battement du verrou (6 s) encore en route sont comptées dans `window.__heartbeats.live` (un ensemble d'identifiants), dans la page comme dans le cadre de l'app.
 // E2E_TIMEOUT=<millisecondes> : le temps qu'un scénario a pour finir (90 s par défaut) ; au-delà il échoue avec un message, au lieu de laisser tout l'essai suspendu (une app muette, une attente sans fin).
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '', tutorial = false } = {}) {
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '', tutorial = false, intervals = false } = {}) {
   if (process.env.E2E_ONLY && !new RegExp(process.env.E2E_ONLY).test(name)) return;
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   if (!tutorial) await tutorialSeen(context);
@@ -27,6 +28,16 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
   if (foreignLock) await page.addInitScript(() => { window.__foreignLock = true; });
   if (noTables) await page.addInitScript(() => { window.__noTables = true; });
   if (init) await page.addInitScript((values) => Object.assign(window, values), init);
+  if (intervals) {
+    await page.addInitScript(() => {
+      const live = new Set();
+      window.__heartbeats = { live };
+      const set = window.setInterval.bind(window);
+      const clear = window.clearInterval.bind(window);
+      window.setInterval = (fn, ms, ...args) => { const id = set(fn, ms, ...args); if (ms === 6000) live.add(id); return id; };
+      window.clearInterval = (id) => { live.delete(id); return clear(id); };
+    });
+  }
   if (host) await page.addInitScript((value) => { window.__context = value; }, host.context ?? {});
   if (host && host.query) await page.addInitScript((value) => { window.__frameQuery = value; }, host.query);
   if (host && !host.fallback) {
@@ -1609,6 +1620,163 @@ await scenario('E2E-77 Diagnostic dans un petit cadre et en anglais : la fenêtr
   await page.click('#diagnostic-copy');
   await page.waitForFunction(() => /Copied|refuses to copy/.test(document.querySelector('.diag-status').innerText));
 }, { viewport: SMALL });
+
+/* ---------- L'appel `rester` de GFS (consigne 016), joué dans le faux GFS ---------- */
+
+// La réponse de l'app à `rester` : { type, data: { repris } } ; la raison est celle du `fermer` auquel elle avait dit oui.
+const askStay = (page, raison = 'explorateur') => page.evaluate((reason) => window.hote.call('rester', { raison: reason }), raison);
+const lockRows = (app) => app.evaluate(() => window.__stub.docTables.Automation.rows.filter((row) => row.Type === 'Lock').map((row) => ({ ...row })));
+const lockOwner = async (app) => ((await lockRows(app))[0] || { Config: null }).Config;
+// Ce que l'app a écrit dans le verrou, dans l'ordre : son identifiant (prise ou renouvellement), ou '' (verrou rendu).
+const lockWrites = (app) => app.evaluate(() => window.__stub.writes.filter((write) => write.table === 'Automation' && write.values && write.values.Type === 'Lock').map((write) => write.values.Config));
+const heartbeats = (app) => app.evaluate(() => window.__heartbeats.live.size);
+const executions = async (app) => ((await app.locator('#log-list').innerText()).match(/exécute maintenant/g) || []).length;
+const holdingLock = (app) => app.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Lock' && row.Config));
+const inactiveGraph = JSON.stringify({ ...JSON.parse(activeGraph), active: false });
+const startedRows = [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeGraph }];
+const changeStatus = (target) => push(target, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
+
+await scenario('E2E-78 « tu restes » après un oui à « fermer » : l\'app reprend son verrou et son battement, une ligne reçue est de nouveau traitée, et elle répond { repris: true }', async (page, app) => {
+  await holdingLock(app);
+  const owner = await lockOwner(app);
+  assert.match(owner, /^[0-9a-f]{16}$/, 'cet onglet exécute');
+  assert.equal(await heartbeats(app), 1);
+  assert.equal((await askClose(page, 'explorateur')).data.ferme, true);
+  assert.equal(await lockOwner(app), '', 'oui : le verrou est rendu');
+  assert.equal(await heartbeats(app), 0, 'et le battement est arrêté');
+  assert.doesNotMatch(await app.locator('#log-list').innerText(), /autre onglet/, 'un verrou rendu n\'est pas un autre onglet qui exécute : le journal ne le dit pas');
+  await changeStatus(app);
+  await app.waitForTimeout(400);
+  assert.deepEqual(await app.evaluate(() => window.__stub.applied), [], 'le cadre est vivant sans verrou : la ligne reçue n\'est pas traitée');
+  const reply = await askStay(page, 'explorateur');
+  assert.deepEqual([reply.type, reply.data], ['reponse', { repris: true }]);
+  assert.equal(await lockOwner(app), owner, 'le même onglet reprend le même verrou');
+  assert.equal(await heartbeats(app), 1, 'le battement est reparti, un seul');
+  assert.equal(await executions(app), 2, 'le journal le dit : cet onglet exécute de nouveau');
+  assert.equal(await app.locator('.modal').count(), 0, 'rien n\'est demandé à la personne');
+  await push(app, { id: 1, Nom: 'A', Statut: 'Rouvert' });   // les lignes reçues pendant la pause ont déplacé le point de comparaison : un seul changement ici, un seul événement
+  await app.waitForFunction(() => window.__stub.applied.length === 1);
+  assert.deepEqual(await app.evaluate(() => window.__stub.applied), [['AddRecord', 'Archive', null, { Motif: 'fait' }]], 'la ligne reçue après « rester » est traitée, une fois');
+  const renewed = (await lockRows(app))[0].Date;
+  await app.waitForFunction((date) => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock').Date > date, renewed, { timeout: 9000 });   // le battement renouvelle le verrou
+}, { host: { context: {} }, intervals: true, init: { __preloadRows: startedRows } });
+
+await scenario('E2E-79 « tu restes » pendant que le verrou se rend encore (la réponse n\'a attendu que 3 s) : il est rendu puis repris, jamais l\'inverse', async (page, app) => {
+  await holdingLock(app);
+  const owner = await lockOwner(app);
+  await app.evaluate(() => { window.__stub.writeDelay = 4200; });   // rendre le verrou dure plus que ce que la réponse veut attendre
+  const closed = await askClose(page, 'explorateur');
+  assert.equal(closed.data.ferme, true);
+  assert.equal(await lockOwner(app), owner, 'la réponse est venue avant que le verrou soit rendu : il est encore en route');
+  await app.evaluate(() => { window.__stub.writeDelay = 0; });
+  const reply = await askStay(page, 'explorateur');
+  assert.deepEqual([reply.type, reply.data], ['reponse', { repris: true }]);
+  assert.equal(await lockOwner(app), owner, 'une fois la reprise répondue, le verrou est à l\'onglet');
+  const written = await lockWrites(app);
+  assert.deepEqual(written.slice(written.indexOf('')), ['', owner], 'rendu d\'abord, repris ensuite : la fin de la fermeture n\'efface pas la reprise');
+  assert.equal(await heartbeats(app), 1);
+}, { host: { context: {} }, intervals: true, init: { __preloadRows: startedRows } });
+
+await scenario('E2E-80 « tu restes » sans rien à reprendre, ou plusieurs fois : sans danger, un seul battement, un seul exécutant', async (page, app) => {
+  await holdingLock(app);
+  const owner = await lockOwner(app);
+  assert.deepEqual((await askStay(page, 'app')).data, { repris: true }, 'rien n\'avait été arrêté : l\'app est comme avant');
+  assert.deepEqual([await lockOwner(app), await heartbeats(app)], [owner, 1]);
+  assert.equal((await askClose(page, 'explorateur')).data.ferme, true);
+  const [first, second] = await Promise.all([askStay(page), askStay(page)]);
+  assert.deepEqual([first.data, second.data], [{ repris: true }, { repris: true }], 'deux à la fois : la même réponse');
+  assert.deepEqual((await askStay(page)).data, { repris: true }, 'et une troisième, plus tard');
+  assert.deepEqual([await lockOwner(app), await heartbeats(app)], [owner, 1], 'le verrou est à l\'onglet, un seul battement');
+  await changeStatus(app);
+  await app.waitForFunction(() => window.__stub.applied.length === 1);
+  await app.waitForTimeout(600);
+  assert.equal(await app.evaluate(() => window.__stub.applied.length), 1, 'la ligne est traitée une fois, pas deux');
+}, { host: { context: {} }, intervals: true, init: { __preloadRows: startedRows } });
+
+await scenario('E2E-81 « tu restes » alors qu\'un autre onglet a pris le verrou entre-temps : il tient le travail, l\'app reste en veille sans rien lui prendre et répond { repris: false }', async (page, app) => {
+  await holdingLock(app);
+  assert.equal((await askClose(page, 'explorateur')).data.ferme, true);
+  const before = (await lockWrites(app)).length;
+  await app.evaluate(() => {   // un autre onglet prend le verrou rendu et le renouvelle chaque seconde (comme `foreignLock`)
+    const lock = window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock');
+    lock.Config = 'autre-onglet';
+    lock.Date = 1;
+    setInterval(() => { lock.Date += 1; }, 1000);
+  });
+  const reply = await askStay(page, 'explorateur');
+  assert.deepEqual([reply.type, reply.data], ['reponse', { repris: false }]);
+  assert.equal(await lockOwner(app), 'autre-onglet', 'le verrou de l\'autre onglet n\'est pas pris');
+  assert.equal((await lockWrites(app)).length, before, 'l\'app n\'a rien écrit dans le verrou');
+  assert.equal(await app.locator('#open-tab-warning').innerText(), FR.otherTab);
+  assert.match(await app.locator('#log-list').innerText(), /reste en veille/);
+  assert.equal(await heartbeats(app), 1, 'le battement continue : l\'app prendra le relais si l\'autre onglet disparaît');
+  await changeStatus(app);
+  await app.waitForTimeout(500);
+  assert.deepEqual(await app.evaluate(() => window.__stub.applied), [], 'rien n\'est exécuté ici');
+}, { host: { context: {} }, intervals: true, init: { __preloadRows: startedRows } });
+
+await scenario('E2E-82 en lecture seule, GFS dit « tu restes » : rien à reprendre, { repris: false }, ni écriture, ni refus, ni battement', async (page, app) => {
+  assert.equal(await app.locator('#add-node').isDisabled(), true, 'lecture seule');
+  assert.equal((await askClose(page)).data.ferme, true);
+  const reply = await askStay(page);
+  assert.deepEqual([reply.type, reply.data], ['reponse', { repris: false }]);
+  assert.deepEqual(await app.evaluate(() => [window.__stub.writes.length, window.__stub.refused.length, window.__heartbeats.live.size]), [0, 0, 0]);
+}, { host: { context: {}, query: '&access=full&readonly=true' }, intervals: true });
+
+await scenario('E2E-83 « tu restes » avec un workflow inactif : { repris: true }, le battement repart, et le verrou n\'est jamais écrit', async (page, app) => {
+  await app.waitForSelector('.node-trigger');
+  assert.equal(await heartbeats(app), 1);
+  assert.equal((await askClose(page, 'explorateur')).data.ferme, true);
+  assert.equal(await heartbeats(app), 0);
+  const reply = await askStay(page);
+  assert.deepEqual([reply.type, reply.data], ['reponse', { repris: true }]);
+  assert.equal(await heartbeats(app), 1);
+  assert.deepEqual(await app.evaluate(() => window.__stub.writes.map((write) => [write.kind, write.table])), [], 'aucun verrou, aucune écriture');
+}, { host: { context: {} }, intervals: true, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }] } });
+
+/* ---------- Dans GFS : les tables internes de Grist et le presse-papiers (consigne 017) ---------- */
+
+await scenario('E2E-84 dans GFS, le courtier refuse la lecture de _grist_Tables et _grist_Tables_column (le manifeste ne les déclare pas) : le diagnostic s\'ouvre quand même, les colonnes se lisent sans leur type, rien ne casse', async (page, app) => {
+  await app.waitForSelector('.node-trigger');
+  await openDiagnostic(app);
+  const { json } = await diagnosticShown(app);
+  assert.equal(json.widget.gfs, true);
+  assert.deepEqual(json.tables, { T1: { C1: null, C2: null, C3: null }, T2: { C4: null, C5: null } }, 'les colonnes sont là, leur type manque (null) : même document que E2E-74, où les types se lisent');
+  assert.deepEqual([json.state.workflow, json.workflow.problems], ['present', []], 'le reste du diagnostic est entier');
+  await page.keyboard.press('Escape');   // le diagnostic, puis les Réglages
+  await page.keyboard.press('Escape');
+  assert.equal(await app.locator('.modal').count(), 0);
+  await openDiagnostic(app);
+  await app.getByRole('button', { name: 'Complet', exact: true }).click();
+  const full = (await diagnosticShown(app)).json;
+  assert.deepEqual(full.tables, { Contacts: { Nom: null, Statut: null, Montant: null }, Archive: { Motif: null, Source: null } }, 'en Complet aussi : les noms, pas les types');
+}, { host: { context: {} }, init: { __metaTables: metaTables, __refuseGristInternal: true, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }] } });
+
+await scenario('E2E-85 Diagnostic dans le cadre isolé de GFS (allow="clipboard-write", jamais allow-same-origin) : Copier copie par l\'API du presse-papiers ; si le navigateur la refuse, par la commande du navigateur', async (page, app) => {
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await app.waitForSelector('.node-trigger');
+  await openDiagnostic(app);
+  const text = await app.locator('#diagnostic-text').inputValue();
+  await app.evaluate(() => {
+    window.__copy = { api: 0, command: 0 };
+    const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+    navigator.clipboard.writeText = (value) => { window.__copy.api += 1; return write(value); };
+    const exec = document.execCommand.bind(document);
+    document.execCommand = (name, ...rest) => { if (name === 'copy') window.__copy.command += 1; return exec(name, ...rest); };
+  });
+  await page.evaluate(() => navigator.clipboard.writeText('vide'));
+  await app.locator('#diagnostic-copy').click();
+  await app.waitForFunction(() => document.querySelector('.diag-status').innerText === 'Copié');
+  assert.deepEqual(await app.evaluate(() => window.__copy), { api: 1, command: 0 }, 'le cadre laisse écrire : l\'API du presse-papiers a copié, la commande du navigateur n\'a pas servi');
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), text, 'le texte collé est celui du champ');
+  // Un navigateur sans accord pour le presse-papiers refuse l'API (mesuré dans Chromium sans écran : « Write permission denied ») : la commande du navigateur copie le texte sélectionné.
+  await app.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new DOMException('Write permission denied.', 'NotAllowedError')); });
+  await page.evaluate(() => navigator.clipboard.writeText('vide'));
+  await app.locator('#diagnostic-copy').click();
+  await app.waitForFunction(() => window.__copy.command === 1);
+  assert.equal(await app.locator('.diag-status').innerText(), 'Copié');
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), text, 'le même texte, copié par la commande du navigateur');
+}, { host: { context: {} }, init: { __metaTables: metaTables, __refuseGristInternal: true, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }] } });
 
 await browser.close();
 server.close();

@@ -124,7 +124,7 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - SEC-07 une condition compare, elle n'évalue pas : « contient » ne lit pas son texte comme une expression régulière.
 - SEC-08 un texte qui se lit « Infinity » ou « 1e999 » reste un texte, un calcul qui sort des nombres est une erreur (JSON écrirait une cellule vide).
 
-### CLOSE — Réponse à l'appel `fermer` de GFS (consigne 010)
+### CLOSE — Réponse aux appels `fermer` (consigne 010) et `rester` (consigne 016) de GFS
 - CLOSE-01 rien n'attend : oui tout de suite, sans question ; le verrou d'exécution est libéré.
 - CLOSE-02 une écriture attend : elle est enregistrée, la réponse ne vient pas avant sa fin, sans question.
 - CLOSE-03 une exécution ou une écriture dans le document en cours est attendue avant de répondre.
@@ -135,7 +135,15 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - CLOSE-08 des écritures qui ne s'arrêtent jamais n'attendent pas sans fin (dix tours au plus ; GFS propose lui-même « Fermer quand même » après 10 s).
 - CLOSE-09 le suivi des promesses en cours (`Closing.tracker`) : rien quand tout est fini, une attente tant que l'une dure, un échec compte comme fini.
 - CLOSE-10 la réponse donnée à GFS : seul « vrai » ferme, une erreur part chez GFS (qui demande à la personne), sans gestionnaire l'app peut partir.
-- (E2E-63 à 69, dans un faux GFS : le tableau ci-dessous ; le vrai GFS : `docs/TESTS_GRIST_REEL.md`, LIEN-12 à LIEN-19.)
+- CLOSE-11 « tu restes » (`rester`) : l'app reprend et ne répond vrai que si elle a repris (faux, rien, nul, « oui », 1 : jamais une reprise).
+- CLOSE-12 « tu restes » pendant que la fermeture finit encore (l'écriture dure) : la reprise attend la fin de la fermeture, qui rend le verrou, puis reprend : rendu avant d'être repris, jamais l'inverse.
+- CLOSE-13 deux « tu restes » à la fois : une seule reprise ; l'un après l'autre : deux, sans danger.
+- CLOSE-14 deux `fermer` à la fois (la personne a redemandé) : une seule fermeture, donc une seule question, et la même réponse ; une fermeture finie ne se partage plus.
+- CLOSE-15 fermer, rester, fermer à la suite : chacun passe derrière le précédent, dans l'ordre où GFS les envoie (et rester, fermer, rester de même).
+- CLOSE-16 une reprise qui ne finit pas répond faux au bout du délai sans retenir la fermeture d'après ; une reprise qui échoue part en erreur sans la bloquer non plus.
+- CLOSE-17 la réponse à `rester` : seul « vrai » est repris, une erreur part chez GFS, sans gestionnaire il n'y a rien à reprendre.
+- CLOSE-18 « tu restes » pendant que le verrou se rend encore (la réponse n'a attendu que 3 s) : la reprise attend qu'il soit rendu ; un verrou que Grist ne rend jamais ne la retient pas.
+- (E2E-63 à 69 et 78 à 83, dans un faux GFS : le tableau ci-dessous ; le vrai GFS : `docs/TESTS_GRIST_REEL.md`, LIEN-12 à LIEN-22, et le labo de GFS pour la 016, joué le 2026-11-11.)
 
 ### DIAG — Diagnostic pour demander de l'aide (0.15.2, `js/diagnostic.js`)
 - DIAG-01 un bloc de code JSON prêt à coller : format, mode (anonymisé sans autre précision), date, widget, état, workflow, tables, journal.
@@ -155,7 +163,7 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 - DIAG-15 champ inconnu d'une version plus récente : masqué, ni recopié ni perdu.
 - DIAG-16 lecture statique : le module ne lit ni Grist ni la page, ni rien du contenu d'une ligne.
 - DIAG-17 mise en page : ce qui tient sur une ligne y reste, toute structure se relit à l'identique.
-- (E2E-70 à 77 et STORE-13 : le tableau ci-dessous ; dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`, DIAG-R1 à DIAG-R10.)
+- (E2E-70 à 77, 84, 85 et STORE-13 : le tableau ci-dessous ; dans un vrai Grist : `docs/TESTS_GRIST_REEL.md`, DIAG-R1 à DIAG-R10.)
 
 ### Tests déjà écrits (état au 2026-10-12)
 
@@ -164,8 +172,9 @@ Document vivant. Chaque test a un identifiant stable (`MODULE-nn`) pour pouvoir 
 | DIAG-01 à 17 | diagnostic (0.15.2) : forme du texte, anonymisation (aucun nom, aucune valeur saisie, aucun contenu de ligne, avec les vrais messages du moteur), pseudonymes constants, mode complet, types de colonnes, problèmes dits, tables illisibles ou très larges, journal, contenu illisible, clôture du bloc, rien de modifié, parties impossibles, champs inconnus, module qui ne lit ni Grist ni la page, mise en page | `tests/diagnostic.test.js` |
 | STORE-13 | le contenu enregistré d'une table de vue, tel quel (`Store.configText`), pour dire la nature d'un contenu illisible | `tests/store.test.js` |
 | E2E-70 à 77 | Réglages > Diagnostic dans Chromium : anonymisé à l'ouverture (aucun nom du document, aucune valeur de ligne, effets du test absents du texte alors qu'ils sont dans le journal à l'écran), « Complet », Copier (presse-papiers, puis copie refusée : texte sélectionné et dit), focus sur Copier puis rendu à l'ouvreur, rien d'écrit ni de journalisé ; workflow illisible (table, réglages de la vue) dit par sa nature ; types lus dans les métadonnées de Grist (référence, formule, colonne vide) et colonne disparue ; hors de Grist ; lecture seule ; petit cadre (700×400) en anglais | `tests/e2e/smoke.mjs` |
-| CLOSE-01 à 10 | `fermer` de GFS (consigne 010, 0.15.1) : rien n'attend (oui tout de suite), une écriture ou une exécution en cours attendue avant le oui, l'écriture qui échoue (question, Annuler, Échap, Abandonner, Enregistrer qui réessaie), verrou rendu sans retenir l'app, attente bornée, suivi des promesses, réponse stricte | `tests/closing.test.js` |
-| E2E-63 à 69 | l'app dans un faux GFS (cadre isolé) à qui GFS demande `fermer` : rien n'attend (oui pour chaque raison, sans fenêtre), lecture seule (oui, rien d'écrit), une modification en attente (écrite avant le oui, sans question, écriture plus longue que la réponse), écriture refusée (la question, Annuler et Échap gardent l'app, Enregistrer réessaie), Abandonner, une colonne indispensable disparue puis revenue (la question dit laquelle, Enregistrer écrit), un workflow actif pendant une exécution (effet et journal écrits avant le oui, verrou rendu) | `tests/e2e/smoke.mjs` |
+| CLOSE-01 à 18 | `fermer` de GFS (consigne 010, 0.15.1) : rien n'attend (oui tout de suite), une écriture ou une exécution en cours attendue avant le oui, l'écriture qui échoue (question, Annuler, Échap, Abandonner, Enregistrer qui réessaie), verrou rendu sans retenir l'app, attente bornée, suivi des promesses, réponse stricte ; `rester` de GFS (consigne 016, 0.15.3) : reprise stricte, derrière la fermeture qui finit et derrière le verrou qui se rend, une seule à la fois, deux `fermer` à la fois joints, ordre des appels, reprise qui traîne ou échoue | `tests/closing.test.js` |
+| E2E-63 à 69, 78 à 83 | l'app dans un faux GFS (cadre isolé) à qui GFS demande `fermer`, puis `rester` (78 à 83) : rien n'attend (oui pour chaque raison, sans fenêtre), lecture seule (oui, rien d'écrit), une modification en attente (écrite avant le oui, sans question, écriture plus longue que la réponse), écriture refusée (la question, Annuler et Échap gardent l'app, Enregistrer réessaie), Abandonner, une colonne indispensable disparue puis revenue (la question dit laquelle, Enregistrer écrit), un workflow actif pendant une exécution (effet et journal écrits avant le oui, verrou rendu) ; `rester` (0.15.3) : le verrou et le battement repris et une ligne reçue de nouveau traitée (le journal ne dit pas « autre onglet » pour un verrou rendu), pendant que le verrou se rend encore (rendu puis repris, jamais l'inverse), sans rien à reprendre ou plusieurs fois (un seul battement, une seule exécution), un autre onglet qui a pris le verrou (`{ repris: false }`, rien écrit, en veille), lecture seule (`{ repris: false }`, rien écrit), workflow inactif (battement seul, aucun verrou) | `tests/e2e/smoke.mjs` |
+| E2E-84, 85 | dans le cadre de GFS (consigne 017) : le courtier refuse `_grist_Tables` et `_grist_Tables_column` (le manifeste ne les déclare pas) : le diagnostic s'ouvre, dit `gfs: true`, montre les colonnes sans leur type (`null`, anonymisé et Complet), rien ne casse ; Copier par l'API du presse-papiers (le cadre a `allow="clipboard-write"`), puis par la commande du navigateur quand l'API est refusée (« Write permission denied ») | `tests/e2e/smoke.mjs` |
 | DIFF, TRG, COND, ACT, DRY, SEC-02 | moteur (voir plus haut), tests listés comme « partiels » ; le moteur parcourt un graphe (conditions en série = ET) | `tests/engine.test.js` |
 | SEC-04, 06 à 08, E2E-62 | une ligne reçue par un lien public est du texte non fiable (consigne 009 de GFS, 0.15.1) : écrite telle quelle, jamais évaluée ni substituée deux fois, une clé qui ne vise que la table du graphe, des comparaisons sans expression régulière, « Infinity » qui reste un texte ; dans Chromium, un texte en HTML se lit dans le journal et le test à blanc sans qu'aucune balise naisse | `tests/engine.test.js`, `tests/e2e/smoke.mjs` |
 | GRAPH-01 à 10 | ajout, liens (sortie vers entrée, pas de cycle, une entrée = un lien), suppression, validation, aller-retour JSON | `tests/graph.test.js` |

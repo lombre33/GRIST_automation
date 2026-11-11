@@ -319,8 +319,9 @@ async function recordRun(result) {
 // En lecture seule, jamais : Grist refuserait chaque écriture, et c'est l'onglet d'une personne qui peut modifier le document qui exécute.
 const canExecute = () => !readOnly && (!executor || executor.isExecutor());
 
-function onExecutorChange(isExecutor) {
-  if (graph.active) addLog(t(isExecutor ? 'executor.active' : 'executor.standby'));
+// holder : l'onglet qui tient le verrou à présent. Un verrou rendu (`fermer`, js/closing.js) n'est pas un autre onglet qui exécute : la veille ne se dit que s'il y en a un.
+function onExecutorChange(isExecutor, holder) {
+  if (graph.active && (isExecutor || holder)) addLog(t(isExecutor ? 'executor.active' : 'executor.standby'));
   refreshState();
 }
 
@@ -368,6 +369,16 @@ async function releaseExecutor() {
   heartbeat = null;
   if (electing) await electing;
   if (executor) await executor.release();
+}
+
+// Pour `rester` (js/closing.js) : GFS garde l'app après son oui à `fermer`. Elle reprend ce que releaseExecutor avait arrêté : le battement, puis le verrou par l'élection habituelle (les lignes reçues se
+// traitent de nouveau quand elle le tient ; celles qui sont venues entre-temps ne sont pas rejouées, comme pour toute vue fermée). Le battement n'est jamais doublé : deux reprises, ou une reprise sans rien d'arrêté, sont sans danger.
+// Vrai quand l'app est de nouveau comme avant `fermer` (elle tient le verrou, ou aucun workflow n'est actif) ; faux quand un autre onglet tient le travail, ou qu'il n'y a rien à reprendre ici (lecture seule, pas de table Automation).
+async function resumeExecutor() {
+  if (!executor) return false;
+  if (!heartbeat) heartbeat = setInterval(electExecutor, HEARTBEAT_MS);
+  await electExecutor();
+  return !graph.active || executor.isExecutor();
 }
 
 function refreshState() {
@@ -712,13 +723,14 @@ function start() {
   });
   grist.onRecords(busy.wrap(onRecords), { includeColumns: 'all' });
   grist.onRecord((record) => { cursorRecord = record; }, { includeColumns: 'all' });
-  // GFS qui va remplacer l'app (`fermer`, répondu par js/gfs.js) : ce qui attend est écrit, et ce qui s'écrit est fini, avant de répondre oui (js/closing.js).
+  // GFS qui va remplacer l'app (`fermer`, répondu par js/gfs.js) : ce qui attend est écrit, et ce qui s'écrit est fini, avant de répondre oui (js/closing.js) ; s'il garde l'app (`rester`), elle reprend son verrou.
   Closing.install(Closing.create({
     flush: flushSave,
     unsaved: () => editGen > savedGen,
     busy: busy.idle,
     ask: askBeforeLeaving,
     release: releaseExecutor,
+    resume: resumeExecutor,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }));
   grist.selectedTable.getTableId().then(async (id) => {
