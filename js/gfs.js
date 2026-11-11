@@ -1,4 +1,4 @@
-// Le lien avec GFS (consignes 003 et 006 ; guide des apps 1.2, points 1, 4 et 9, et règle 15). Le kit commun des apps Grist Factory, référencé en sous-module (kit/, commit eaa2ae2, version 0.9.0),
+// Le lien avec GFS (consignes 003 et 006 ; guide des apps 1.2, points 1, 4 et 9, et règle 15). Le kit commun des apps Grist Factory, référencé en sous-module (kit/, commit 28e2b76, version 0.13.0),
 // porte tout le dialogue ; ce module n'en prend que trois choses :
 //  - la barre de GFS, que l'app laisse libre (js/keep-clear.js) : { bord, epaisseur, zone } en pixels du cadre, ou null ;
 //  - l'ambiance que la personne a choisie dans GFS pour GFS et pour toutes ses apps, posée par le kit sur <html> (les jetons de la charte et de forme que lisent les feuilles de css/) ;
