@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-11-11, au commit `c3c88d6` (le dernier commit de code que cette page décrit).
+Mis à jour le 2026-11-17, au commit `44d3e64` (le dernier commit que cette page décrit ; le dernier commit de code est toujours `c3c88d6`, l'app est à la 0.15.3).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -53,8 +53,19 @@ Mis à jour le 2026-11-11, au commit `c3c88d6` (le dernier commit de code que ce
   - DIAG-R10 dans le labo de GFS (Chromium 141 sans écran) : quand le navigateur accorde `clipboard-write`, l'API du presse-papiers copie (le presse-papiers contient le début du diagnostic) ; quand il ne l'accorde pas (un navigateur sans écran n'en donne aucune), l'API est refusée (« Write permission denied ») et c'est la commande du navigateur qui copie ; « Copié » s'affiche dans les deux cas
   - DIAG-R10 sous Firefox 160 sans écran (le navigateur du porteur), dans la *forme* du cas, Grist ne se pilotant pas sous Firefox (comme GFS le fait pour ses propres mesures) : la page du dessus, un cadre de GFS d'un autre site avec `allow="clipboard-write"`, le cadre isolé de l'app avec les attributs de `frames.js`, la vraie Automation+, l'API de Grist simulée qui refuse `_grist_*` comme le courtier, vraie souris et vrai clavier du navigateur : « Copier » copie par **l'API du presse-papiers**, et le texte collé par un vrai Ctrl+V est le diagnostic en entier ; quand l'API est refusée (simulée), la commande du navigateur copie aussi, avec le même texte collé ; sans `allow="clipboard-write"` sur aucun des deux cadres, Firefox copie de même par l'API (il n'en a pas besoin pour écrire) ; ni erreur ni avertissement dans le journal du navigateur
   - pas joué : le vrai GFS dans le Firefox du porteur (sa version, d'ici inconnue), et Grist.Gouv
+- 018 · faite · `44d3e64` · la vitrine de l'app pour sa carte et sa fiche : `vitrine/vitrine.json` et trois captures, `vitrine/1.webp`, `2.webp` et `3.webp` ; aucun code, aucune bibliothèque, aucune adresse, aucun manifeste ne change, l'app ne charge rien de ce dossier :
+  - description : 242 caractères en français, 185 en anglais (280 au plus) ; elle dit ce que la personne fait de l'app (construire des automatisations pour ses tables : un déclencheur, des conditions, des actions qui ajoutent ou modifient des lignes ; tester sur une ligne, activer, relire le journal) et que les automatisations ne s'exécutent que tant que la vue reste ouverte ; aucune promesse de sécurité (règle 13)
+  - captures : trois WebP sans perte de 960 × 600 (28, 30 et 39 Ko, 60 Ko au plus), l'app seule (sans barre de navigateur), thème clair, en français (une même capture sert aux deux langues), prises dans un vrai Grist (grist-static, le labo de GFS) avec la vraie app, sur un document d'exemple sans nom de personne (commandes : `Ref`, `Statut`, `Montant`, et une table `Archive`) ; l'essentiel est au centre, le graphe de la première tient entre le dixième haut et le dixième bas que la carte rogne :
+  - 1 (la carte) : le graphe d'un workflow entier, Déclencheur (une ligne modifiée, colonne `Statut`) → Condition (`Statut` est égal à `Clos`) → Action (ajouter une ligne dans `Archive`, `Motif` = `{Ref} clôturée`), la barre d'outils au-dessus
+  - 2 : « Tester » sur une commande close, en gros plan sur la condition et l'action : « Passé » sous la condition, « Action prévue » sous l'action
+  - 3 : le journal ouvert après trois exécutions réelles, le workflow activé (« modification ligne 4 : réussi », 2 et 1, puis « Cet onglet exécute maintenant l'automation. »)
+  - légendes (60 caractères au plus, français et anglais) : 1 « Quand le Statut devient Clos, ajouter une ligne à Archive » ; 2 « Tester sur une ligne : chaque nœud indique son résultat » ; 3 « Le journal garde les exécutions et leur résultat »
+  - essais : VITRINE-01 à 04 (dossier, deux langues et longueurs, aucune promesse de sécurité, dimensions et poids), `npm test` : 217 ; VITRINE-R1 et R2 à jouer (`docs/TESTS_GRIST_REEL.md`)
+  - pas fait : les captures en thème sombre (la consigne demande le clair) ; l'affichage de la carte et de la fiche dans GFS, qui revient à GFS
 
 ## Changements qui touchent GFS
+- 2026-11-17 · `44d3e64` · la vitrine de l'app (consigne 018), sans changer l'app (toujours la 0.15.3) :
+  - nouveau : le dossier `vitrine/` à la racine du dépôt (`vitrine.json`, `1.webp`, `2.webp`, `3.webp`), que GFS lit et copie chez lui ; il est publié avec le site comme le reste du dépôt, mais aucune page de l'app ne le charge ; aucun script, aucune demande réseau, aucune ligne de la CSP, aucun nom de table, de colonne ou de clé, aucune lecture ni écriture, aucun stockage du navigateur, aucune adresse d'entrée, aucune bibliothèque, ni le kit (`28e2b76`) ne change ; essais : VITRINE-01 à 04
 - 2026-11-11 · `4d1cb59`, `c3c88d6` · l'app répond à `rester` de GFS (0.15.3) :
   - nouveau : sous-module `kit/` à `28e2b76` (version 0.13.0, avant `eaa2ae2`) ; un abonné de plus, `GfsLink.onStay` (`js/gfs.js`) ; toujours aucun appel de sa part que `contexte` ; aucun script en plus (`js/closing.js` et `js/main.js` changent) ; fichiers locaux demandés avec `?v=0.15.3`
   - écritures : aucune sorte nouvelle ; sur `rester`, l'app reprend la ligne `Lock` de `Automation` (`Config` : l'identifiant de l'onglet, que `fermer` avait vidé ; `Date` renouvelée à chaque battement) ; table `Automation`, colonnes, clé `workflow`, CSP, stockage du navigateur, adresse d'entrée : rien ne change ; essais : CLOSE-11 à 18, E2E-78 à 85, et LIEN-20 à 22 à jouer dans un vrai GFS (`docs/TESTS_GRIST_REEL.md`)
@@ -85,4 +96,5 @@ Mis à jour le 2026-11-11, au commit `c3c88d6` (le dernier commit de code que ce
 - aucune (la question du presse-papiers a sa réponse, voir « 017 » ; les questions 009 et 010 aussi, voir « 013 »)
 
 ## Demandes à GFS
-- aucune (les lectures de `_grist_Tables` et `_grist_Tables_column` du diagnostic ne sont pas demandées : voir « 017 »)
+- vitrine · 44d3e64 · vitrine/vitrine.json · description et trois captures pour la carte et la fiche
+- rien d'autre (les lectures de `_grist_Tables` et `_grist_Tables_column` du diagnostic ne sont toujours pas demandées : voir « 017 »)
