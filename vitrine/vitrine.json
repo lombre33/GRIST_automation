@@ -1,0 +1,29 @@
+{
+  "description": {
+    "fr": "Construisez des automatisations pour vos tables Grist : un déclencheur, des conditions, puis des actions qui ajoutent ou modifient des lignes. Testez sur une ligne, activez, relisez le journal. Elles s'exécutent tant que la vue reste ouverte.",
+    "en": "Build automations for your Grist tables: a trigger, conditions, then actions that add or update rows. Test on one row, turn it on, read the log. They run as long as the view stays open."
+  },
+  "captures": [
+    {
+      "fichier": "1.webp",
+      "legende": {
+        "fr": "Quand le Statut devient Clos, ajouter une ligne à Archive",
+        "en": "When the status becomes Clos, add a row to Archive"
+      }
+    },
+    {
+      "fichier": "2.webp",
+      "legende": {
+        "fr": "Tester sur une ligne : chaque nœud indique son résultat",
+        "en": "Test on one row: each node reports its result"
+      }
+    },
+    {
+      "fichier": "3.webp",
+      "legende": {
+        "fr": "Le journal garde les exécutions et leur résultat",
+        "en": "The log keeps the runs and their result"
+      }
+    }
+  ]
+}

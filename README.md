@@ -94,7 +94,7 @@ Aucune à installer : HTML, CSS et JavaScript, sans framework, sans bibliothèqu
 
 ## Dans Grist Factory Suite (GFS)
 
-Quand GFS ouvre l'app dans l'un de ses cadres (`?gfs=<n>` dans l'adresse), l'app parle à GFS par le lien du kit commun et en prend trois choses ; seule, dans Grist, rien de cela ne joue.
+Quand GFS ouvre l'app dans l'un de ses cadres (`?gfs=<n>` dans l'adresse), l'app parle à GFS par le lien du kit commun et en prend quatre choses ; seule, dans Grist, rien de cela ne joue.
 
 - **La barre de GFS** se pose par-dessus le cadre, au bord que la personne choisit. L'app laisse libre la zone que GFS donne (`js/keep-clear.js`) : la barre d'outils se partage autour d'elle quand la barre est en haut ; le journal, le menu d'ajout, les listes et les bulles qui la recouvriraient s'en écartent du juste nécessaire ; une fenêtre se place dans le reste du cadre.
 - **L'ambiance** que la personne a choisie dans GFS : le kit pose les jetons de couleur et de forme sur `<html>` (`js/gfs.js`), les feuilles de `css/` les lisent, jamais une couleur écrite en dur. Le rouge de l'échec et l'ambre de l'avertissement restent ceux de l'app (HYG-17).
@@ -102,6 +102,8 @@ Quand GFS ouvre l'app dans l'un de ses cadres (`?gfs=<n>` dans l'adresse), l'app
 - **Tu restes** : si la personne revient avant que GFS ait remplacé le cadre (retour à l'explorateur, ou « Fermer quand même » puis retour), GFS le dit à l'app (`rester`, consigne 016) : elle reprend ce que `fermer` avait arrêté, c'est-à-dire le battement et le verrou d'exécution par l'élection habituelle, et ses lignes reçues sont de nouveau traitées (celles venues pendant la pause ne sont pas rejouées). La reprise passe derrière la fermeture qui finit encore, y compris le verrou qui se rend, se joue sans danger deux fois ou sans rien à reprendre, et répond `{ repris: false }` quand un autre onglet tient le travail ou en lecture seule. GFS ne montre rien à la personne.
 
 La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages restent actifs.
+
+Dans l'autre sens, GFS prend de l'app sa **vitrine** (consigne 018) : le dossier `vitrine/` (`vitrine.json`, une description et trois légendes en français et en anglais, et trois captures WebP de 960 × 600 px) sert à la carte et à la fiche de l'app dans GFS, qui copie les captures chez lui ; l'app ne les charge jamais. Les captures sont prises dans un vrai Grist, en français et en thème clair, sur un document d'exemple sans nom de personne, et sont à refaire quand l'interface qu'elles montrent change (`tests/vitrine.test.js` garde les limites de GFS : 280 caractères, 60 caractères, 60 Ko).
 
 ## Organisation du code
 
@@ -121,6 +123,7 @@ La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages re
 | `js/gfs.js`, `js/keep-clear.js`, `kit/` | lien avec GFS : l'ambiance (par le kit), la zone de la barre à laisser libre et le branchement de `fermer` et de `rester` |
 | `js/closing.js` | réponses à `fermer` et à `rester` : enregistrer ce qui attend, laisser finir les écritures, rendre le verrou, ne poser la question que si l'écriture échoue ; puis reprendre le verrou et le battement si GFS dit « tu restes », les deux appels l'un derrière l'autre (sans DOM ni Grist) |
 | `css/` | jetons de la charte, styles, canevas, fenêtres, prise en main |
+| `vitrine/` | description, légendes et trois captures de l'app pour la carte et la fiche de GFS (lues par GFS, jamais par l'app) |
 
 Périmètre : `docs/CDC_Widget_Grist_Automation_Builder.md`. Règles d'interface et de développement : `docs/REGLES_UI_UX_ET_DEV.md`. Sécurité : `SECURITY.md`.
 
