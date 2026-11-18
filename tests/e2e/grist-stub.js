@@ -4,6 +4,7 @@
 // window.__preloadTables : tables ajoutées au démarrage { nom: ['Colonne', …] } (avec __noTables, pour une table Automation incomplète ou un nom pris à la casse près).
 // window.__preloadRows : lignes ajoutées à la table Automation au démarrage.
 // window.__fetchDelay : délai (ms) de la lecture des tables du widget, pour modifier le graphe avant la fin du démarrage.
+// window.__optionsDelay : délai (ms) avant que les réglages de la vue arrivent (Grist les donne tout de suite, mais rien ne le garantit), pour qu'ils arrivent après la fin du démarrage.
 // Comme Grist : une écriture dans une colonne qui n'existe pas échoue en entier, et un identifiant déjà pris (sans tenir compte de la casse) devient `nom_2`.
 // Comme Grist encore : à `ready`, le thème de Grist (window.__gristAppearance, sombre par défaut) est posé dans <style id="grist-theme">, créée si la page n'a pas
 // d'élément de ce nom, et en style en ligne sur <html> ; en lecture seule (`readonly=true` dans l'adresse), toute écriture est refusée et notée dans `refused`.
@@ -59,7 +60,7 @@ function attachTheme() {
 
 window.grist = {
   ready() { count('ready'); attachTheme(); },
-  onOptions(cb) { cb(window.__stub.options); },
+  onOptions(cb) { if (window.__optionsDelay) setTimeout(() => cb(window.__stub.options), window.__optionsDelay); else cb(window.__stub.options); },
   setOption(key, value) {
     if (readOnly) return refuse(['setOption', key]);
     window.__stub.options[key] = value;

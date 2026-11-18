@@ -3,6 +3,7 @@
 // du widget (grist.setOption), que Grist garde comme une modification de la vue à enregistrer. Le graphe d'options déjà enregistrées se relit toujours.
 // Ce que Grist accorde se lit dans l'adresse du cadre : sans l'accès complet, le widget le dit et attend (Grist recharge le cadre quand il est accordé) ;
 // en lecture seule, le workflow se voit et se teste, rien ne s'écrit ni ne s'exécute dans cet onglet.
+// GFS peut aussi ouvrir l'app sur un modèle de départ (« Nouveau > Depuis un modèle », js/model-opening.js) : il se montre sans rien écrire, et le premier changement de la personne l'enregistre.
 'use strict';
 
 const $ = (id) => document.getElementById(id);
@@ -22,9 +23,12 @@ let tab = null;                // l'identifiant de cet onglet pour le verrou (Ex
 const randomId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 let heartbeat = null;
 const HEARTBEAT_MS = 6000;
+const OPTIONS_WAIT_MS = 1500;   // au plus, l'attente de la première lecture des réglages de la vue avant d'ouvrir un modèle (Grist la donne tout de suite)
 let tables = [];
 let tablesAvailable = false;   // la table Automation existe dans le document
 const columnsByTable = new Map();
+let shownModel = null;         // le modèle de départ que l'éditeur montre, tant que rien n'y a changé : rien n'en est enregistré (js/model-opening.js)
+let modelShown = false;        // un modèle a été ouvert dans cette page : les réglages de la vue ne remplacent plus ce que l'éditeur montre
 
 // Grist dit dans l'adresse du cadre le niveau d'accès accordé au widget (access : none, read table ou full) et si la personne peut modifier le document (readonly).
 // Sans ces paramètres (une version de Grist qui ne les donne pas), on fait comme avant : accès complet, modification permise.
@@ -121,6 +125,9 @@ function storeMessage(err) {
 let saveTimer = null;
 let savePending = false;
 let startupDone = false;   // le contenu déjà enregistré a été examiné : avant, on ne sait pas encore s'il faut le laisser intact
+// Résolue (jamais rejetée) en même temps que startupDone : ce qui doit attendre la fin du démarrage, comme l'ouverture d'un modèle (js/model-opening.js).
+let finishStartup = () => { startupDone = true; };
+const startup = new Promise((resolve) => { finishStartup = () => { startupDone = true; resolve(); }; });
 // Ce que GFS qui demande à l'app de partir (`fermer`, js/closing.js) veut savoir : editGen compte les modifications du graphe, savedGen la dernière dont l'écriture a réussi
 // (les modifications ne sont pas écrites tant que savedGen est en retard), lastSaveError le dernier message d'échec. Les écritures du graphe se font une à la fois (writing).
 let editGen = 0;
@@ -390,10 +397,57 @@ function refreshState() {
   $('open-tab-warning').dataset.i18n = standby ? 'app.otherTab' : 'app.openTab';
   $('open-tab-warning').textContent = t(standby ? 'app.otherTab' : 'app.openTab');
   canvas.setActive(active);
+  syncModelNotice();
 }
 
+// Le premier changement fait du modèle le workflow de la table : il s'enregistre comme tout graphe, et le bandeau s'en va.
 function onGraphChange() {
+  if (shownModel) {
+    shownModel = null;
+    syncModelNotice();
+  }
   scheduleSave();
+}
+
+/* ---------- Modèle de départ ouvert depuis GFS (js/model-opening.js) ---------- */
+
+// Le bandeau « modèle ouvert » : tant que rien n'a changé dans le modèle.
+function syncModelNotice() {
+  $('model-notice').hidden = shownModel === null;
+  if (shownModel) $('model-notice').textContent = t('model.notice', { name: Models.nameOf(shownModel.id, I18n.lang) });
+}
+
+// Ce que l'éditeur montre : s'il y a un workflow (enregistré ou non, jamais un modèle encore intact), le modèle le remplacerait.
+const modelStatus = () => ({ readOnly, locked, hasWork: shownModel === null && graph.nodes.length > 0, active: graph.active });
+
+// La question quand la table a déjà un workflow : vrai pour remplacer, faux pour Annuler et Échap (le focus est sur « Garder le workflow »).
+const askReplace = (model, active) => Modal.confirm({
+  title: t('model.replaceTitle'),
+  message: t(active ? 'model.replaceBodyActive' : 'model.replaceBody', { name: Models.nameOf(model.id, I18n.lang) }),
+  confirmLabel: t('model.replace'),
+  cancelLabel: t('model.keep'),
+  danger: true,
+});
+
+// Pourquoi rien n'est ouvert (un identifiant inconnu, un workflow illisible, la lecture seule) : GFS n'ajoute rien à `{ ouvert: false }`, c'est à l'app de le dire.
+function sayWhyNoModel(reason) {
+  const body = document.createElement('p');
+  body.textContent = t('model.' + reason);
+  Modal.create({ title: t('model.refusedTitle'), body });
+}
+
+// Charge le modèle dans l'éditeur sans rien écrire (comme tout chargement) : seul le premier changement de la personne enregistre (onGraphChange). Ce que la personne avait modifié juste avant,
+// et que la minuterie n'a pas encore écrit, l'est d'abord : l'enregistrement ne doit pas prendre le modèle pour son graphe.
+async function showModel(model) {
+  await flushSave();
+  graph = Models.graphOf(model.id);
+  shownModel = model;
+  modelShown = true;
+  canvas.load(graph);
+  refreshState();   // le bandeau prend de la hauteur au canevas : le graphe se cadre après, et hors de ce que la barre de GFS recouvre
+  const area = $('canvas').getBoundingClientRect();
+  canvas.fit(KeepClear.margins(KeepClear.current(), { x: area.left, y: area.top, largeur: area.width, hauteur: area.height }));
+  addLog(t('log.modelOpened', { name: Models.nameOf(model.id, I18n.lang) }));
 }
 
 /* ---------- Exécution ---------- */
@@ -666,7 +720,7 @@ function showAccessNeeded() {
   $('access-needed').hidden = false;
   $('canvas').inert = true;
   for (const id of ['add-node', 'test-workflow', 'toggle-active']) $(id).disabled = true;
-  startupDone = true;
+  finishStartup();
 }
 
 // Lecture seule : le canevas se déplace et se zoome mais ne se modifie pas (js/canvas.js) ; « Tester » reste, il n'écrit rien.
@@ -691,7 +745,7 @@ function start() {
   document.addEventListener('langchange', refreshState);
 
   if (typeof grist === 'undefined') {
-    startupDone = true;
+    finishStartup();
     return showOutsideGrist();
   }
 
@@ -711,9 +765,12 @@ function start() {
   grist.ready({ requiredAccess: 'full' });
   if (!accessGranted) return showAccessNeeded();
   if (readOnly) showReadOnly();
+  let optionsKnown = () => {};
+  const optionsFirst = new Promise((resolve) => { optionsKnown = resolve; });   // la première lecture des réglages de la vue : un modèle attend de savoir s'ils portent un workflow
   grist.onOptions((options) => {
+    optionsKnown();
     if (options && options.workflow) lastOptionsWorkflow = options.workflow;
-    if (loaded || locked || !options || !options.workflow) return;
+    if (loaded || modelShown || locked || !options || !options.workflow) return;
     const saved = Graph.parse(options.workflow);
     if (!saved) return lockWorkflow();
     loaded = true;
@@ -733,19 +790,27 @@ function start() {
     resume: resumeExecutor,
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }));
+  // GFS qui ouvre un modèle de départ (répondu par js/gfs.js) : après le démarrage et la première lecture des réglages de la vue, pour savoir si la table porte déjà un workflow ; la question se pose avant de remplacer.
+  ModelOpening.install(ModelOpening.create({
+    ready: () => startup.then(() => Promise.race([optionsFirst, new Promise((resolve) => setTimeout(resolve, OPTIONS_WAIT_MS))])),
+    status: modelStatus,
+    ask: askReplace,
+    show: showModel,
+    say: sayWhyNoModel,
+  }));
   grist.selectedTable.getTableId().then(async (id) => {
     tableId = id;
     rememberTab(id);
     try {
       await initStore();
     } finally {
-      startupDone = true;
+      finishStartup();
     }
     // La prise en main, la première fois, pour qui peut modifier le document : après la question de la table (initStore l'attend), jamais par-dessus elle.
     if (!readOnly) Tutorial.openFirstTime();
     await loadSchema();
   }).catch((err) => {
-    startupDone = true;
+    finishStartup();
     throw err;
   });
 }

@@ -38,6 +38,18 @@ const I18N_TEXTS = {
     'close.discard': 'Abandonner',
     'close.cancel': 'Annuler',
 
+    // Un modèle de départ ouvert depuis GFS (« Nouveau > Depuis un modèle », js/model-opening.js) : le bandeau tant que rien n'a changé, la question quand la table a déjà un workflow, la raison d'un refus.
+    'model.notice': 'Modèle « {name} » ouvert : rien n\'est enregistré avant votre première modification. Choisissez ensuite vos colonnes.',
+    'model.replaceTitle': 'Remplacer le workflow de cette table ?',
+    'model.replaceBody': 'Cette table a déjà un workflow. Le modèle « {name} » le remplace dès votre première modification ; d\'ici là, rien n\'est enregistré.',
+    'model.replaceBodyActive': 'Cette table a déjà un workflow activé. En ouvrant le modèle « {name} », vous l\'arrêtez dans cet onglet ; le modèle le remplace dans le document dès votre première modification.',
+    'model.replace': 'Remplacer',
+    'model.keep': 'Garder le workflow',
+    'model.refusedTitle': 'Modèle non ouvert',
+    'model.unknown': 'Ce modèle n\'existe pas dans cette version d\'Automation+ : rien n\'a été ouvert.',
+    'model.locked': 'Cette table garde un workflow que cette version ne sait pas lire : le modèle n\'est pas ouvert, pour ne pas l\'écraser.',
+    'model.readOnly': 'Ce document est en lecture seule : un modèle ne peut pas y être ouvert ni enregistré.',
+
     // Le canevas : l'aide quand il est vide, et pendant la création d'un lien.
     'canvas.empty': 'Clic droit sur le fond, ou « Ajouter », pour créer un premier nœud.',
     'canvas.connecting': 'Cliquez sur l\'entrée d\'un nœud pour relier (Échap pour annuler).',
@@ -167,6 +179,7 @@ const I18N_TEXTS = {
     'log.cannotActivate': 'Activation impossible : {issue}',
     'log.noTables': 'Non enregistré : la table du widget n\'a pas été créée dans ce document.',
     'log.tablesCreated': 'Table du widget créée.',
+    'log.modelOpened': 'Modèle « {name} » ouvert depuis Grist Factory Suite : rien n\'est enregistré avant la première modification.',
     'log.storeError': 'Enregistrement dans le document impossible : {error}',
     'log.activated': 'Workflow activé.',
     'log.deactivated': 'Workflow désactivé.',
@@ -280,6 +293,18 @@ const I18N_TEXTS = {
     'close.save': 'Save',
     'close.discard': 'Discard',
     'close.cancel': 'Cancel',
+
+    // A starter template opened from GFS ("New > From a template", js/model-opening.js): the banner while nothing has changed, the question when the table already has a workflow, the reason for a refusal.
+    'model.notice': 'Template “{name}” opened: nothing is saved until you make your first change. Then choose your columns.',
+    'model.replaceTitle': 'Replace this table\'s workflow?',
+    'model.replaceBody': 'This table already has a workflow. The template “{name}” replaces it as soon as you make your first change; until then, nothing is saved.',
+    'model.replaceBodyActive': 'This table already has a workflow that is turned on. Opening the template “{name}” stops it in this tab; the template replaces it in the document as soon as you make your first change.',
+    'model.replace': 'Replace',
+    'model.keep': 'Keep the workflow',
+    'model.refusedTitle': 'Template not opened',
+    'model.unknown': 'This template does not exist in this version of Automation+: nothing was opened.',
+    'model.locked': 'This table keeps a workflow that this version cannot read: the template is not opened, so as not to overwrite it.',
+    'model.readOnly': 'This document is read-only: a template cannot be opened or saved in it.',
 
     // Le canevas : l'aide quand il est vide, et pendant la création d'un lien.
     'canvas.empty': 'Right-click the background, or "Add", to create a first node.',
@@ -410,6 +435,7 @@ const I18N_TEXTS = {
     'log.cannotActivate': 'Cannot turn on: {issue}',
     'log.noTables': 'Not saved: the widget table was not created in this document.',
     'log.tablesCreated': 'Widget table created.',
+    'log.modelOpened': 'Template “{name}” opened from Grist Factory Suite: nothing is saved until the first change.',
     'log.storeError': 'Could not save to the document: {error}',
     'log.activated': 'Workflow turned on.',
     'log.deactivated': 'Workflow turned off.',

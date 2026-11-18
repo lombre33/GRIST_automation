@@ -1778,6 +1778,272 @@ await scenario('E2E-85 Diagnostic dans le cadre isolé de GFS (allow="clipboard-
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), text, 'le même texte, copié par la commande du navigateur');
 }, { host: { context: {} }, init: { __metaTables: metaTables, __refuseGristInternal: true, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }] } });
 
+
+/* ---------- L'ouverture d'un modèle de départ (consigne 021), jouée dans le faux GFS ---------- */
+
+// Ce que GFS passe à l'app : au démarrage, dans l'ouverture du contexte (`host.context.ouverture`) ; l'app déjà ouverte, dans les arguments de l'appel `ouvrir`.
+const modelOpening = (id, extra = {}) => ({ fichier: null, type: 'automatisme', dossier: '', raison: 'modele', modele: { id }, ...extra });
+// La réponse de l'app à `ouvrir` (type, data) ; holdOpen laisse l'appel en route, pour répondre à la question de l'app, et openAnswer en rend la réponse.
+const askOpen = (page, args) => page.evaluate((value) => window.hote.call('ouvrir', value), args);
+const holdOpen = (page, args) => page.evaluate((value) => { window.__opening = window.hote.call('ouvrir', value); }, args);
+const openAnswer = (page) => page.evaluate(() => window.__opening);
+// Les nœuds du graphe affiché, dans l'ordre de leur création (le type que le nom de classe porte).
+const nodeTypes = (app) => app.evaluate(() => [...document.querySelectorAll('.node')].map((el) => /node-(\w+)/.exec(el.className)[1]));
+// Ce que l'app a écrit pour le workflow : les lignes Workflow de la table et la clé de réglages de la vue.
+const stored = (app) => app.evaluate(() => ({
+  rows: (window.__stub.docTables.Automation ? window.__stub.docTables.Automation.rows : []).filter((row) => row.Type === 'Workflow').map((row) => row.Config),
+  option: window.__stub.options.workflow || null,
+  writes: window.__stub.writes.length,
+}));
+const insideCanvas = (app) => app.evaluate(() => {
+  const area = document.getElementById('canvas').getBoundingClientRect();
+  return [...document.querySelectorAll('.node')].every((el) => { const box = el.getBoundingClientRect(); return box.left >= area.left && box.right <= area.right && box.top >= area.top && box.bottom <= area.bottom; });
+});
+const modalTitle = (app) => app.locator('.modal-title').last().innerText();
+// Choisit dans la liste avec recherche d'un nœud du cadre de l'app ; le clavier est celui de la page de l'hôte.
+async function pickIn(page, app, id, search) {
+  const field = app.locator(`#${id}`).locator('xpath=..');
+  await field.locator('.ss-button').click();
+  await field.locator('input').fill(search);
+  await page.keyboard.press('Enter');
+}
+const TOTAL = 'Calculer un total à partir de deux colonnes';
+const storedInactive = [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }];
+
+await scenario('E2E-86 GFS ouvre l\'app sur un modèle (l\'ouverture du contexte) : le graphe entier s\'affiche, relié, sans choix, sans question ni écriture ; le premier changement l\'enregistre', async (page, app) => {
+  await app.waitForSelector('.node-action');
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'transform', 'action']);
+  assert.equal(await app.locator('.wire-group').count(), 2, 'les deux liens du modèle');
+  assert.equal(await app.locator('.modal').count(), 0, 'la table n\'a pas de workflow : aucune question');
+  assert.equal(await insideCanvas(app), true, 'tout le graphe tient dans le canevas');
+  assert.equal(await app.locator('#model-notice').isVisible(), true);
+  assert.equal(await app.locator('#model-notice').innerText(), `Modèle « ${TOTAL} » ouvert : rien n'est enregistré avant votre première modification. Choisissez ensuite vos colonnes.`);
+  assert.equal(await app.locator('#toggle-active').innerText(), 'Activer', 'jamais actif à l\'ouverture');
+  await app.waitForTimeout(800);   // bien plus que les 300 ms de l'enregistrement automatique
+  assert.deepEqual(await stored(app), { rows: [], option: null, writes: 0 }, 'rien n\'est écrit avant un geste de la personne');
+  await pickIn(page, app, 'trigger-1-column', 'statut');
+  await app.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Workflow'));
+  const graph = JSON.parse((await stored(app)).rows[0]);
+  assert.deepEqual(graph.nodes.map((node) => node.type), ['trigger', 'transform', 'action']);
+  assert.equal(graph.nodes[0].config.column, 'Statut', 'le choix de la personne');
+  assert.deepEqual([graph.nodes[1].config.name, graph.nodes[1].config.op, graph.nodes[2].config.value], ['total', 'mul', '{total}'], 'le modèle tel qu\'il s\'est ouvert');
+  assert.equal(await app.locator('#model-notice').isHidden(), true, 'le modèle est maintenant le workflow de la table');
+}, { host: { context: { ouverture: modelOpening('total-calcule') } } });
+
+await scenario('E2E-87 l\'app est déjà ouverte : `ouvrir` montre le modèle et répond { ouvert: true } ; un autre modèle le remplace sans question tant que rien n\'y a changé', async (page, app) => {
+  assert.deepEqual(await nodeTypes(app), [], 'un éditeur vide au départ');
+  const first = await askOpen(page, modelOpening('seuil-a-verifier'));
+  assert.deepEqual([first.type, first.data], ['reponse', { ouvert: true }]);
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'condition', 'action']);
+  assert.match(await app.locator('#model-notice').innerText(), /^Modèle « Marquer une ligne quand un montant dépasse un seuil » ouvert/);
+  const second = await askOpen(page, modelOpening('valeur-a-la-creation'));
+  assert.deepEqual([second.type, second.data], ['reponse', { ouvert: true }]);
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'action'], 'le second modèle a pris la place du premier');
+  assert.match(await app.locator('#model-notice').innerText(), /^Modèle « Remplir une colonne à la création d'une ligne » ouvert/);
+  assert.equal(await app.locator('.modal').count(), 0, 'un modèle que personne n\'a modifié n\'est pas du travail à protéger : aucune question');
+  assert.equal(await insideCanvas(app), true);
+  await app.waitForTimeout(800);
+  assert.deepEqual(await stored(app), { rows: [], option: null, writes: 0 }, 'rien n\'est écrit');
+  assert.match(await app.locator('#log-list').innerText(), /Modèle « Remplir une colonne à la création d'une ligne » ouvert depuis Grist Factory Suite/, 'le journal le dit');
+}, { host: { context: {} } });
+
+await scenario('E2E-88 un identifiant inconnu, un autre type, un modèle sans identifiant : { ouvert: false }, une fenêtre le dit, et l\'éditeur reste vide (jamais un éditeur vide « à la place »)', async (page, app) => {
+  const refused = [
+    modelOpening('inconnu'),
+    modelOpening('total-calcule', { type: 'document' }),
+    { fichier: null, type: 'automatisme', dossier: '', raison: 'modele' },
+  ];
+  for (const args of refused) {
+    const reply = await askOpen(page, args);
+    assert.deepEqual([reply.type, reply.data], ['reponse', { ouvert: false }], JSON.stringify(args));
+    assert.equal(await modalTitle(app), 'Modèle non ouvert');
+    assert.equal(await app.locator('.modal-body').last().innerText(), 'Ce modèle n\'existe pas dans cette version d\'Automation+ : rien n\'a été ouvert.');
+    await app.getByRole('button', { name: 'Fermer' }).click();
+    assert.equal(await app.locator('.modal').count(), 0);
+    assert.deepEqual(await nodeTypes(app), [], 'rien n\'est ouvert');
+    assert.equal(await app.locator('#model-notice').isHidden(), true);
+  }
+  assert.deepEqual(await stored(app), { rows: [], option: null, writes: 0 });
+}, { host: { context: {} } });
+
+await scenario('E2E-89 la table a déjà un workflow : l\'app demande avant de le remplacer ; Échap garde tout et répond { ouvert: false } ; « Remplacer » ouvre le modèle, et le document ne change qu\'au premier geste', async (page, app) => {
+  await app.waitForSelector('.node-action');
+  const before = await stored(app);
+  await holdOpen(page, modelOpening('total-calcule'));
+  await app.waitForSelector('.modal');
+  assert.equal(await modalTitle(app), 'Remplacer le workflow de cette table ?');
+  assert.equal(await app.locator('.modal-body').last().innerText(), `Cette table a déjà un workflow. Le modèle « ${TOTAL} » le remplace dès votre première modification ; d'ici là, rien n'est enregistré.`);
+  assert.equal(await app.evaluate(() => document.activeElement.textContent), 'Garder le workflow', 'le focus est sur le choix prudent');
+  await page.keyboard.press('Escape');
+  const refused = await openAnswer(page);
+  assert.deepEqual([refused.type, refused.data], ['reponse', { ouvert: false }]);
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'action'], 'le workflow de la table est toujours là');
+  assert.equal(await app.locator('#model-notice').isHidden(), true);
+  assert.deepEqual(await stored(app), before, 'rien n\'est écrit');
+  await holdOpen(page, modelOpening('total-calcule'));
+  await app.getByRole('button', { name: 'Remplacer', exact: true }).click();
+  const accepted = await openAnswer(page);
+  assert.deepEqual([accepted.type, accepted.data], ['reponse', { ouvert: true }]);
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'transform', 'action'], 'le modèle est affiché');
+  await app.waitForTimeout(800);
+  assert.deepEqual(await stored(app), before, 'ouvert, le modèle n\'est pas enregistré : le workflow du document est intact');
+  await pickIn(page, app, 'trigger-1-column', 'statut');
+  await app.waitForFunction(() => JSON.parse(window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Workflow').Config).nodes.length === 3);
+  assert.equal(await app.locator('#model-notice').isHidden(), true);
+}, { host: { context: {} }, init: { __preloadRows: storedInactive } });
+
+await scenario('E2E-90 le workflow de la table est actif : la question le dit ; Annuler le laisse exécuter, « Remplacer » l\'arrête dans cet onglet (le verrou est rendu), le document garde le workflow actif jusqu\'au premier geste', async (page, app) => {
+  await holdingLock(app);
+  const owner = await lockOwner(app);
+  await holdOpen(page, modelOpening('total-calcule'));
+  await app.waitForSelector('.modal');
+  assert.match(await app.locator('.modal-body').last().innerText(), /^Cette table a déjà un workflow activé\. En ouvrant le modèle/);
+  await app.getByRole('button', { name: 'Garder le workflow' }).click();
+  assert.equal((await openAnswer(page)).data.ouvert, false);
+  assert.equal(await app.locator('#toggle-active').innerText(), 'Désactiver', 'le workflow continue');
+  assert.equal(await lockOwner(app), owner, 'cet onglet garde le verrou');
+  await holdOpen(page, modelOpening('total-calcule'));
+  await app.getByRole('button', { name: 'Remplacer', exact: true }).click();
+  assert.equal((await openAnswer(page)).data.ouvert, true);
+  assert.equal(await app.locator('#toggle-active').innerText(), 'Activer', 'le modèle n\'est pas actif');
+  assert.equal(await app.locator('#open-tab-warning').isHidden(), true);
+  await app.waitForFunction(() => !window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock').Config, null, { timeout: 9000 });   // au battement suivant, cet onglet n'exécute plus
+  const row = await app.evaluate(() => window.__stub.docTables.Automation.rows.find((entry) => entry.Type === 'Workflow'));
+  assert.deepEqual([row.Actif, row.Config], [true, activeGraph], 'le document n\'a rien reçu : son workflow reste enregistré comme actif');
+}, { host: { context: {} }, intervals: true, init: { __preloadRows: startedRows } });
+
+await scenario('E2E-91 l\'ouverture du contexte tombe sur une table qui a déjà un workflow : la question vient après le démarrage ; « Garder le workflow » laisse l\'app comme elle était', async (page, app) => {
+  await app.waitForSelector('.modal');
+  assert.equal(await modalTitle(app), 'Remplacer le workflow de cette table ?');
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'action'], 'le workflow de la table est affiché derrière la question');
+  const before = await stored(app);
+  await app.getByRole('button', { name: 'Garder le workflow' }).click();
+  await app.waitForTimeout(500);
+  assert.equal(await app.locator('.modal').count(), 0, 'une seule question');
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'action']);
+  assert.equal(await app.locator('#model-notice').isHidden(), true);
+  assert.deepEqual(await stored(app), before);
+}, { host: { context: { ouverture: modelOpening('statut-vers-archive') } }, init: { __preloadRows: storedInactive } });
+
+await scenario('E2E-92 sans la table du widget : sa question vient d\'abord, avant le modèle ; refusée, l\'éditeur reste utilisable avec le modèle, dont le premier changement va dans les réglages de la vue', async (page, app) => {
+  await app.waitForSelector('.modal');
+  assert.equal(await modalTitle(app), 'Créer la table du widget dans ce document ?');
+  assert.deepEqual(await nodeTypes(app), [], 'le modèle attend la réponse');
+  await app.getByRole('button', { name: 'Ne pas créer' }).click();
+  await app.waitForSelector('.node-action');
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'condition', 'action']);
+  assert.equal(await app.locator('.modal').count(), 0, 'pas de deuxième question');
+  await app.waitForTimeout(800);
+  assert.deepEqual(await app.evaluate(() => [window.__stub.options.workflow || null, window.__stub.writes.length]), [null, 0], 'rien n\'est écrit');
+  await pickIn(page, app, 'trigger-1-column', 'montant');
+  await app.waitForFunction(() => window.__stub.options.workflow);
+  const graph = JSON.parse(await app.evaluate(() => window.__stub.options.workflow));
+  assert.deepEqual([graph.nodes.map((node) => node.type), graph.nodes[0].config.column, graph.nodes[1].config.checks[0].operator], [['trigger', 'condition', 'action'], 'Montant', 'gt']);
+  assert.equal(await app.evaluate(() => Object.keys(window.__stub.docTables)).then((names) => names.includes('Automation')), false, 'la table n\'a pas été créée');
+}, { host: { context: { ouverture: modelOpening('seuil-a-verifier') } }, noTables: true });
+
+await scenario('E2E-93 en lecture seule : { ouvert: false } et la raison dite, au démarrage comme par `ouvrir` ; ni écriture ni refus de Grist', async (page, app) => {
+  await app.waitForSelector('.modal');
+  assert.equal(await modalTitle(app), 'Modèle non ouvert');
+  assert.equal(await app.locator('.modal-body').last().innerText(), 'Ce document est en lecture seule : un modèle ne peut pas y être ouvert ni enregistré.');
+  await app.getByRole('button', { name: 'Fermer' }).click();
+  const reply = await askOpen(page, modelOpening('total-calcule'));
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ouvert: false }]);
+  assert.match(await app.locator('.modal-body').last().innerText(), /lecture seule/);
+  assert.deepEqual(await nodeTypes(app), []);
+  assert.deepEqual(await app.evaluate(() => [window.__stub.writes.length, window.__stub.refused.length]), [0, 0]);
+}, { host: { context: { ouverture: modelOpening('total-calcule') }, query: '&access=full&readonly=true' } });
+
+await scenario('E2E-94 un workflow que cette version ne lit pas : jamais écrasé par un modèle, { ouvert: false } et la raison dite', async (page, app) => {
+  await app.waitForSelector('#locked:not([hidden])');
+  const reply = await askOpen(page, modelOpening('total-calcule'));
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ouvert: false }]);
+  assert.equal(await app.locator('.modal-body').last().innerText(), 'Cette table garde un workflow que cette version ne sait pas lire : le modèle n\'est pas ouvert, pour ne pas l\'écraser.');
+  assert.deepEqual(await nodeTypes(app), []);
+  await assertUntouched(app, 'la ligne illisible n\'est pas touchée');
+}, { host: { context: {} }, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+
+await scenario('E2E-95 en anglais, dans un cadre de 700 × 400 : le bandeau et la question suivent la langue, et tout le modèle tient dans le canevas', async (page, app) => {
+  await app.click('#open-settings');
+  await app.getByRole('button', { name: 'EN', exact: true }).click();
+  await page.keyboard.press('Escape');
+  assert.equal((await askOpen(page, modelOpening('copie-depuis-une-table'))).data.ouvert, true);
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'lookup', 'action']);
+  assert.equal(await app.locator('#model-notice').innerText(), 'Template “Copy a value from another table” opened: nothing is saved until you make your first change. Then choose your columns.');
+  assert.equal(await insideCanvas(app), true, 'à 700 × 400, le graphe est réduit pour tenir');
+  assert.ok((await app.evaluate(() => getComputedStyle(document.querySelector('.world')).transform)) !== 'none');
+  await pickIn(page, app, 'trigger-1-column', 'nom');
+  await holdOpen(page, modelOpening('total-calcule'));
+  await app.waitForSelector('.modal');
+  assert.equal(await modalTitle(app), 'Replace this table\'s workflow?');
+  assert.deepEqual(await app.evaluate(() => [...document.querySelectorAll('.modal-footer button')].map((button) => button.textContent)), ['Keep the workflow', 'Replace']);
+  await page.keyboard.press('Escape');
+  assert.equal((await openAnswer(page)).data.ouvert, false);
+}, { host: { context: {} }, viewport: { width: 700, height: 400 } });
+
+await scenario('E2E-96 un modèle que personne n\'a modifié ne retient pas l\'app : GFS demande de fermer, la réponse est oui tout de suite, rien n\'est écrit', async (page, app) => {
+  assert.equal((await askOpen(page, modelOpening('total-calcule'))).data.ouvert, true);
+  const reply = await askClose(page, 'explorateur');
+  assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
+  assert.equal(await app.locator('.modal').count(), 0);
+  assert.deepEqual(await stored(app), { rows: [], option: null, writes: 0 });
+}, { host: { context: {} } });
+
+
+await scenario('E2E-97 sans la table du widget, le workflow est dans les réglages de la vue : il compte comme un workflow à remplacer, la question se pose, et « Remplacer » le remplace à la première modification', async (page, app) => {
+  await app.waitForSelector('.modal');
+  assert.equal(await modalTitle(app), 'Créer la table du widget dans ce document ?');
+  await app.getByRole('button', { name: 'Ne pas créer' }).click();
+  await app.waitForSelector('.modal-title:has-text("Remplacer le workflow de cette table ?")');
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'action'], 'le workflow des réglages est affiché derrière la question');
+  assert.match(await app.locator('.modal-body').last().innerText(), /workflow activé/, 'il est actif : la question le dit');
+  await app.getByRole('button', { name: 'Remplacer', exact: true }).click();
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'transform', 'action']);
+  assert.equal(await app.evaluate(() => window.__stub.options.workflow), activeGraph, 'les réglages de la vue n\'ont rien reçu');
+  await pickIn(page, app, 'trigger-1-column', 'statut');
+  await app.waitForFunction((before) => window.__stub.options.workflow !== before, activeGraph);
+  assert.deepEqual(JSON.parse(await app.evaluate(() => window.__stub.options.workflow)).nodes.map((node) => node.type), ['trigger', 'transform', 'action']);
+}, { host: { context: { ouverture: modelOpening('total-calcule') } }, noTables: true, init: { __preloadOptions: { workflow: activeGraph } } });
+
+await scenario('E2E-98 les réglages de la vue arrivent après la fin du démarrage : le modèle les attend, voit le workflow qu\'ils portent et demande, au lieu de l\'écraser en silence', async (page, app) => {
+  await app.waitForSelector('.modal-title:has-text("Remplacer le workflow de cette table ?")');
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'action'], 'le workflow des réglages est chargé avant la question');
+  await app.getByRole('button', { name: 'Garder le workflow' }).click();
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'action']);
+  assert.equal(await app.evaluate(() => window.__stub.options.workflow), activeGraph);
+}, { host: { context: { ouverture: modelOpening('total-calcule') } }, init: { __optionsDelay: 700, __preloadOptions: { workflow: activeGraph } } });
+
+
+await scenario('E2E-99 une modification attend son enregistrement quand la personne remplace le workflow par un modèle : elle est écrite d\'abord, le modèle ne la remplace pas en silence', async (page, app) => {
+  await app.evaluate(() => { window.__stub.writeDelay = 1200; });
+  await addTrigger(page, app);   // l'écriture attend 300 ms, puis dure 1,2 s : le document n'a rien reçu
+  assert.equal(await workflowRow(app), null);
+  await holdOpen(page, modelOpening('total-calcule'));
+  await app.getByRole('button', { name: 'Remplacer', exact: true }).click();
+  assert.equal((await openAnswer(page)).data.ouvert, true);
+  assert.deepEqual(await nodeTypes(app), ['trigger', 'transform', 'action'], 'le modèle est affiché');
+  assert.deepEqual(JSON.parse((await workflowRow(app)).Config).nodes.map((node) => node.type), ['trigger'], 'le document a reçu ce que la personne avait fait avant, pas le modèle');
+  await app.waitForTimeout(1000);   // la minuterie de 300 ms, si elle était restée, aurait écrit le modèle
+  assert.deepEqual(JSON.parse((await workflowRow(app)).Config).nodes.map((node) => node.type), ['trigger']);
+}, { host: { context: {} } });
+
+// La barre de GFS ne recouvre pas le modèle qui s'ouvre : le graphe se cadre dans le canevas privé de ce que la barre en prend (le bandeau « modèle ouvert » a déjà pris sa hauteur).
+for (const edge of ['haut', 'bas', 'gauche', 'droite']) {
+  await scenario(`E2E-100 barre ${edge === 'haut' || edge === 'bas' ? 'en ' : 'à '}${edge} : le modèle s'ouvre cadré hors de la zone que la barre de GFS recouvre, tout dans le canevas`, async (page, app) => {
+    await app.waitForSelector('.node-action');
+    await settled(app);
+    assert.deepEqual(await nodeTypes(app), ['trigger', 'condition', 'action']);
+    assert.equal(await app.locator('#model-notice').isVisible(), true);
+    const { zone } = BARS[edge];
+    const hits = await app.evaluate((area) => [...document.querySelectorAll('.node')].filter((el) => {
+      const box = el.getBoundingClientRect();
+      return box.left < area.x + area.largeur - 0.5 && area.x + 0.5 < box.right && box.top < area.y + area.hauteur - 0.5 && area.y + 0.5 < box.bottom;
+    }).map((el) => el.id || el.className), zone);
+    assert.deepEqual(hits, [], 'aucun nœud sous la barre');
+    assert.equal(await insideCanvas(app), true, 'tout le graphe tient dans le canevas');
+  }, { host: { context: { barre: BARS[edge], ambiance: null, ouverture: modelOpening('statut-vers-archive') } }, viewport: SMALL });
+}
+
 await browser.close();
 server.close();
 process.exit(failures ? 1 : 0);

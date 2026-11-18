@@ -13,6 +13,7 @@
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const K_MIN = 0.4;
   const K_MAX = 1.6;
+  const FIT_MARGIN = 16;      // px : l'espace laissé autour du graphe quand le canevas le cadre (fit)
   const DRAG_THRESHOLD = 4;   // px : en deçà, un appui sur une sortie est un clic (le lien attend l'entrée), pas un glisser
   const t = (key, params) => I18n.t(key, params);
 
@@ -57,6 +58,25 @@
       cv.view.y = start.viewY + e.clientY - start.y;
       applyView(cv);
     }, () => cv.container.classList.remove('is-panning'));
+  }
+
+  // Cadre tout le graphe dans le canevas (à l'ouverture d'un modèle, qui peut arriver après que la personne a déplacé le fond ou zoomé) : à l'échelle 1 s'il tient, sinon réduit sans passer sous K_MIN ;
+  // le coin haut gauche du graphe se pose à FIT_MARGIN du coin du canevas, `extra` en plus ({ left, top, right, bottom } en pixels : ce que la barre de GFS recouvre, js/keep-clear.js `margins`).
+  // Un graphe sans nœud ne change rien.
+  function fit(cv, extra) {
+    const boxes = [...cv.views.values()].map(({ node, element }) => ({ left: node.x, top: node.y, right: node.x + element.offsetWidth, bottom: node.y + element.offsetHeight }));
+    if (!boxes.length) return;
+    const left = Math.min(...boxes.map((box) => box.left));
+    const top = Math.min(...boxes.map((box) => box.top));
+    const width = Math.max(...boxes.map((box) => box.right)) - left;
+    const height = Math.max(...boxes.map((box) => box.bottom)) - top;
+    const space = cv.container.getBoundingClientRect();
+    const margin = { left: FIT_MARGIN + ((extra && extra.left) || 0), top: FIT_MARGIN + ((extra && extra.top) || 0), right: FIT_MARGIN + ((extra && extra.right) || 0), bottom: FIT_MARGIN + ((extra && extra.bottom) || 0) };
+    const k = Math.min(1, Math.max(K_MIN, Math.min((space.width - margin.left - margin.right) / width, (space.height - margin.top - margin.bottom) / height)));
+    cv.view.k = k;
+    cv.view.x = margin.left - left * k;
+    cv.view.y = margin.top - top * k;
+    applyView(cv);
   }
 
   // Zoom autour du pointeur : le point sous la souris reste en place.
@@ -502,6 +522,7 @@
     drawWires(cv);
     return {
       load: (next) => load(cv, next),
+      fit: (extra) => fit(cv, extra),
       refreshSchema: () => refreshSchema(cv),
       openAddMenu: (clientX, clientY) => openAddMenu(cv, clientX, clientY),
       showTrace: (trace) => showTrace(cv, trace),

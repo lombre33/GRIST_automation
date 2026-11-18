@@ -36,7 +36,19 @@
     return frame.largeur - zone.x;
   }
 
-  const api = { overlaps, escape, inset };
+  // Les marges, de chaque côté d'une zone `area` (le canevas : { x, y, largeur, hauteur } en pixels du cadre), qu'un contenu qu'on y cadre (un modèle qui s'ouvre) doit laisser pour ne pas passer
+  // sous la barre : la profondeur de la zone du côté de la barre, 0 des trois autres côtés, et 0 partout sans barre ou quand la zone ne touche pas `area` (une barre en haut, au-dessus du canevas).
+  function margins(bar, area) {
+    const none = { left: 0, top: 0, right: 0, bottom: 0 };
+    if (!bar || !bar.zone || !overlaps(area, bar.zone)) return none;
+    const { zone, bord } = bar;
+    if (bord === 'haut') return { ...none, top: Math.max(0, zone.y + zone.hauteur - area.y) };
+    if (bord === 'bas') return { ...none, bottom: Math.max(0, area.y + area.hauteur - zone.y) };
+    if (bord === 'gauche') return { ...none, left: Math.max(0, zone.x + zone.largeur - area.x) };
+    return { ...none, right: Math.max(0, area.x + area.largeur - zone.x) };
+  }
+
+  const api = { overlaps, escape, inset, margins };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
     return;
@@ -103,5 +115,5 @@
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   window.addEventListener('resize', schedule);
 
-  root.KeepClear = Object.assign({ set, refresh }, api);
+  root.KeepClear = Object.assign({ set, refresh, current: () => current }, api);
 })(typeof window !== 'undefined' ? window : globalThis);

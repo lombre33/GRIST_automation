@@ -1,12 +1,14 @@
 'use strict';
-// MODELE : les modèles d'automatisme que l'app propose à GFS pour « Nouveau > Depuis un modèle » (consigne 020) : un catalogue (modeles/modeles.json) et une vignette par modèle.
-// GFS lit et copie ce dossier chez lui ; l'app, elle, ne le charge jamais, et n'ouvre encore aucun modèle (le code vient après la réponse de GFS). Ces essais gardent
-// les limites que GFS fixe à une entrée (contrats 2.2 et 5.4, point 13 ; lecteur du catalogue de GFS, js/apps/templates-catalogue.js) et vérifient que chaque recette annoncée tient dans le moteur.
+// MODELE : les modèles d'automatisme que l'app propose à GFS pour « Nouveau > Depuis un modèle » (consigne 020) : un catalogue (modeles/modeles.json) et une vignette par modèle, puis (consigne 021)
+// leur graphe de départ dans js/models.js, que l'éditeur ouvre quand GFS en demande un (js/model-opening.js, essais OPEN). GFS lit et copie le dossier modeles/ chez lui ; l'app, elle, ne le charge jamais :
+// les noms et les graphes sont dans js/models.js, que MODELE-11 et 12 comparent au catalogue et aux recettes. Ces essais gardent les limites que GFS fixe à une entrée (contrats 2.2 et 5.4, point 13 ;
+// lecteur du catalogue de GFS, js/apps/templates-catalogue.js) et vérifient que chaque recette annoncée tient dans le moteur.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const Graph = require('../js/graph.js');
+const Models = require('../js/models.js');
 const E = require('../js/engine.js');
 const { createFakeApi } = require('./fakes/fakeGrist.js');
 const { RECETTES, blank } = require('./fakes/modeles.js');
@@ -134,4 +136,31 @@ test('MODELE-10 chaque recette, ouverte comme un modèle (sans table, colonne ni
     assert.strictEqual(api.applied.length, 0, `${id} : rien n'est écrit`);
     assert.notStrictEqual(result.status, 'success', id);
   }
+});
+
+test('MODELE-11 js/models.js : les cinq mêmes id, dans le même ordre, et les noms du catalogue en français et en anglais (le widget ne peut pas lire son catalogue : sa politique de sécurité n\'autorise aucune requête)', () => {
+  assert.deepStrictEqual(Models.MODELS.map((model) => model.id), IDS);
+  for (const entry of catalogue) {
+    const model = Models.find(entry.id);
+    assert.deepStrictEqual(model.name, entry.nom, entry.id);
+    for (const lang of LANGS) assert.strictEqual(Models.nameOf(entry.id, lang), entry.nom[lang], `${entry.id} (${lang})`);
+  }
+  assert.strictEqual(Models.nameOf('total-calcule', 'de'), catalogue[3].nom.fr, 'une langue inconnue : le français');
+  assert.strictEqual(Models.nameOf('inconnu', 'fr'), '');
+});
+
+test('MODELE-12 chaque modèle s\'ouvre tel que sa recette, sans les choix de la personne : le graphe de js/models.js est la recette vidée, relu par l\'éditeur, et chaque appel en rend une copie neuve', () => {
+  for (const id of IDS) {
+    const opened = Models.graphOf(id);
+    assert.deepStrictEqual(opened, blank(RECETTES[id].graph), `${id} : la structure, les opérateurs, les sorties et les noms entre nœuds de la recette`);
+    assert.strictEqual(opened.active, false, `${id} : jamais actif à l'ouverture`);
+    assert.deepStrictEqual(Graph.parse(JSON.stringify(opened)), opened, `${id} : l'éditeur le relit tel quel`);
+    opened.nodes[0].config.column = 'Statut';
+    opened.nodes.push({ id: 'trigger-9', type: 'trigger', x: 0, y: 0, config: {} });
+    assert.deepStrictEqual(Models.graphOf(id), blank(RECETTES[id].graph), `${id} : modifier une copie ne change pas le modèle`);
+    assert.strictEqual(Graph.addNode(Models.graphOf(id), 'trigger', 0, 0).id, 'trigger-2', `${id} : un nœud ajouté ne reprend aucun identifiant du modèle`);
+  }
+  assert.strictEqual(Models.graphOf('inconnu'), null, 'un identifiant inconnu : aucun graphe, jamais un graphe vide');
+  for (const id of [undefined, null, 12, {}, ['total-calcule'], '']) assert.strictEqual(Models.graphOf(id), null);
+  assert.strictEqual(Models.find('__proto__'), null);
 });
