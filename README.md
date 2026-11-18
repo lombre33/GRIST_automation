@@ -105,6 +105,8 @@ La langue de GFS n'est pas encore suivie : les boutons FR et EN des Réglages re
 
 Dans l'autre sens, GFS prend de l'app sa **vitrine** (consigne 018) : le dossier `vitrine/` (`vitrine.json`, une description et trois légendes en français et en anglais, et trois captures WebP de 960 × 600 px) sert à la carte et à la fiche de l'app dans GFS, qui copie les captures chez lui ; l'app ne les charge jamais. Les captures sont prises dans un vrai Grist, en français et en thème clair, sur un document d'exemple sans nom de personne, et sont à refaire quand l'interface qu'elles montrent change (`tests/vitrine.test.js` garde les limites de GFS : 280 caractères, 60 caractères, 60 Ko).
 
+GFS peut aussi proposer des **modèles d'automatisme** dans « Nouveau > Depuis un modèle » (consigne 020) : le dossier `modeles/` (`modeles.json`, cinq modèles avec nom, description et étiquettes en français et en anglais, et une vignette WebP de 240 × 320 px par modèle) est le catalogue que GFS copiera chez lui ; l'app ne le charge jamais et **n'ouvre encore aucun modèle** : l'app n'a pas de fichier, donc pas de `type` à mettre dans une entrée, et GFS doit d'abord dire où le ranger (le code d'ouverture suit sa réponse). Un modèle est un graphe de départ sans table, colonne ni valeur choisies, que l'éditeur ouvrira sans l'enregistrer ; la personne le complète, et l'activation est refusée (le journal dit ce qui manque, nœud par nœud) tant qu'une colonne de la condition, de l'action ou de la lecture, ou une valeur de la transformation, manque. Les cinq recettes (`tests/fakes/modeles.js` : le graphe rempli d'un document d'exemple) sont jouées dans le moteur par `tests/modeles.test.js`, qui garde aussi les limites de GFS (60 et 140 caractères, 240 × 320, 12 Ko), et ont été jouées pour de vrai dans un vrai Grist, qui a aussi servi aux vignettes (nœuds posés en escalier pour tenir dans le format en hauteur) ; à refaire quand l'interface qu'elles montrent change.
+
 ## Organisation du code
 
 | Fichier | Rôle |
@@ -124,6 +126,7 @@ Dans l'autre sens, GFS prend de l'app sa **vitrine** (consigne 018) : le dossier
 | `js/closing.js` | réponses à `fermer` et à `rester` : enregistrer ce qui attend, laisser finir les écritures, rendre le verrou, ne poser la question que si l'écriture échoue ; puis reprendre le verrou et le battement si GFS dit « tu restes », les deux appels l'un derrière l'autre (sans DOM ni Grist) |
 | `css/` | jetons de la charte, styles, canevas, fenêtres, prise en main |
 | `vitrine/` | description, légendes et trois captures de l'app pour la carte et la fiche de GFS (lues par GFS, jamais par l'app) |
+| `modeles/` | catalogue des modèles d'automatisme et une vignette par modèle, pour « Depuis un modèle » de GFS (lus par GFS, jamais par l'app) |
 
 Périmètre : `docs/CDC_Widget_Grist_Automation_Builder.md`. Règles d'interface et de développement : `docs/REGLES_UI_UX_ET_DEV.md`. Sécurité : `SECURITY.md`.
 

@@ -1,0 +1,67 @@
+[
+  {
+    "id": "statut-vers-archive",
+    "nom": { "fr": "Archiver une ligne quand son statut change", "en": "Archive a row when its status changes" },
+    "description": {
+      "fr": "Quand une colonne est modifiée et prend la valeur choisie, une ligne est ajoutée à une autre table : archive, suivi ou file d'attente.",
+      "en": "When a column is edited and takes the chosen value, a row is added to another table: archive, follow-up or queue."
+    },
+    "etiquettes": [
+      { "fr": "Statut", "en": "Status" },
+      { "fr": "Autre table", "en": "Other table" }
+    ],
+    "vignette": "statut-vers-archive.webp"
+  },
+  {
+    "id": "valeur-a-la-creation",
+    "nom": { "fr": "Remplir une colonne à la création d'une ligne", "en": "Fill in a column when a row is created" },
+    "description": {
+      "fr": "À chaque nouvelle ligne, une colonne reçoit une valeur de départ que la personne choisit.",
+      "en": "Each new row gets a starting value, chosen by the person, in one column."
+    },
+    "etiquettes": [
+      { "fr": "Création", "en": "Creation" },
+      { "fr": "Valeur de départ", "en": "Starting value" }
+    ],
+    "vignette": "valeur-a-la-creation.webp"
+  },
+  {
+    "id": "seuil-a-verifier",
+    "nom": { "fr": "Marquer une ligne quand un montant dépasse un seuil", "en": "Flag a row when an amount goes over a threshold" },
+    "description": {
+      "fr": "Quand un nombre est modifié et dépasse le seuil choisi, une colonne de contrôle reçoit le texte choisi.",
+      "en": "When a number is edited and goes over the chosen threshold, a check column gets the chosen text."
+    },
+    "etiquettes": [
+      { "fr": "Condition", "en": "Condition" },
+      { "fr": "Seuil", "en": "Threshold" }
+    ],
+    "vignette": "seuil-a-verifier.webp"
+  },
+  {
+    "id": "total-calcule",
+    "nom": { "fr": "Calculer un total à partir de deux colonnes", "en": "Work out a total from two columns" },
+    "description": {
+      "fr": "Quand une première colonne change, son produit avec une seconde (quantité × prix) est écrit dans une colonne de total.",
+      "en": "When a first column changes, its product with a second one (quantity × price) is written in a total column."
+    },
+    "etiquettes": [
+      { "fr": "Calcul", "en": "Calculation" },
+      { "fr": "Transformation", "en": "Transform" }
+    ],
+    "vignette": "total-calcule.webp"
+  },
+  {
+    "id": "copie-depuis-une-table",
+    "nom": { "fr": "Recopier une valeur depuis une autre table", "en": "Copy a value from another table" },
+    "description": {
+      "fr": "Quand un code est saisi, son libellé est lu dans une autre table (un catalogue) et recopié dans la ligne.",
+      "en": "When a code is typed, its label is looked up in another table (a catalogue) and copied into the row."
+    },
+    "etiquettes": [
+      { "fr": "Lecture", "en": "Lookup" },
+      { "fr": "Autre table", "en": "Other table" }
+    ],
+    "vignette": "copie-depuis-une-table.webp"
+  }
+]
