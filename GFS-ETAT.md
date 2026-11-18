@@ -1,6 +1,6 @@
 # GFS-ETAT : Automation+ (Grist Automation Builder)
 
-Mis à jour le 2026-11-17, au commit `44d3e64` (le dernier commit que cette page décrit ; le dernier commit de code est toujours `c3c88d6`, l'app est à la 0.15.3).
+Mis à jour le 2026-11-18, au commit `44d3e64` (le dernier commit que cette page décrit ; le dernier commit de code est toujours `c3c88d6`, l'app est à la 0.15.3).
 
 ## Consignes
 - 001 · faite · `e356021` · écarts à la 1.1 relevés dans le code existant : règles 2, 3, 4 et 12 ; corrigés à `6eb0165` : 3, 4 et 12 (sauf le logo) ; restent la règle 2 et le logo ; les neuf autres sont respectées ou sans objet
@@ -62,6 +62,10 @@ Mis à jour le 2026-11-17, au commit `44d3e64` (le dernier commit que cette page
   - légendes (60 caractères au plus, français et anglais) : 1 « Quand le Statut devient Clos, ajouter une ligne à Archive » ; 2 « Tester sur une ligne : chaque nœud indique son résultat » ; 3 « Le journal garde les exécutions et leur résultat »
   - essais : VITRINE-01 à 04 (dossier, deux langues et longueurs, aucune promesse de sécurité, dimensions et poids), `npm test` : 217 ; VITRINE-R1 et R2 à jouer (`docs/TESTS_GRIST_REEL.md`)
   - pas fait : les captures en thème sombre (la consigne demande le clair) ; l'affichage de la carte et de la fiche dans GFS, qui revient à GFS
+- 019 · lue · aucun code à changer · GFS a reçu la vitrine : sa référence de l'app est `4390ac1`, le commit de la page de la 018 (entre `aaad9bf` et lui, seuls `vitrine/`, des essais, le README, `docs/` et cette page changent, aucun fichier de l'app) ; relevé dans le dépôt de GFS à `a16fe10` :
+  - images : `prototype/vitrine/automation/1.webp`, `2.webp` et `3.webp` sont identiques octet pour octet à celles de `vitrine/` (28 720, 30 930 et 39 908 octets)
+  - manifeste : le champ `vitrine` de `prototype/manifestes/automation.json` porte la description (242 et 185 caractères) et les trois légendes, mot pour mot comme `vitrine/vitrine.json`
+  - pas mesuré de notre côté : la carte et la fiche à l'écran (GFS les a mesurées sous Firefox, à 700 × 400, en français et en anglais, en clair et en sombre) ni dans le Grist du porteur (VITRINE-R2) ; si une capture est refaite, le fichier est remplacé sous le même nom dans `vitrine/` et la ligne « vitrine » de « Demandes à GFS » redite avec le nouveau commit
 
 ## Changements qui touchent GFS
 - 2026-11-17 · `44d3e64` · la vitrine de l'app (consigne 018), sans changer l'app (toujours la 0.15.3) :
