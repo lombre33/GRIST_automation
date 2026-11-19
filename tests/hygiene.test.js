@@ -203,6 +203,46 @@ test('HYG-21 règle S9 : SECURITY.md, à la racine, dit où signaler une faille,
   assert.match(section, /pas ouvrir de ticket public/);
 });
 
+test('HYG-22 GFS-ETAT.md : les sections « Adresses que l\'app appelle » et « Sécurité » se lisent comme le contrôle de GFS les lit, et disent vrai de la politique de la page (consigne 023)', () => {
+  // La lecture de GFS (prototype/js/apps/security-page.js, `parseState`), reprise sans importer son code : titres de niveau 2 sans accents ni casse, une puce par ligne, cellules séparées par « · ».
+  const normalize = (text) => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’']/g, "'").trim();
+  const sections = new Map();
+  let current = null;
+  for (const line of read('GFS-ETAT.md').split('\n')) {
+    const title = /^##\s+(.+?)\s*$/.exec(line);
+    if (title) { current = normalize(title[1]); sections.set(current, []); } else if (current) sections.get(current).push(line);
+  }
+  const bullets = (lines) => lines.map((line) => /^\s*[-*]\s+(.*\S)\s*$/.exec(line)).filter(Boolean).map((m) => m[1].split(/\s+·\s+/).map((cell) => cell.trim()));
+  assert.ok(sections.has("adresses que l'app appelle") && sections.has('securite'), 'les deux sections sont là');
+  // Les adresses dites sont celles que la politique ouvre aux appels (connect, img, font, media, frame, worker), ni plus ni moins ; « aucune » seule quand elle n'en ouvre aucune.
+  const csp = read('index.html').match(/Content-Security-Policy" content="([^"]+)"/)[1];
+  const directives = Object.fromEntries(csp.split(/;\s*/).filter(Boolean).map((part) => { const [name, ...sources] = part.split(/\s+/); return [name, sources]; }));
+  const opened = new Set();
+  for (const name of ['connect-src', 'img-src', 'font-src', 'media-src', 'frame-src', 'worker-src']) {
+    for (const source of directives[name] || directives['default-src']) {
+      const host = /^(?:[a-z]+:\/\/)?([^/:?#]+\.[^/:?#]+)/i.exec(source);
+      if (host) opened.add(host[1].toLowerCase());
+    }
+  }
+  const calls = bullets(sections.get("adresses que l'app appelle"));
+  const said = calls.map((cells) => /^(?:https?:\/\/)?([^/\s:]+\.[^/\s:]+)/i.exec(cells[0])).filter(Boolean).map((m) => m[1].toLowerCase());
+  assert.deepStrictEqual([...new Set(said)].sort(), [...opened].sort(), 'chaque adresse que la politique ouvre est dite, et seulement elles');
+  if (!opened.size) assert.deepStrictEqual(calls.map((cells) => cells[0]), ['aucune'], '« aucune » seule quand la politique n\'ouvre aucun appel');
+  // Sécurité : une ligne par règle, de S1 à S9, d'un état que GFS sait lire ; « en cours » dit sa date, « non tenue » dit pourquoi ; GFS n'en montre que les 200 premiers caractères.
+  const rules = bullets(sections.get('securite'));
+  assert.deepStrictEqual(rules.map((cells) => cells[0]), ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9'], 'une ligne par règle, dans l\'ordre');
+  for (const [id, status = '', ...rest] of rules) {
+    const known = /^(tenue|en cours, prévue le \d{2}\/\d{2}|non tenue, .+)$/.test(status);
+    assert.ok(known, `${id} : « tenue », « en cours, prévue le JJ/MM » ou « non tenue, pourquoi » (lu : « ${status} »)`);
+    assert.ok([status, ...rest].join(' · ').length <= 200, `${id} : GFS ne lit que les 200 premiers caractères de la ligne`);
+  }
+  // S6 est déclarée par l'app, GFS ne peut pas la vérifier ; les autres règles ont leur essai (HYG-06, 20 et 21, E2E-101 à 104) : une ligne « tenue » les cite.
+  assert.match(rules[0].join(' '), /HYG-06/);
+  assert.match(rules[6].join(' '), /dependabot\.yml/);
+  assert.match(rules[7].join(' '), /violations-start\.js|premier import de `js\/gfs\.js`/);
+  assert.match(rules[8].join(' '), /SECURITY\.md/);
+});
+
 test('HYG-17 les couleurs propres à l\'app, que l\'ambiance de GFS ne change pas, forment une liste écrite et justifiée (consigne 006)', {
   skip: !fs.existsSync(path.join(root, 'kit/js/ambiance-message.js')) && 'le kit n\'est pas récupéré (git submodule update --init)',
 }, async () => {

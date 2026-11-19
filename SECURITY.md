@@ -29,6 +29,10 @@ Le script de Grist pose les couleurs de son thème dans une balise `<style id="g
 
 `'unsafe-eval'` est présent **uniquement à cause du script de Grist**, qui évalue ses propres modules : sans lui, l'objet `grist` n'existe pas et le widget ne peut pas demander l'accès au document. Le code du widget n'utilise pas `eval`. Point à signaler à l'audit.
 
+## Dépendances
+
+Le widget ne charge aucune bibliothèque d'un CDN : le seul code d'un autre site est le script d'API de Grist, que Grist sert. Sa seule dépendance est le kit de la suite Grist Factory (`kit/`, sous-module Git de `grist-factory-kit`) ; Dependabot en propose l'avancement chaque semaine (`.github/dependabot.yml`, test `HYG-20`), et avancer la référence du kit est un commit à part, relu, dit dans `GFS-ETAT.md`. Les essais s'appuient sur Node et sur Playwright, installés hors du dépôt : `package.json` ne liste aucune dépendance.
+
 ## Limites connues
 
 - Le widget n'exécute les automatisations que tant qu'il est ouvert dans un navigateur ; un seul onglet exécute à la fois (verrou dans la table `Automation`, relais après 20 s ; un onglet rechargé reprend tout de suite, test `E2E-49`).
