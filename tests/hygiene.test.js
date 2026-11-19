@@ -42,9 +42,17 @@ test('HYG-05 pas d\'emoji ni de police d\'icônes dans l\'interface', () => {
   assert.deepStrictEqual(offenders(everything, /font-?awesome|material-icons/i), []);
 });
 
-test('HYG-06 la politique de sécurité n\'autorise que le widget et l\'API Grist', () => {
+test('HYG-06 la politique de sécurité n\'autorise que le widget et l\'API Grist (règles S1 à S4 du guide des apps, 1.4)', () => {
   const csp = read('index.html').match(/Content-Security-Policy" content="([^"]+)"/)[1];
   assert.match(csp, /default-src 'none'/);
+  // S2 : rien n'est ouvert que la page n'utilise, `object-src`, `base-uri` et `form-action` sont dits ; S3 : aucune directive d'appel n'ouvre autre chose que 'self' ; S4 : un script nommé par son adresse entière.
+  const directives = Object.fromEntries(csp.split(/;\s*/).filter(Boolean).map((part) => { const [name, ...sources] = part.split(/\s+/); return [name, sources]; }));
+  for (const name of ['default-src', 'object-src', 'base-uri', 'form-action']) assert.deepStrictEqual(directives[name], ["'none'"], `S2 : ${name} 'none'`);
+  assert.deepStrictEqual(directives['style-src'], ["'self'"], 'S2 : aucune feuille en ligne');
+  for (const name of ['connect-src', 'font-src', 'media-src', 'frame-src', 'worker-src', 'child-src']) {
+    assert.ok(!directives[name] || directives[name].every((source) => ["'none'", "'self'"].includes(source)), `S3 : ${name} n'ouvre que 'self'`);
+  }
+  assert.deepStrictEqual(directives['script-src'], ["'self'", "'unsafe-eval'", 'https://docs.getgrist.com/grist-plugin-api.js'], 'S4 : le script de Grist par son adresse entière, rien d\'autre');
   // 'unsafe-eval' est imposé par le bundle de l'API Grist (voir index.html) ; rien d'autre n'est assoupli.
   assert.match(csp, /'unsafe-eval'/, 'sans lui, l\'API Grist ne démarre pas');
   assert.doesNotMatch(csp.replace(/'unsafe-eval'/, ''), /unsafe-|connect-src/);
@@ -174,6 +182,25 @@ test('HYG-16 les modules du kit que la page charge ne font aucun appel réseau, 
   assert.ok(reached.length >= 2, `les modules du kit atteints (${reached.join(', ')})`);
   assert.deepStrictEqual(offenders(reached, /\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|\beval\s*\(|new\s+Function|\bimport\s*\(|innerHTML|outerHTML|insertAdjacentHTML|document\.write|cssText|setAttribute\(\s*['"]style['"]/), [], 'un module du kit fait ce que la politique de sécurité de la page ne laisse pas faire : relire avant de passer à ce commit du kit');
   assert.deepStrictEqual(offenders(reached, /https?:\/\//), [], 'aucune adresse écrite dans les modules chargés');
+});
+
+test('HYG-20 règle S7 : Dependabot suit chaque sorte de dépendance du dépôt, et seulement elles (.github/dependabot.yml : le kit en sous-module ; npm ou github-actions le jour où l\'un apparaît)', () => {
+  const config = read('.github/dependabot.yml');
+  assert.match(config, /^version: 2$/m);
+  const ecosystems = [...config.matchAll(/package-ecosystem:\s*(\S+)/g)].map((m) => m[1]);
+  assert.match(config, /package-ecosystem: gitsubmodule\s+directory: \/\s/, 'le kit, sous-module à la racine, est suivi');
+  const manifest = JSON.parse(read('package.json'));
+  const hasPackages = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'].some((key) => Object.keys(manifest[key] || {}).length > 0);
+  assert.strictEqual(ecosystems.includes('npm'), hasPackages, 'npm est suivi si, et seulement si, package.json liste des dépendances');
+  const workflows = fs.existsSync(path.join(root, '.github/workflows')) ? fs.readdirSync(path.join(root, '.github/workflows')).filter((f) => /\.ya?ml$/.test(f)) : [];
+  assert.strictEqual(ecosystems.includes('github-actions'), workflows.length > 0, 'github-actions est suivi si, et seulement si, le dépôt a un workflow');
+});
+
+test('HYG-21 règle S9 : SECURITY.md, à la racine, dit où signaler une faille, en privé', () => {
+  const section = read('SECURITY.md').split(/^## Signaler une vulnérabilité$/m)[1];
+  assert.ok(section, 'une section « Signaler une vulnérabilité »');
+  assert.match(section, /signalement privé de GitHub/);
+  assert.match(section, /pas ouvrir de ticket public/);
 });
 
 test('HYG-17 les couleurs propres à l\'app, que l\'ambiance de GFS ne change pas, forment une liste écrite et justifiée (consigne 006)', {

@@ -17,7 +17,9 @@ Ce widget est destiné à être relu par la DINUM avant publication. Ce document
 
 ## Politique de sécurité de la page (CSP)
 
-`default-src 'none'; script-src 'self' 'unsafe-eval' https://docs.getgrist.com/grist-plugin-api.js; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'`.
+`default-src 'none'; script-src 'self' 'unsafe-eval' https://docs.getgrist.com/grist-plugin-api.js; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'`.
+
+Aucune autre directive n'est écrite : `connect-src`, `font-src`, `media-src`, `frame-src` et `worker-src` suivent `default-src 'none'`, donc la page n'appelle aucune adresse (règles S1 à S4 du guide des apps, 1.4 ; test `HYG-06`). `object-src 'none'` est écrit pour que la règle S2 le lise sans suivre `default-src`.
 
 Les images viennent du site du widget (`'self'` : les captures de la prise en main, `img/tuto/`, en WebP) ou de la page elle-même (`data:` : les icônes) ; aucune d'un autre site (test `HYG-06`).
 

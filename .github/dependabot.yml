@@ -1,0 +1,10 @@
+# Les mises à jour proposées (règle S7 du guide des apps, consigne 023). Une proposition = une demande de fusion à relire ; rien n'avance seul.
+# - gitsubmodule : la référence du kit (`kit/`), la seule dépendance de l'app. Avancer cette référence est un commit à part, relu, dit dans « Changements qui touchent GFS » de `GFS-ETAT.md`.
+# Pas de `npm` : `package.json` ne liste aucune dépendance (les essais s'appuient sur Node et sur Playwright, installés hors du dépôt). Pas de `github-actions` : le dépôt n'a aucun workflow
+# (GitHub Pages publie la branche `main`). Le jour où l'un des deux apparaît, une ligne de plus ici (HYG-20 le rappelle).
+version: 2
+updates:
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
