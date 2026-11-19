@@ -15,8 +15,9 @@ let failures = 0;
 // E2E_ONLY=<expression régulière> ne joue que les scénarios dont le nom lui correspond (E2E_ONLY='E2E-3[6-9]|E2E-4').
 // tutorial : la prise en main s'ouvre d'elle-même, comme dans un navigateur qui ne l'a jamais vue ; sinon, elle est déjà vue et ne gêne pas le scénario.
 // intervals : les minuteries du battement du verrou (6 s) encore en route sont comptées dans `window.__heartbeats.live` (un ensemble d'identifiants), dans la page comme dans le cadre de l'app.
+// initScript : une fonction jouée dans chaque cadre avant les scripts de la page ; routes : [[glob, (route) => …]] pour répondre autrement à une demande (une page qu'on veut piéger, un script qui en fait un de plus).
 // E2E_TIMEOUT=<millisecondes> : le temps qu'un scénario a pour finir (90 s par défaut) ; au-delà il échoue avec un message, au lieu de laisser tout l'essai suspendu (une app muette, une attente sans fin).
-async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '', tutorial = false, intervals = false } = {}) {
+async function scenario(name, run, { grist = true, viewport = { width: 1100, height: 700 }, noTables = false, foreignLock = false, preloadLogs = 0, init = null, host = null, blocked = [], tolerated = [], query = '', tutorial = false, intervals = false, initScript = null, routes = [] } = {}) {
   if (process.env.E2E_ONLY && !new RegExp(process.env.E2E_ONLY).test(name)) return;
   const context = await browser.newContext({ viewport, locale: 'fr-FR' });
   if (!tutorial) await tutorialSeen(context);
@@ -48,6 +49,8 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
     });
   }
   for (const glob of blocked) await page.route(glob, (route) => route.abort());
+  if (initScript) await page.addInitScript(initScript);
+  for (const [glob, handler] of routes) await page.route(glob, handler);
   await routeApi(page, grist);
   const limit = Number(process.env.E2E_TIMEOUT) || 90000;
   let timer = null;
@@ -648,6 +651,7 @@ await scenario('E2E-35 contenu du document illisible, graphe actif dans les rég
 
 /* ---------- App hébergée par GFS (consignes 003 et 006) ----------
    Un faux GFS (tests/e2e/gfs-host.html) ouvre l'app dans un cadre isolé comme chez GFS, lui rend le contexte et lui envoie des événements, comme le ferait GFS. */
+const KIT_VERSION = JSON.parse(fs.readFileSync(path.join(root, 'kit/package.json'), 'utf8')).version;   // celle que le relais dit à GFS
 const POP = JSON.parse(fs.readFileSync(path.join(root, 'kit/test/ambiance-exemple.json'), 'utf8'));   // l'ambiance Pop, message d'exemple du kit
 const SMALL = { width: 700, height: 400 };
 // La barre telle que GFS la mesure à 700 × 400 (consigne 003) : 124 × 34 à 4 px du bord et centrée, la zone en ajoute 4 autour.
@@ -715,9 +719,11 @@ const unreadable = (app) => app.evaluate(() => {
 });
 
 await scenario('E2E-36 hébergée par GFS sans ambiance ni barre : l\'app a demandé le contexte et garde ses couleurs et sa disposition', async (page, app) => {
-  // Tout ce que l'app dit à GFS : la demande du contexte, rien d'autre (SECURITY.md : aucune donnée du document ne part par ce lien).
-  const said = await page.evaluate(() => window.hote.received().map((m) => `${m.type}:${m.nom}`));
-  assert.deepEqual(said, ['appel:contexte']);
+  // Tout ce que l'app dit à GFS : la demande du contexte et l'annonce de son relais des appels bloqués (consigne 024, sans réponse attendue), rien d'autre (SECURITY.md : aucune donnée du document ne part par ce lien).
+  const said = await page.evaluate(() => window.hote.received());
+  assert.deepEqual(said.map((m) => `${m.type}:${m.nom}`), ['appel:contexte', 'appel:securite']);
+  assert.deepEqual(said[1].args, { quoi: 'relais', kit: KIT_VERSION });
+  assert.equal('id' in said[1], false, 'un appel sans id : GFS n\'a rien à répondre');
   assert.equal(await app.evaluate(() => document.documentElement.hasAttribute('data-gfs-pending')), false, 'l\'attente est levée');
   assert.equal(await app.evaluate(() => 'gfsBar' in document.documentElement.dataset), false, 'pas de barre');
   await addNode(page, 'Déclencheur', 40, 120);
@@ -2043,6 +2049,67 @@ for (const edge of ['haut', 'bas', 'gauche', 'droite']) {
     assert.equal(await insideCanvas(app), true, 'tout le graphe tient dans le canevas');
   }, { host: { context: { barre: BARS[edge], ambiance: null, ouverture: modelOpening('statut-vers-archive') } }, viewport: SMALL });
 }
+
+/* ---------- Le relais des appels bloqués (consigne 024, règle S8 du guide des apps ; kit 0.25.0) ----------
+   Le faux GFS reçoit ce que l'app lui dit quand la politique de sa page bloque un appel : l'hôte seul, jamais le chemin, les paramètres ni le fragment (contrats de GFS 5.4, point 14). */
+const relayed = (page) => page.evaluate(() => window.hote.received().filter((m) => m.nom === 'securite' && m.args.quoi === 'bloque').map((m) => m.args));
+
+await scenario('E2E-101 un appel que la politique de la page bloque (fetch, image, script) est dit à GFS avec son hôte seul : ni chemin, ni paramètres, ni fragment ; la même violation ne repart pas', async (page, app) => {
+  await app.evaluate(() => {
+    fetch('https://exemple.test/x?secret=1#frag').catch(() => null);
+    new Image().src = 'https://img.exemple.test/pixel.png?token=2';
+    const script = document.createElement('script');
+    script.src = 'https://scripts.exemple.test/a.js?key=3';
+    document.head.append(script);
+  });
+  await page.waitForFunction(() => window.hote.received().filter((m) => m.nom === 'securite' && m.args.quoi === 'bloque').length >= 3);
+  const seen = await relayed(page);
+  assert.deepEqual(seen.map((args) => [args.directive, args.cible]).sort(), [['connect-src', 'exemple.test'], ['img-src', 'img.exemple.test'], ['script-src-elem', 'scripts.exemple.test']]);
+  for (const args of seen) {
+    assert.deepEqual(Object.keys(args).sort(), ['cible', 'directive', 'disposition', 'fois', 'quoi', 'source']);
+    assert.equal(args.disposition, 'enforce');
+    assert.equal(args.fois, 1);
+  }
+  assert.doesNotMatch(JSON.stringify(await page.evaluate(() => window.hote.received())), /secret|frag|pixel|token|a\.js|key=3|\/x\b/, 'ni chemin, ni paramètres, ni fragment dans ce que GFS a reçu');
+  await app.evaluate(() => fetch('https://exemple.test/x?secret=1#frag').catch(() => null));
+  await app.waitForTimeout(500);
+  assert.equal((await relayed(page)).length, 3, 'la même violation ne repart pas à la deuxième fois');
+}, { host: { context: {} }, tolerated: [/exemple\.test/] });
+
+// Limite mesurée, dite à GFS (GFS-ETAT.md, S8) : les scripts classiques de la page s'évaluent avant le module qui démarre le relais (un module n'est évalué qu'une fois la page lue). Un appel que l'un d'eux
+// fait en se chargeant (ici, une ligne de plus en tête de js/theme.js, le premier script de la page) est bloqué par la politique, vu par une écoute posée dès le départ, et pas relayé.
+await scenario('E2E-102 limite connue : un appel bloqué pendant le chargement des scripts classiques, avant le module du relais, n\'est pas relayé (la politique le bloque quand même) ; celui d\'après l\'est', async (page, app) => {
+  await app.evaluate(() => fetch('https://after-module.test/y?secret=2').catch(() => null));
+  await page.waitForFunction(() => window.hote.received().some((m) => m.nom === 'securite' && m.args.quoi === 'bloque'));
+  await app.waitForTimeout(300);
+  assert.ok((await app.evaluate(() => window.__early)).some((uri) => uri.startsWith('https://early-classic.test/')), 'la politique a bien bloqué l\'appel d\'avant le module (une écoute posée dès le départ l\'a vu)');
+  assert.deepEqual((await relayed(page)).map((args) => args.cible), ['after-module.test'], 'seul l\'appel d\'après le module est relayé ; si celui d\'avant l\'est aussi, le kit a changé : relire la ligne S8 de GFS-ETAT.md et la question qui l\'accompagne');
+}, {
+  host: { context: {} }, tolerated: [/early-classic\.test|after-module\.test/],
+  initScript: () => { window.__early = []; document.addEventListener('securitypolicyviolation', (event) => window.__early.push(event.blockedURI)); },
+  routes: [['**/js/theme.js*', async (route) => {
+    const reply = await route.fetch();
+    await route.fulfill({ response: reply, body: `fetch('https://early-classic.test/a?secret=1').catch(() => {});\n${await reply.text()}` });
+  }]],
+});
+
+// Combien d'écoutes de `securitypolicyviolation` la page pose : seule, aucune ; sous GFS, la seule du relais.
+const countViolationListeners = () => {
+  window.__violationListeners = 0;
+  const add = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function (type, ...rest) {
+    if (type === 'securitypolicyviolation') window.__violationListeners += 1;
+    return add.call(this, type, ...rest);
+  };
+};
+await scenario('E2E-103 seule dans Grist, la page n\'écoute aucune violation de sa politique : il n\'y a personne à qui la dire', async (page) => {
+  await page.waitForSelector('#add-node');
+  assert.equal(await page.evaluate(() => window.__violationListeners), 0);
+}, { initScript: countViolationListeners });
+
+await scenario('E2E-104 sous GFS, la page n\'a qu\'une écoute des violations de sa politique, celle du relais', async (page, app) => {
+  assert.equal(await app.evaluate(() => window.__violationListeners), 1);
+}, { host: { context: {} }, initScript: countViolationListeners });
 
 await browser.close();
 server.close();

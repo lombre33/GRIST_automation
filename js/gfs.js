@@ -1,14 +1,18 @@
 // Le lien avec GFS (consignes 003 et 006 ; guide des apps 1.2, points 1, 4 et 9, et règle 15). Le kit commun des apps Grist Factory, référencé en sous-module (kit/, commit ed0a575, version 0.27.0),
-// porte tout le dialogue ; ce module n'en prend que cinq choses :
+// porte tout le dialogue ; ce module n'en prend que six choses :
 //  - la barre de GFS, que l'app laisse libre (js/keep-clear.js) : { bord, epaisseur, zone } en pixels du cadre, ou null ;
 //  - l'ambiance que la personne a choisie dans GFS pour GFS et pour toutes ses apps, posée par le kit sur <html> (les jetons de la charte et de forme que lisent les feuilles de css/) ;
 //  - l'appel `fermer` (consigne 010) : GFS ne détruit le cadre de l'app qu'après son oui ; js/closing.js enregistre ce qui attend, laisse finir ce qui s'écrit, et ne pose sa question que si l'écriture échoue ;
 //  - l'appel `rester` (consigne 016) : après ce oui, la personne est revenue avant la destruction du cadre ; js/closing.js reprend ce que `fermer` avait arrêté (le battement, le verrou, les lignes reçues) ;
 //  - l'ouverture d'un modèle de départ (consigne 021, « Nouveau > Depuis un modèle ») : au démarrage, celle que porte le contexte (`raison: 'modele'`, `modele: { id }`, gardé par le kit depuis la 0.24.0) ; l'app déjà ouverte, l'appel `ouvrir` ;
 //    js/model-opening.js ne montre qu'un modèle de son catalogue (js/models.js), non enregistré, et rend faux pour tout le reste : le kit répond alors `{ ouvert: false }`, jamais un éditeur vide à la place.
+//  - le relais des appels bloqués (consigne 024, règle S8 du guide, contrats de GFS 5.4, point 14) : `violations-start.js`, importé en premier, écoute `securitypolicyviolation` et dit à GFS, sans réponse attendue, le nom d'hôte seul de chaque appel que la
+//    politique de la page bloque (jamais le chemin, les paramètres ni le fragment) ; il informe, il ne protège pas : la protection est la politique de index.html. Seule dans Grist, rien n'écoute. Limite mesurée (E2E-102, docs/TESTS_GRIST_REEL.md) : les scripts
+//    classiques de la page (celui de l'API de Grist, ceux de js/) s'évaluent avant ce module, qui n'est évalué qu'une fois la page lue ; un appel qu'ils feraient en se chargeant est bloqué mais n'est pas relayé.
 // Seule, l'app n'a ni barre ni ambiance ni appel : le kit ne dit rien et ne pose rien. Module à part, chargé en plus des scripts de l'app : si le kit manque (une copie du dépôt sans ses sous-modules),
 // ce module échoue seul, l'attente de js/theme.js se lève d'elle-même et l'app s'ouvre avec ses couleurs.
 // Le mode (clair ou sombre) est celui de js/theme.js, qui pose data-theme sur <html> et garde son propre choix (ab_theme) : on donne donc son `isDark` à la pose de l'ambiance, au lieu du `Theme` du kit.
+import '../kit/js/violations-start.js';
 import { GfsLink } from '../kit/js/gfs-link.js';
 import { createAmbiance } from '../kit/js/ambiance-pose.js';
 

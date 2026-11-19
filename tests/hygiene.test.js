@@ -138,8 +138,10 @@ test('HYG-14 le kit commun est un sous-module du dépôt de GFS, et js/gfs.js en
   assert.ok(staged[1].startsWith(cited[1]), `le commit cité (${cited[1]}) est celui que le dépôt référence (${staged[1].slice(0, 7)})`);
 });
 
-test('HYG-15 js/gfs.js n\'importe que les deux modules du kit dont il a besoin, par chemin relatif : aucune adresse, aucun import dynamique', () => {
-  assert.deepStrictEqual([...read('js/gfs.js').matchAll(/\bfrom\s+'([^']+)'/g)].map((m) => m[1]).sort(), ['../kit/js/ambiance-pose.js', '../kit/js/gfs-link.js']);
+test('HYG-15 js/gfs.js n\'importe que trois modules du kit, par chemin relatif, le relais des appels bloqués d\'abord (règle S8, consigne 024) : aucune adresse, aucun import dynamique', () => {
+  // Le relais est la première ligne d'import du module d'entrée : il démarre avant que les autres modules de la chaîne s'évaluent (une violation d'avant n'est pas vue).
+  assert.deepStrictEqual([...read('js/gfs.js').matchAll(/^import\s+(?:[^'\n]*?\bfrom\s+)?'([^']+)'/gm)].map((m) => m[1]),
+    ['../kit/js/violations-start.js', '../kit/js/gfs-link.js', '../kit/js/ambiance-pose.js']);
   assert.deepStrictEqual(offenders(jsFiles, /\bimport\s*\(/), []);
   assert.deepStrictEqual([...read('index.html').matchAll(/<script[^>]*type="module"[^>]*src="([^"?]+)(?:\?v=[\d.]+)?"/g)].map((m) => m[1]), ['js/gfs.js'], 'le seul module chargé par la page');
 });
@@ -160,7 +162,8 @@ test('HYG-18 chaque script et feuille de l\'app est demandé avec la version de 
 function kitModulesReached(entry = 'js/gfs.js', seen = new Set()) {
   if (seen.has(entry)) return seen;
   seen.add(entry);
-  for (const m of read(entry).matchAll(/\bfrom\s+'(\.[^']+)'/g)) kitModulesReached(path.join(path.dirname(entry), m[1]), seen);
+  const source = read(entry);
+  for (const m of [...source.matchAll(/\bfrom\s+'(\.[^']+)'/g), ...source.matchAll(/^import\s+'(\.[^']+)'/gm)]) kitModulesReached(path.join(path.dirname(entry), m[1]), seen);   // `import './x.js'` seul : le relais
   return seen;
 }
 
