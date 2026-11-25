@@ -41,10 +41,10 @@ test('STORE-02 la table n\'est créée que seule, et rien d\'autre n\'est ajout�
   assert.deepStrictEqual(existing.tables.get(S.TABLE).columns, ['Type', 'Config']);
 });
 
-test('STORE-03 la colonne Auteur est une formule déclenchée user.Email', async () => {
+test('STORE-03 la colonne Author est une formule déclenchée user.Email', async () => {
   const doc = createFakeDoc();
   await S.ensureTables(doc);
-  const column = doc.tables.get(S.TABLE).spec.find((c) => c.id === 'Auteur');
+  const column = doc.tables.get(S.TABLE).spec.find((c) => c.id === 'Author');
   assert.strictEqual(column.formula, 'user.Email');
   assert.strictEqual(column.isFormula, false);
 });
@@ -66,8 +66,8 @@ test('STORE-05 enregistrer un graphe : une ligne par table de vue, mise à jour 
   const rows = doc.tables.get(S.TABLE).rows;
   assert.strictEqual(rows.length, 2);
   assert.strictEqual(rows[0].Type, S.WORKFLOW);
-  assert.strictEqual(rows[0].Actif, true);
-  assert.strictEqual(rows[0].Resume, 'résumé 2');
+  assert.strictEqual(rows[0].Active, true);
+  assert.strictEqual(rows[0].Summary, 'résumé 2');
 });
 
 test('STORE-06 relire le graphe de la bonne table, aller-retour sans perte', async () => {
@@ -106,12 +106,12 @@ test('STORE-08 journal : une ligne par exécution, pages de la plus récente à 
     await S.appendLog(doc, { date: i * 1000, table: i === 4 ? 'Services' : 'Contacts', event: 'update', row: i, result: 'success', detail: 'd' + i });
   }
   const first = await S.logsPage(doc, 'Contacts', 3);
-  assert.deepStrictEqual(first.rows.map((r) => r.Ligne), [5, 3, 2]);
+  assert.deepStrictEqual(first.rows.map((r) => r.Row), [5, 3, 2]);
   assert.strictEqual(first.rows[2].Date, 2);
   assert.strictEqual(first.more, true);
   assert.ok(first.rows.every((r) => r.Type === S.LOG));
   const second = await S.logsPage(doc, 'Contacts', 3, first.rows[2].id);
-  assert.deepStrictEqual(second.rows.map((r) => r.Ligne), [1]);
+  assert.deepStrictEqual(second.rows.map((r) => r.Row), [1]);
   assert.strictEqual(second.more, false);
 });
 
@@ -122,7 +122,7 @@ test('STORE-12 une exécution ajoutée entre deux pages ne décale pas la page s
   const first = await S.logsPage(doc, 'Contacts', 2);
   await S.appendLog(doc, { date: 9, table: 'Contacts', event: 'update', row: 9, result: 'success' });
   const second = await S.logsPage(doc, 'Contacts', 2, first.rows[1].id);
-  assert.deepStrictEqual(second.rows.map((r) => r.Ligne), [2, 1]);
+  assert.deepStrictEqual(second.rows.map((r) => r.Row), [2, 1]);
 });
 
 test('STORE-09 les tables du widget sont reconnues pour être masquées', () => {

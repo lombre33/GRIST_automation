@@ -19,8 +19,9 @@ function createFakeApi(opts) {
 }
 
 // Faux document : tables en mémoire avec AddTable, AddRecord et UpdateRecord, comme grist.docApi.
-// Comme Grist : un identifiant de table déjà pris (sans tenir compte de la casse) est changé en `nom_2`, et une écriture dans une colonne
-// qui n'existe pas échoue en entier. options.renameTables : { demandé: obtenu } force un autre identifiant. failNext : le prochain appel à applyUserActions échoue.
+// Comme Grist : un identifiant de table déjà pris (sans tenir compte de la casse) est changé en `nom_2`, et une écriture dans une table ou une colonne
+// qui n'existe pas échoue en entier, avec le message du moteur de Grist (« [Sandbox] KeyError 'Nom' », vu dans un vrai Grist le 2026-11-25) ; lire une table qui n'existe pas
+// répond « Table not found "Nom" ». options.renameTables : { demandé: obtenu } force un autre identifiant. failNext : le prochain appel à applyUserActions échoue.
 function createFakeDoc(initialTables, opts) {
   const options = opts || {};
   const tables = new Map(Object.entries(initialTables || {}).map(([name, columns]) => [name, { columns, rows: [] }]));
@@ -33,7 +34,7 @@ function createFakeDoc(initialTables, opts) {
     async listTables() { return [...tables.keys()]; },
     async fetchTable(name) {
       const table = tables.get(name);
-      if (!table) throw new Error('Table inconnue : ' + name);
+      if (!table) throw new Error('Table not found "' + name + '"');
       const data = { id: table.rows.map((r) => r.id) };
       for (const column of table.columns) data[column] = table.rows.map((r) => r[column]);
       return data;
@@ -44,9 +45,12 @@ function createFakeDoc(initialTables, opts) {
         this.failNext = null;
         throw new Error(message);
       }
-      const unknown = actions.filter(([kind, name, , values]) => (kind === 'AddRecord' || kind === 'UpdateRecord') && tables.has(name)
-        && Object.keys(values).some((column) => !tables.get(name).columns.includes(column)));
-      if (unknown.length) throw new Error('Invalid column "' + Object.keys(unknown[0][3]).find((column) => !tables.get(unknown[0][1]).columns.includes(column)) + '"');
+      for (const [kind, name, , values] of actions) {
+        if (kind !== 'AddRecord' && kind !== 'UpdateRecord') continue;
+        if (!tables.has(name)) throw new Error("[Sandbox] KeyError '" + name + "'");
+        const column = Object.keys(values).find((candidate) => !tables.get(name).columns.includes(candidate));
+        if (column) throw new Error("[Sandbox] KeyError '" + column + "'");
+      }
       for (const [kind, name, rowId, values] of actions) {
         if (kind === 'AddTable') {
           if (options.rejectFormulaColumns && rowId.some((c) => c.formula)) throw new Error('Colonne à formule refusée');

@@ -1,5 +1,5 @@
 // Exécuteur unique : quand le même document est ouvert dans plusieurs onglets (ou chez plusieurs personnes), un seul exécute les workflows.
-// Élection par un verrou dans la table Automation (ligne Type = Lock) renouvelé toutes les quelques secondes.
+// Élection par un verrou dans la table du widget (ligne Type = Lock) renouvelé toutes les quelques secondes.
 // Un onglet qui voit le verrou d'un autre change de date reste en veille ; si la date ne change plus pendant `ttl` secondes (onglet fermé ou planté),
 // il prend le relais. On compare des dates vues par soi-même, pas l'horloge des autres : un décalage d'horloge entre navigateurs ne gêne pas.
 // Limite : les modifications faites pendant le relais (au plus `ttl` secondes) ne sont exécutées par personne. Un onglet rechargé n'attend pas ce relais :

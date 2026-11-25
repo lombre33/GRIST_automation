@@ -8,6 +8,12 @@ import { root, stubSource, serve, launch, routeApi, tutorialSeen, addNode, pick,
 const { server, url } = await serve();
 const browser = await launch();
 let failures = 0;
+// Deux jeux de noms (consigne 028 de GFS) : par défaut le document des scénarios est neuf (table `Automation_Store`, colonnes anglaises) ; avec E2E_NAMES=legacy, c'est un document
+// d'avant la 0.15.6 (table `Automation`, colonnes françaises) : les mêmes scénarios, jouent la lecture et l'écriture sous les anciens noms. Quand l'app crée la table (noTables), elle est toujours anglaise.
+// key(nom) : le nom, dans le document des scénarios, de l'une des six colonnes qui ont changé. Les lignes préchargées (__preloadRows) se disent en noms anglais : le simulateur les traduit.
+const LEGACY_RUN = process.env.E2E_NAMES === 'legacy';
+const LEGACY_KEYS = { Active: 'Actif', Summary: 'Resume', Event: 'Evenement', Row: 'Ligne', Result: 'Resultat', Author: 'Auteur' };
+const key = (name) => (LEGACY_RUN && LEGACY_KEYS[name]) || name;
 // host : { context, fallback, query } joue l'app dans un faux GFS (tests/e2e/gfs-host.html), un cadre isolé comme chez GFS, qui rend `context` à l'appel `contexte` (query : ce qui s'ajoute à l'adresse du cadre) ; run(page, app) reçoit alors aussi le cadre de l'app
 //   (`app`), dans lequel on lit et on clique (`page` reste la page de l'hôte : souris, clavier, captures). Sans host, `app` est la page. `fallback` garde le garde-fou de 2 s de l'attente de l'ambiance.
 // blocked : adresses (globs) dont la requête échoue ; tolerated : messages de la console attendus dans ce scénario.
@@ -28,6 +34,7 @@ async function scenario(name, run, { grist = true, viewport = { width: 1100, hei
   if (preloadLogs) await page.addInitScript((n) => { window.__preloadLogs = n; }, preloadLogs);
   if (foreignLock) await page.addInitScript(() => { window.__foreignLock = true; });
   if (noTables) await page.addInitScript(() => { window.__noTables = true; });
+  if (LEGACY_RUN) await page.addInitScript(() => { window.__legacyNames = true; });
   if (init) await page.addInitScript((values) => Object.assign(window, values), init);
   if (intervals) {
     await page.addInitScript(() => {
@@ -101,12 +108,12 @@ async function push(page, ...records) {
 async function activateAndClose(page) {
   await page.click('#toggle-active');
   await push(page, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  await page.waitForFunction(() => window.__stub.store.rows.filter((r) => r.Type === 'Log').length === 2);
 }
 
-// La ligne illisible de la table Automation est toujours seule et intacte, et les réglages de la vue n'ont rien reçu.
+// La ligne illisible de la table du widget est toujours seule et intacte, et les réglages de la vue n'ont rien reçu.
 async function assertUntouched(target, message) {
-  const rows = await target.evaluate(() => window.__stub.docTables.Automation.rows);
+  const rows = await target.evaluate(() => window.__stub.store.rows);
   assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], message);
   assert.equal(await target.evaluate(() => window.__stub.options.workflow), undefined, 'rien dans les réglages de la vue non plus');
 }
@@ -245,12 +252,12 @@ await scenario('E2E-10 déplacement du fond, zoom à la molette, déplacement d\
   assert.ok(end.x > start.x + 50 && end.y > start.y + 25);
 });
 
-// Le graphe de la table Automation (sans identifiant de ligne), une fois que son dernier état y est écrit.
+// Le graphe de la table du widget (sans identifiant de ligne), une fois que son dernier état y est écrit.
 const savedRows = async (page, done) => {
   await page.waitForFunction(done);
-  return page.evaluate(() => window.__stub.docTables.Automation.rows.map(({ id, ...row }) => row));
+  return page.evaluate(() => window.__stub.store.rows.map(({ id, ...row }) => row));
 };
-const workflowSaved = (test) => `(() => { const row = window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Workflow'); return Boolean(row) && (${test})(JSON.parse(row.Config)); })()`;
+const workflowSaved = (test) => `(() => { const row = window.__stub.store.rows.find((r) => r.Type === 'Workflow'); return Boolean(row) && (${test})(JSON.parse(row.Config)); })()`;
 
 await scenario('E2E-11 sauvegarde automatique et rechargement du graphe', async (page) => {
   await buildFlow(page);
@@ -271,18 +278,18 @@ await scenario('E2E-12 tables du document : accord demandé au démarrage, graph
   assert.match(await page.locator('.modal-title').innerText(), /Créer la table du widget/);
   assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Créer la table', 'le focus est sur l\'action');
   await page.getByRole('button', { name: 'Créer la table' }).click();
-  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['Automation']);
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['Automation_Store']);
   await buildFlow(page);
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((r) => r.Type === 'Workflow') && JSON.parse(window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Workflow').Config).edges.length === 2);
-  const row = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Workflow'));
+  await page.waitForFunction(() => window.__stub.store.rows.some((r) => r.Type === 'Workflow') && JSON.parse(window.__stub.store.rows.find((r) => r.Type === 'Workflow').Config).edges.length === 2);
+  const row = await page.evaluate(() => window.__stub.store.rows.find((r) => r.Type === 'Workflow'));
   assert.equal(row.Type, 'Workflow');
   assert.equal(row.Table, 'Contacts');
-  assert.match(row.Resume, /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action/);
+  assert.match(row.Summary, /Déclencheur : modifiée \(Statut\) → Condition : Statut est égal à Clos → Action/);
   await activateAndClose(page);
-  const log = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log' && r.Evenement === 'update'));
-  const toggle = await page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Log' && r.Evenement === 'activate'));
+  const log = await page.evaluate(() => window.__stub.store.rows.find((r) => r.Type === 'Log' && r.Event === 'update'));
+  const toggle = await page.evaluate(() => window.__stub.store.rows.find((r) => r.Type === 'Log' && r.Event === 'activate'));
   assert.equal(toggle.Table, 'Contacts', 'l\'activation est tracée dans le journal');
-  assert.deepEqual([log.Table, log.Evenement, log.Ligne, log.Resultat], ['Contacts', 'update', 1, 'success']);
+  assert.deepEqual([log.Table, log.Event, log.Row, log.Result], ['Contacts', 'update', 1, 'success']);
 }, { noTables: true });
 
 await scenario('E2E-13 accord refusé : le widget marche sans tables, la question revient à l\'activation', async (page) => {
@@ -345,11 +352,11 @@ await scenario('E2E-15 anti-boucle précis : notre propre écriture ne redéclen
 await scenario('E2E-16 exécution unique : l\'onglet prend le verrou, le libère à la désactivation', async (page) => {
   await buildFlow(page);
   await page.click('#toggle-active');
-  const lock = () => page.evaluate(() => window.__stub.docTables.Automation.rows.find((r) => r.Type === 'Lock'));
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((r) => r.Type === 'Lock' && r.Config));
+  const lock = () => page.evaluate(() => window.__stub.store.rows.find((r) => r.Type === 'Lock'));
+  await page.waitForFunction(() => window.__stub.store.rows.some((r) => r.Type === 'Lock' && r.Config));
   assert.equal(await page.locator('#open-tab-warning').innerText().then((x) => /un autre onglet/.test(x)), false);
   await page.click('#toggle-active');
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((r) => r.Type === 'Lock' && r.Config === ''));
+  await page.waitForFunction(() => window.__stub.store.rows.some((r) => r.Type === 'Lock' && r.Config === ''));
   assert.equal((await lock()).Config, '');
 });
 
@@ -558,16 +565,16 @@ await scenario('E2E-27 workflow d\'une version plus récente dans les réglages 
   assert.match(await page.locator('#log-list').innerText(), /Configuration illisible : elle est conservée telle quelle/);
   await page.waitForTimeout(700);
   assert.equal(await page.evaluate(() => window.__stub.options.workflow), newerGraph, 'les réglages de la vue sont intacts');
-  assert.deepEqual(await page.evaluate(() => window.__stub.docTables.Automation.rows), [], 'rien n\'est écrit dans le document');
+  assert.deepEqual(await page.evaluate(() => window.__stub.store.rows), [], 'rien n\'est écrit dans le document');
 }, { init: { __preloadOptions: { workflow: newerGraph } } });
 
-await scenario('E2E-28 workflow illisible dans la table Automation : conservé tel quel, la ligne n\'est pas touchée', async (page) => {
+await scenario('E2E-28 workflow illisible dans la table du widget : conservé tel quel, la ligne n\'est pas touchée', async (page) => {
   await page.waitForSelector('#locked:not([hidden])');
   await page.click('#toggle-logs');
   assert.match(await page.locator('#log-list').innerText(), /Configuration illisible/);
   await page.waitForTimeout(700);
   await assertUntouched(page, 'même contenu, aucune ligne ajoutée (ni verrou)');
-}, { init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+}, { init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 4, Config: newerGraph }] } });
 
 await scenario('E2E-29 le graphe du document passe avant des réglages de vue illisibles', async (page) => {
   await page.waitForSelector('.node-trigger');
@@ -578,27 +585,27 @@ await scenario('E2E-29 le graphe du document passe avant des réglages de vue il
 
 await scenario('E2E-30 table dont le nom ne diffère que par la casse : aucune question, aucune création, la raison est dite', async (page) => {
   await page.click('#toggle-logs');
-  await page.waitForFunction(() => /déjà une table « automation »/.test(document.querySelector('#log-list').innerText));
+  await page.waitForFunction(() => /déjà une table « automation_store »/.test(document.querySelector('#log-list').innerText));
   assert.equal(await page.locator('[role=dialog]').count(), 0, 'pas de question : la création est impossible');
   await buildFlow(page);
   await page.click('#toggle-active');
   assert.equal(await page.locator('[role=dialog]').count(), 0);
   assert.match(await page.locator('#log-list').innerText(), /Non enregistré : la table du widget/);
   await page.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).edges.length === 2);
-  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['automation'], 'rien n\'a été créé');
-}, { noTables: true, init: { __preloadTables: { automation: ['Nom'] } } });
+  assert.deepEqual(await page.evaluate(() => Object.keys(window.__stub.docTables)), ['automation_store'], 'rien n\'a été créé');
+}, { noTables: true, init: { __preloadTables: { automation_store: ['Nom'] } } });
 
-await scenario('E2E-31 table Automation sans les colonnes attendues : non utilisée, rien n\'y est écrit', async (page) => {
+await scenario('E2E-31 table du widget sans les colonnes attendues : non utilisée, rien n\'y est écrit', async (page) => {
   await page.click('#toggle-logs');
-  await page.waitForFunction(() => /n'a pas les colonnes attendues \(Config, Evenement, Resultat\)/.test(document.querySelector('#log-list').innerText));
+  await page.waitForFunction(() => /La table Automation_Store du document n'a pas les colonnes attendues \(Config, Event, Result\)/.test(document.querySelector('#log-list').innerText));
   assert.equal(await page.locator('[role=dialog]').count(), 0);
   await buildFlow(page);
   await page.click('#toggle-active');
   await page.waitForFunction(() => window.__stub.options.workflow && JSON.parse(window.__stub.options.workflow).edges.length === 2);
   assert.equal(await page.locator('#open-tab-warning').isVisible(), true, 'activé quand même : le graphe reste dans les réglages de la vue');
   await page.waitForTimeout(500);
-  assert.deepEqual(await page.evaluate(() => window.__stub.docTables.Automation.rows), [], 'aucune écriture dans la table incomplète');
-}, { noTables: true, init: { __preloadTables: { Automation: ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Detail'] } } });
+  assert.deepEqual(await page.evaluate(() => window.__stub.store.rows), [], 'aucune écriture dans la table incomplète');
+}, { noTables: true, init: { __preloadTables: { Automation_Store: ['Type', 'Table', 'Date', 'Active', 'Version', 'Summary', 'Detail'] } } });
 
 await scenario('E2E-32 test à blanc : l\'action est signalée par l\'accent bleu de la charte, plus en vert', async (page) => {
   await buildFlow(page);
@@ -628,7 +635,7 @@ await scenario('E2E-34 modification faite pendant le démarrage, avant la décou
   await page.waitForSelector('#locked:not([hidden])');
   await page.waitForTimeout(1500);
   await assertUntouched(page, 'la ligne illisible est intacte');
-}, { init: { __fetchDelay: 400, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+}, { init: { __fetchDelay: 400, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 4, Config: newerGraph }] } });
 
 await scenario('E2E-35 contenu du document illisible, graphe actif dans les réglages de la vue : rien ne s\'exécute à sa place', async (page) => {
   await buildFlow(page);
@@ -636,7 +643,7 @@ await scenario('E2E-35 contenu du document illisible, graphe actif dans les rég
   // Un graphe actif ne va plus dans les réglages de la vue quand la table est là : il y est mis comme l'aurait laissé une version plus ancienne.
   const saved = (await savedRows(page, workflowSaved('(graph) => graph.active === true'))).find((row) => row.Type === 'Workflow').Config;
   const copy = await page.context().newPage();
-  await copy.addInitScript((init) => Object.assign(window, init), { __preloadOptions: { workflow: saved }, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] });
+  await copy.addInitScript((init) => Object.assign(window, init), { __preloadOptions: { workflow: saved }, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 4, Config: newerGraph }] });
   await routeApi(copy);
   await copy.goto(url);
   await copy.waitForSelector('#locked:not([hidden])');
@@ -645,7 +652,7 @@ await scenario('E2E-35 contenu du document illisible, graphe actif dans les rég
   await push(copy, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
   await copy.waitForTimeout(1500);
   assert.deepEqual(await copy.evaluate(() => window.__stub.applied), [], 'aucune écriture dans Archive');
-  const rows = await copy.evaluate(() => window.__stub.docTables.Automation.rows);
+  const rows = await copy.evaluate(() => window.__stub.store.rows);
   assert.deepEqual(rows.map((row) => [row.Type, row.Config]), [['Workflow', newerGraph]], 'ni verrou ni journal ajoutés, la ligne illisible est intacte');
 });
 
@@ -886,12 +893,12 @@ await scenario('E2E-44 le kit manque (copie du dépôt sans ses sous-modules) : 
 
 /* ---------- Le widget seul dans Grist : ce que Grist accorde et pose (pré-alpha publique) ---------- */
 
-// Un workflow actif complet (déclencheur -> action), tel qu'enregistré dans la table Automation.
+// Un workflow actif complet (déclencheur -> action), tel qu'enregistré dans la table du widget.
 const activeFlow = JSON.stringify({ version: 3, active: true, nodes: [
   { id: 'trigger-1', type: 'trigger', x: 40, y: 120, config: { action: 'update', column: 'Statut', targetColumn: '', targetValue: '' } },
   { id: 'action-1', type: 'action', x: 330, y: 120, config: { type: 'AddRecord', table: 'Archive', matchColumn: '', matchValue: '', column: 'Motif', value: 'vu' } },
 ], edges: [{ from: 'trigger-1', to: 'action-1' }] });
-const activeRows = [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeFlow }];
+const activeRows = [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 3, Config: activeFlow }];
 const FR = { openTab: 'Automation active : elle ne s\'exécute que tant que cette vue reste ouverte dans votre navigateur, y compris si la vue du widget est réduite.', otherTab: 'Automation active : un autre onglet l\'exécute pour le moment, celui-ci prend le relais s\'il se ferme.' };
 
 await scenario('E2E-45 le thème que Grist pose ne déclenche aucune erreur de politique de sécurité, et les contrôles natifs gardent le thème de l\'app', async (page) => {
@@ -946,7 +953,7 @@ await scenario('E2E-47 lecture seule : le workflow se voit, se déplace et se te
   assert.doesNotMatch(await page.locator('#log-list').innerText(), /No write access|impossible/);
 }, { query: '?access=full&readonly=true', init: { __preloadRows: activeRows } });
 
-await scenario('E2E-48 lecture seule dans un document sans table Automation : aucune question de création', async (page) => {
+await scenario('E2E-48 lecture seule dans un document sans table du widget : aucune question de création', async (page) => {
   await page.waitForSelector('#read-only-notice:not([hidden])');
   await page.waitForTimeout(800);
   assert.equal(await page.locator('.modal').count(), 0);
@@ -955,8 +962,8 @@ await scenario('E2E-48 lecture seule dans un document sans table Automation : au
 
 await scenario('E2E-49 un onglet rechargé reprend l\'exécution tout de suite : il reconnaît son verrou au lieu d\'attendre 20 s qu\'il expire', async (page) => {
   page.on('dialog', (dialog) => dialog.accept());   // « Quitter la page ? » : un workflow actif ne s'exécute que tant que la vue est ouverte
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Lock' && row.Config));
-  const rows = await page.evaluate(() => window.__stub.docTables.Automation.rows.map((row) => ({ ...row })));
+  await page.waitForFunction(() => window.__stub.store.rows.some((row) => row.Type === 'Lock' && row.Config));
+  const rows = await page.evaluate(() => window.__stub.store.rows.map((row) => ({ ...row })));
   const owner = rows.find((row) => row.Type === 'Lock').Config;
   assert.match(owner, /^[0-9a-f]{16}$/);
   // Le document garde ses lignes d'un chargement à l'autre, verrou compris, comme si la page n'avait pas eu le temps de le libérer.
@@ -964,7 +971,7 @@ await scenario('E2E-49 un onglet rechargé reprend l\'exécution tout de suite :
   await page.reload();
   await page.waitForSelector('.node-action');
   await page.waitForFunction((text) => document.getElementById('open-tab-warning').textContent === text, FR.openTab, { timeout: 3000 });
-  assert.equal(await page.evaluate(() => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock').Config), owner, 'même identifiant d\'onglet');
+  assert.equal(await page.evaluate(() => window.__stub.store.rows.find((row) => row.Type === 'Lock').Config), owner, 'même identifiant d\'onglet');
   await push(page, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
   await page.waitForFunction(() => window.__stub.applied.length > 0, null, { timeout: 3000 });
   assert.deepEqual(await page.evaluate(() => window.__stub.applied), [['AddRecord', 'Archive', null, { Motif: 'vu' }]]);
@@ -1162,7 +1169,7 @@ await scenario('E2E-57 prise en main en anglais et en sombre : captures et texte
 /* ---------- Retouches de la 0.15.0 ---------- */
 
 // Grist garde les réglages écrits par grist.setOption comme une modification de la vue, à enregistrer par son bouton « Enregistrer » :
-// le widget n'y écrit le graphe que s'il ne peut pas le garder dans la table Automation.
+// le widget n'y écrit le graphe que s'il ne peut pas le garder dans la table du widget.
 await scenario('E2E-58 graphe gardé dans la table : rien dans les réglages de la vue, même à l\'activation ; sans la table, les réglages le gardent', async (page) => {
   await buildFlow(page);
   await page.click('#toggle-active');
@@ -1291,7 +1298,7 @@ await scenario('E2E-62 une ligne reçue dont les valeurs sont du HTML (un lien p
   await page.fill('#action-1-value', '{Nom}');
   await page.click('#toggle-active');
   await push(page, { id: 1, Nom: hostile, Statut: 'Nouveau' }, { id: 1, Nom: hostile, Statut: 'Clos' });
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  await page.waitForFunction(() => window.__stub.store.rows.filter((r) => r.Type === 'Log').length === 2);
   assert.deepEqual(await page.evaluate(() => window.__stub.applied), [['AddRecord', 'Archive', null, { Motif: hostile }]], 'écrite telle quelle : ni évaluée, ni substituée une seconde fois');
   await page.click('#toggle-logs');
   await page.click('#test-workflow');
@@ -1300,7 +1307,7 @@ await scenario('E2E-62 une ligne reçue dont les valeurs sont du HTML (un lien p
   assert.equal(await page.evaluate(() => document.querySelectorAll('img[src="x"]').length), 0, 'aucune image n\'est née du texte');
   assert.equal(await page.locator('#log-list img, #log-list script').count(), 0, 'ni balise dans le journal');
   assert.notEqual(await page.title(), 'pwned');
-  const details = await page.evaluate(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').map((r) => r.Detail));
+  const details = await page.evaluate(() => window.__stub.store.rows.filter((r) => r.Type === 'Log').map((r) => r.Detail));
   assert.ok(details.some((text) => text.includes(JSON.stringify(hostile).slice(1, -1))), 'le journal du document garde la valeur comme texte');
 });
 
@@ -1318,7 +1325,7 @@ async function addTrigger(page, app) {
   await page.keyboard.press('Enter');
   await app.waitForSelector('.node-trigger');
 }
-const workflowRow = (app) => app.evaluate(() => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Workflow') || null);
+const workflowRow = (app) => app.evaluate(() => window.__stub.store.rows.find((row) => row.Type === 'Workflow') || null);
 const hasTrigger = (row) => Boolean(row) && JSON.parse(row.Config).nodes.some((node) => node.type === 'trigger');
 
 await scenario('E2E-63 GFS demande de fermer et rien n\'attend : oui tout de suite, sans question, quelle que soit la raison', async (page, app) => {
@@ -1403,15 +1410,15 @@ await scenario('E2E-68 un workflow actif : GFS demande de fermer pendant une ex�
   });
   const reply = await askClose(page, 'app');
   assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
-  const state = await app.evaluate(() => ({ applied: window.__stub.applied, rows: window.__stub.docTables.Automation.rows }));
+  const state = await app.evaluate(() => ({ applied: window.__stub.applied, rows: window.__stub.store.rows }));
   assert.deepEqual(state.applied, [['AddRecord', 'Archive', null, { Motif: 'fait' }]], 'l\'effet du workflow est écrit avant le oui');
   assert.equal(state.rows.filter((row) => row.Type === 'Log').length, 1, 'la ligne du journal aussi');
   assert.equal(state.rows.find((row) => row.Type === 'Lock').Config, '', 'le verrou est rendu : un autre onglet reprend sans attendre son expiration');
-}, { host: { context: {} }, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeGraph }] } });
+}, { host: { context: {} }, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 3, Config: activeGraph }] } });
 
 await scenario('E2E-69 une colonne indispensable de la table disparaît pendant la session : la question de l\'app dit laquelle, et Enregistrer écrit dès qu\'elle est revenue', async (page, app) => {
   const columns = await app.evaluate(() => {
-    const table = window.__stub.docTables.Automation;
+    const table = window.__stub.store;
     const all = table.columns.slice();
     table.columns = all.filter((column) => column !== 'Config');   // comme une colonne renommée dans Grist
     return all;
@@ -1421,7 +1428,7 @@ await scenario('E2E-69 une colonne indispensable de la table disparaît pendant 
   await app.waitForSelector('.modal-box');
   assert.match(await app.locator('.modal-body').innerText(), /Config/, 'la question dit quelle colonne manque');
   assert.equal(await workflowRow(app), null, 'rien n\'est écrit tant qu\'elle manque');
-  await app.evaluate((all) => { window.__stub.docTables.Automation.columns = all; }, columns);
+  await app.evaluate((all) => { window.__stub.store.columns = all; }, columns);
   await app.locator('.modal-footer button', { hasText: 'Enregistrer' }).click();
   const reply = await closeAnswer(page);
   assert.deepEqual([reply.type, reply.data], ['reponse', { ferme: true }]);
@@ -1453,7 +1460,7 @@ await scenario('E2E-70 Réglages > Diagnostic : anonymisé d\'abord (ni nom du d
   await page.fill('#action-1-value', '{Nom}');
   await page.click('#toggle-active');
   await push(page, { id: 1, Nom: 'SECRET-LIGNE', Statut: 'Nouveau' }, { id: 1, Nom: 'SECRET-LIGNE', Statut: 'Clos' });
-  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((r) => r.Type === 'Log').length === 2);
+  await page.waitForFunction(() => window.__stub.store.rows.filter((r) => r.Type === 'Log').length === 2);
   await page.click('#toggle-logs');
   await page.click('#test-workflow');
   await page.waitForFunction(() => /(Dry-run ligne|Test sur la ligne) 1/.test(document.getElementById('log-list').innerText));   // « Test sur la ligne » depuis la 0.16.0
@@ -1536,7 +1543,7 @@ await scenario('E2E-72 Diagnostic d\'un workflow écrit par une version plus ré
   assert.doesNotMatch(text, /boucle-1|zoom/, 'ni identifiant de nœud ni réglage de la vue');
   await page.keyboard.press('Escape');
   await assertUntouched(page, 'le diagnostic n\'écrit rien dans la ligne illisible');
-}, { init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+}, { init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 4, Config: newerGraph }] } });
 
 await scenario('E2E-73 Diagnostic d\'un workflow illisible dans les réglages de la vue : la nature de ce contenu, sans le recopier', async (page) => {
   await page.waitForSelector('#locked:not([hidden])');
@@ -1578,7 +1585,7 @@ await scenario('E2E-74 Diagnostic : les types lus dans les métadonnées de Gris
   const full = (await diagnosticShown(page)).json;
   assert.equal(full.tables.Archive.Lien, 'Ref:Contacts');
   assert.deepEqual(full.workflow.problems, [{ node: 'trigger-1', code: 'unknown-column', field: 'column', table: 'Contacts', name: 'Ancienne' }]);
-}, { init: { __metaTables: metaTables, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: oldColumnGraph }] } });
+}, { init: { __metaTables: metaTables, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: false, Version: 3, Config: oldColumnGraph }] } });
 
 await scenario('E2E-75 Diagnostic hors de Grist : il s\'ouvre quand même, et dit que l\'API de Grist manque et que les tables ne sont pas lues', async (page) => {
   await page.getByRole('button', { name: 'Fermer' }).click();
@@ -1631,15 +1638,15 @@ await scenario('E2E-77 Diagnostic dans un petit cadre et en anglais : la fenêtr
 
 // La réponse de l'app à `rester` : { type, data: { repris } } ; la raison est celle du `fermer` auquel elle avait dit oui.
 const askStay = (page, raison = 'explorateur') => page.evaluate((reason) => window.hote.call('rester', { raison: reason }), raison);
-const lockRows = (app) => app.evaluate(() => window.__stub.docTables.Automation.rows.filter((row) => row.Type === 'Lock').map((row) => ({ ...row })));
+const lockRows = (app) => app.evaluate(() => window.__stub.store.rows.filter((row) => row.Type === 'Lock').map((row) => ({ ...row })));
 const lockOwner = async (app) => ((await lockRows(app))[0] || { Config: null }).Config;
 // Ce que l'app a écrit dans le verrou, dans l'ordre : son identifiant (prise ou renouvellement), ou '' (verrou rendu).
-const lockWrites = (app) => app.evaluate(() => window.__stub.writes.filter((write) => write.table === 'Automation' && write.values && write.values.Type === 'Lock').map((write) => write.values.Config));
+const lockWrites = (app) => app.evaluate(() => window.__stub.writes.filter((write) => write.table === window.__stub.store.name && write.values && write.values.Type === 'Lock').map((write) => write.values.Config));
 const heartbeats = (app) => app.evaluate(() => window.__heartbeats.live.size);
 const executions = async (app) => ((await app.locator('#log-list').innerText()).match(/exécute maintenant/g) || []).length;
-const holdingLock = (app) => app.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Lock' && row.Config));
+const holdingLock = (app) => app.waitForFunction(() => window.__stub.store.rows.some((row) => row.Type === 'Lock' && row.Config));
 const inactiveGraph = JSON.stringify({ ...JSON.parse(activeGraph), active: false });
-const startedRows = [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 3, Config: activeGraph }];
+const startedRows = [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 3, Config: activeGraph }];
 const changeStatus = (target) => push(target, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
 
 await scenario('E2E-78 « tu restes » après un oui à « fermer » : l\'app reprend son verrou et son battement, une ligne reçue est de nouveau traitée, et elle répond { repris: true }', async (page, app) => {
@@ -1664,7 +1671,7 @@ await scenario('E2E-78 « tu restes » après un oui à « fermer » : l\'app re
   await app.waitForFunction(() => window.__stub.applied.length === 1);
   assert.deepEqual(await app.evaluate(() => window.__stub.applied), [['AddRecord', 'Archive', null, { Motif: 'fait' }]], 'la ligne reçue après « rester » est traitée, une fois');
   const renewed = (await lockRows(app))[0].Date;
-  await app.waitForFunction((date) => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock').Date > date, renewed, { timeout: 9000 });   // le battement renouvelle le verrou
+  await app.waitForFunction((date) => window.__stub.store.rows.find((row) => row.Type === 'Lock').Date > date, renewed, { timeout: 9000 });   // le battement renouvelle le verrou
 }, { host: { context: {} }, intervals: true, init: { __preloadRows: startedRows } });
 
 await scenario('E2E-79 « tu restes » pendant que le verrou se rend encore (la réponse n\'a attendu que 3 s) : il est rendu puis repris, jamais l\'inverse', async (page, app) => {
@@ -1704,7 +1711,7 @@ await scenario('E2E-81 « tu restes » alors qu\'un autre onglet a pris le verro
   assert.equal((await askClose(page, 'explorateur')).data.ferme, true);
   const before = (await lockWrites(app)).length;
   await app.evaluate(() => {   // un autre onglet prend le verrou rendu et le renouvelle chaque seconde (comme `foreignLock`)
-    const lock = window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock');
+    const lock = window.__stub.store.rows.find((row) => row.Type === 'Lock');
     lock.Config = 'autre-onglet';
     lock.Date = 1;
     setInterval(() => { lock.Date += 1; }, 1000);
@@ -1738,7 +1745,7 @@ await scenario('E2E-83 « tu restes » avec un workflow inactif : { repris: true
   assert.deepEqual([reply.type, reply.data], ['reponse', { repris: true }]);
   assert.equal(await heartbeats(app), 1);
   assert.deepEqual(await app.evaluate(() => window.__stub.writes.map((write) => [write.kind, write.table])), [], 'aucun verrou, aucune écriture');
-}, { host: { context: {} }, intervals: true, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }] } });
+}, { host: { context: {} }, intervals: true, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: false, Version: 3, Config: inactiveGraph }] } });
 
 /* ---------- Dans GFS : les tables internes de Grist et le presse-papiers (consigne 017) ---------- */
 
@@ -1756,7 +1763,7 @@ await scenario('E2E-84 dans GFS, le courtier refuse la lecture de _grist_Tables 
   await app.getByRole('button', { name: 'Complet', exact: true }).click();
   const full = (await diagnosticShown(app)).json;
   assert.deepEqual(full.tables, { Contacts: { Nom: null, Statut: null, Montant: null }, Archive: { Motif: null, Source: null } }, 'en Complet aussi : les noms, pas les types');
-}, { host: { context: {} }, init: { __metaTables: metaTables, __refuseGristInternal: true, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }] } });
+}, { host: { context: {} }, init: { __metaTables: metaTables, __refuseGristInternal: true, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: false, Version: 3, Config: inactiveGraph }] } });
 
 await scenario('E2E-85 Diagnostic dans le cadre isolé de GFS (allow="clipboard-write", jamais allow-same-origin) : Copier copie par l\'API du presse-papiers ; si le navigateur la refuse, par la commande du navigateur', async (page, app) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -1782,7 +1789,7 @@ await scenario('E2E-85 Diagnostic dans le cadre isolé de GFS (allow="clipboard-
   await app.waitForFunction(() => window.__copy.command === 1);
   assert.equal(await app.locator('.diag-status').innerText(), 'Copié');
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), text, 'le même texte, copié par la commande du navigateur');
-}, { host: { context: {} }, init: { __metaTables: metaTables, __refuseGristInternal: true, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }] } });
+}, { host: { context: {} }, init: { __metaTables: metaTables, __refuseGristInternal: true, __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: false, Version: 3, Config: inactiveGraph }] } });
 
 
 /* ---------- L'ouverture d'un modèle de départ (consigne 021), jouée dans le faux GFS ---------- */
@@ -1797,7 +1804,7 @@ const openAnswer = (page) => page.evaluate(() => window.__opening);
 const nodeTypes = (app) => app.evaluate(() => [...document.querySelectorAll('.node')].map((el) => /node-(\w+)/.exec(el.className)[1]));
 // Ce que l'app a écrit pour le workflow : les lignes Workflow de la table et la clé de réglages de la vue.
 const stored = (app) => app.evaluate(() => ({
-  rows: (window.__stub.docTables.Automation ? window.__stub.docTables.Automation.rows : []).filter((row) => row.Type === 'Workflow').map((row) => row.Config),
+  rows: (window.__stub.store ? window.__stub.store.rows : []).filter((row) => row.Type === 'Workflow').map((row) => row.Config),
   option: window.__stub.options.workflow || null,
   writes: window.__stub.writes.length,
 }));
@@ -1814,7 +1821,7 @@ async function pickIn(page, app, id, search) {
   await page.keyboard.press('Enter');
 }
 const TOTAL = 'Calculer un total à partir de deux colonnes';
-const storedInactive = [{ Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph }];
+const storedInactive = [{ Type: 'Workflow', Table: 'Contacts', Active: false, Version: 3, Config: inactiveGraph }];
 
 await scenario('E2E-86 GFS ouvre l\'app sur un modèle (l\'ouverture du contexte) : le graphe entier s\'affiche, relié, sans choix, sans question ni écriture ; le premier changement l\'enregistre', async (page, app) => {
   await app.waitForSelector('.node-action');
@@ -1828,7 +1835,7 @@ await scenario('E2E-86 GFS ouvre l\'app sur un modèle (l\'ouverture du contexte
   await app.waitForTimeout(800);   // bien plus que les 300 ms de l'enregistrement automatique
   assert.deepEqual(await stored(app), { rows: [], option: null, writes: 0 }, 'rien n\'est écrit avant un geste de la personne');
   await pickIn(page, app, 'trigger-1-column', 'statut');
-  await app.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Workflow'));
+  await app.waitForFunction(() => window.__stub.store.rows.some((row) => row.Type === 'Workflow'));
   const graph = JSON.parse((await stored(app)).rows[0]);
   assert.deepEqual(graph.nodes.map((node) => node.type), ['trigger', 'transform', 'action']);
   assert.equal(graph.nodes[0].config.column, 'Statut', 'le choix de la personne');
@@ -1894,7 +1901,7 @@ await scenario('E2E-89 la table a déjà un workflow : l\'app demande avant de l
   await app.waitForTimeout(800);
   assert.deepEqual(await stored(app), before, 'ouvert, le modèle n\'est pas enregistré : le workflow du document est intact');
   await pickIn(page, app, 'trigger-1-column', 'statut');
-  await app.waitForFunction(() => JSON.parse(window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Workflow').Config).nodes.length === 3);
+  await app.waitForFunction(() => JSON.parse(window.__stub.store.rows.find((row) => row.Type === 'Workflow').Config).nodes.length === 3);
   assert.equal(await app.locator('#model-notice').isHidden(), true);
 }, { host: { context: {} }, init: { __preloadRows: storedInactive } });
 
@@ -1913,9 +1920,9 @@ await scenario('E2E-90 le workflow de la table est actif : la question le dit ; 
   assert.equal((await openAnswer(page)).data.ouvert, true);
   assert.equal(await app.locator('#toggle-active').innerText(), 'Activer', 'le modèle n\'est pas actif');
   assert.equal(await app.locator('#open-tab-warning').isHidden(), true);
-  await app.waitForFunction(() => !window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Lock').Config, null, { timeout: 9000 });   // au battement suivant, cet onglet n'exécute plus
-  const row = await app.evaluate(() => window.__stub.docTables.Automation.rows.find((entry) => entry.Type === 'Workflow'));
-  assert.deepEqual([row.Actif, row.Config], [true, activeGraph], 'le document n\'a rien reçu : son workflow reste enregistré comme actif');
+  await app.waitForFunction(() => !window.__stub.store.rows.find((row) => row.Type === 'Lock').Config, null, { timeout: 9000 });   // au battement suivant, cet onglet n'exécute plus
+  const row = await app.evaluate(() => window.__stub.store.rows.find((entry) => entry.Type === 'Workflow'));
+  assert.deepEqual([row[key('Active')], row.Config], [true, activeGraph], 'le document n\'a rien reçu : son workflow reste enregistré comme actif');
 }, { host: { context: {} }, intervals: true, init: { __preloadRows: startedRows } });
 
 await scenario('E2E-91 l\'ouverture du contexte tombe sur une table qui a déjà un workflow : la question vient après le démarrage ; « Garder le workflow » laisse l\'app comme elle était', async (page, app) => {
@@ -1945,7 +1952,7 @@ await scenario('E2E-92 sans la table du widget : sa question vient d\'abord, ava
   await app.waitForFunction(() => window.__stub.options.workflow);
   const graph = JSON.parse(await app.evaluate(() => window.__stub.options.workflow));
   assert.deepEqual([graph.nodes.map((node) => node.type), graph.nodes[0].config.column, graph.nodes[1].config.checks[0].operator], [['trigger', 'condition', 'action'], 'Montant', 'gt']);
-  assert.equal(await app.evaluate(() => Object.keys(window.__stub.docTables)).then((names) => names.includes('Automation')), false, 'la table n\'a pas été créée');
+  assert.equal(await app.evaluate(() => Object.keys(window.__stub.docTables)).then((names) => names.some((name) => name.startsWith('Automation'))), false, 'la table n\'a pas été créée');
 }, { host: { context: { ouverture: modelOpening('seuil-a-verifier') } }, noTables: true });
 
 await scenario('E2E-93 en lecture seule : { ouvert: false } et la raison dite, au démarrage comme par `ouvrir` ; ni écriture ni refus de Grist', async (page, app) => {
@@ -1967,7 +1974,7 @@ await scenario('E2E-94 un workflow que cette version ne lit pas : jamais écras�
   assert.equal(await app.locator('.modal-body').last().innerText(), 'Cette table garde un workflow que cette version ne sait pas lire : le modèle n\'est pas ouvert, pour ne pas l\'écraser.');
   assert.deepEqual(await nodeTypes(app), []);
   await assertUntouched(app, 'la ligne illisible n\'est pas touchée');
-}, { host: { context: {} }, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Actif: true, Version: 4, Config: newerGraph }] } });
+}, { host: { context: {} }, init: { __preloadRows: [{ Type: 'Workflow', Table: 'Contacts', Active: true, Version: 4, Config: newerGraph }] } });
 
 await scenario('E2E-95 en anglais, dans un cadre de 700 × 400 : le bandeau et la question suivent la langue, et tout le modèle tient dans le canevas', async (page, app) => {
   await app.click('#open-settings');
@@ -2110,6 +2117,125 @@ await scenario('E2E-103 seule dans Grist, la page n\'écoute aucune violation de
 await scenario('E2E-104 sous GFS, la page n\'a qu\'une écoute des violations de sa politique, celle du relais', async (page, app) => {
   assert.equal(await app.evaluate(() => window.__violationListeners), 1);
 }, { host: { context: {} }, initScript: countViolationListeners });
+
+/* ---------- Consigne 028 de GFS : tout en anglais, sous le préfixe `Automation_` ---------- */
+// Un document neuf prend la table `Automation_Store` et les colonnes anglaises ; un document d'avant la 0.15.6 garde `Automation` et ses colonnes françaises, que l'app lit et écrit
+// sous ces noms, sans rien renommer. Ces scénarios fixent eux-mêmes le jeu de noms du document (`__legacyNames`), quel que soit E2E_NAMES.
+
+const ENGLISH_COLUMNS = ['Type', 'Table', 'Date', 'Active', 'Version', 'Summary', 'Config', 'Event', 'Row', 'Result', 'Detail', 'Author'];
+const FRENCH_COLUMNS = Object.values(LEGACY_KEYS);
+const ENGLISH_SIX = Object.keys(LEGACY_KEYS);
+const tableNames = (app) => app.evaluate(() => Object.keys(window.__stub.docTables));
+const widgetRows = (app, name) => app.evaluate((table) => window.__stub.docTables[table].rows.map((row) => ({ ...row })), name);
+const widgetWrites = (app) => app.evaluate(() => window.__stub.writes.filter((write) => write.table && write.table.startsWith('Automation')).length);
+const showLog = async (app) => {
+  if (!(await app.locator('#log-list').isVisible())) await app.click('#toggle-logs');
+  return app.locator('#log-list').innerText();
+};
+
+await scenario('E2E-105 un document neuf : la question nomme `Automation_Store`, la table naît avec les douze colonnes anglaises et la formule d\'auteur, et tout s\'y écrit sous ces noms', async (page) => {
+  await page.waitForSelector('[role=dialog]');
+  assert.match(await page.locator('.modal-body').innerText(), /nommée Automation_Store/);
+  await page.getByRole('button', { name: 'Créer la table' }).click();
+  const created = await page.evaluate(() => window.__stub.writes.find((write) => write.kind === 'AddTable'));
+  assert.equal(created.table, 'Automation_Store');
+  assert.deepEqual(created.row.map((column) => column.id), ENGLISH_COLUMNS);
+  const author = created.row.find((column) => column.id === 'Author');
+  assert.deepEqual([author.formula, author.isFormula], ['user.Email', false], 'Author garde sa formule déclenchée à la création de la ligne');
+  assert.deepEqual(await tableNames(page), ['Automation_Store'], 'une seule table de plus, jamais `Automation`');
+  await buildFlow(page);
+  await activateAndClose(page);
+  const rows = await widgetRows(page, 'Automation_Store');
+  const workflow = rows.find((row) => row.Type === 'Workflow');
+  assert.deepEqual([workflow.Active, typeof workflow.Summary, workflow.Version], [true, 'string', 3]);
+  const log = rows.find((row) => row.Type === 'Log' && row.Event === 'update');
+  assert.deepEqual([log.Table, log.Row, log.Result], ['Contacts', 1, 'success']);
+  assert.ok(rows.some((row) => row.Type === 'Lock' && row.Config), 'le verrou aussi');
+  assert.deepEqual(rows.flatMap((row) => Object.keys(row).filter((name) => FRENCH_COLUMNS.includes(name) && !ENGLISH_COLUMNS.includes(name))), [], 'aucun nom français écrit');
+}, { noTables: true, init: { __legacyNames: false } });
+
+await scenario('E2E-106 un document d\'avant la 0.15.6 (table `Automation`, colonnes françaises) : aucune question, aucune table de plus, le graphe est lu et le journal, le verrou et le graphe s\'écrivent sous les noms français', async (page) => {
+  await page.waitForSelector('#add-node');
+  await page.waitForFunction(() => document.querySelectorAll('.node').length === 2, null, { timeout: 5000 });
+  assert.equal(await page.locator('[role=dialog]').count(), 0, 'pas de question : la table existe');
+  assert.match(await showLog(page), /modification ligne 1 : réussi \(moi@exemple.fr\)/, 'le journal du document est relu, auteur compris (colonnes Evenement, Ligne, Resultat, Auteur)');
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Lock' && row.Config));
+  await push(page, { id: 1, Nom: 'A', Statut: 'Nouveau' }, { id: 1, Nom: 'A', Statut: 'Clos' });
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((row) => row.Type === 'Log').length === 3);
+  await page.click('#toggle-active');   // la désactivation est écrite dans le graphe et tracée dans le journal
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.filter((row) => row.Type === 'Log').length === 4 && window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Workflow').Actif === false);
+  const rows = await widgetRows(page, 'Automation');
+  const logs = rows.filter((row) => row.Type === 'Log');
+  assert.deepEqual([logs[2].Evenement, logs[2].Ligne, logs[2].Resultat, logs[3].Evenement], ['update', 1, 'success', 'deactivate'], 'après les deux lignes d\'avant : l\'exécution, puis la désactivation');
+  assert.equal(rows.find((row) => row.Type === 'Workflow').Resume.length > 0, true, 'le résumé du graphe va dans la colonne Resume');
+  assert.deepEqual(rows.flatMap((row) => Object.keys(row).filter((name) => ENGLISH_SIX.includes(name))), [], 'aucune colonne anglaise écrite');
+  assert.deepEqual(await tableNames(page), ['Automation'], 'ni table de plus, ni table renommée');
+  assert.equal(await page.evaluate(() => window.__stub.writes.some((write) => write.kind === 'AddTable')), false, 'aucune table créée');
+  assert.deepEqual(await page.evaluate(() => window.__stub.docTables.Automation.columns), ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((name) => name), 'les colonnes ne sont pas renommées');
+}, { init: { __legacyNames: true, __preloadLogs: 2, __preloadRows: activeRows } });
+
+await scenario('E2E-107 la table du widget est renommée dans le document pendant que l\'app est ouverte : l\'écriture relit les noms et recommence une fois, sans message', async (page) => {
+  await page.waitForSelector('#add-node');
+  await buildFlow(page);
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.some((row) => row.Type === 'Workflow'));
+  await page.evaluate(() => {   // un autre onglet, une autre personne ou une restauration
+    window.__stub.docTables.Automation_Store = window.__stub.docTables.Automation;
+    window.__stub.docTables.Automation_Store.name = 'Automation_Store';
+    delete window.__stub.docTables.Automation;
+  });
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => window.__stub.docTables.Automation_Store.rows.find((row) => row.Type === 'Workflow').Actif === true);
+  assert.deepEqual(await tableNames(page), ['Automation_Store'], 'rien n\'est recréé');
+  assert.doesNotMatch(await showLog(page), /Rechargez la page/);
+  const rows = await widgetRows(page, 'Automation_Store');
+  assert.equal(rows.filter((row) => row.Type === 'Workflow').length, 1, 'la ligne du workflow est mise à jour, pas doublée');
+}, { init: { __legacyNames: true } });
+
+await scenario('E2E-108 la table du widget disparaît pendant que l\'app est ouverte : le journal dit « Rechargez la page » une seule fois, et plus rien n\'est écrit', async (page) => {
+  await page.waitForSelector('#add-node');
+  await buildFlow(page);
+  await page.waitForFunction(() => window.__stub.docTables.Automation_Store.rows.some((row) => row.Type === 'Workflow'));
+  await page.evaluate(() => { delete window.__stub.docTables.Automation_Store; });
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => /Rechargez la page/.test(document.querySelector('#log-list').textContent));
+  const before = await widgetWrites(page);
+  await page.click('#toggle-active');
+  await page.click('#toggle-active');
+  await page.waitForTimeout(700);
+  assert.equal(await widgetWrites(page), before, 'plus aucune écriture dans la table du widget');
+  const text = await showLog(page);
+  assert.equal((text.match(/Rechargez la page/g) || []).length, 1, 'dit une seule fois');
+  assert.equal(await page.evaluate(() => Object.keys(window.__stub.docTables).length), 0, 'rien n\'est recréé de lui-même');
+}, { init: { __legacyNames: false } });
+
+// Le graphe d'un workflow à lire, dans le jeu de noms de la table où il est rangé : la table qui a des lignes sert, la nouvelle si les deux en ont (comme GFS).
+const oldRow = { Type: 'Workflow', Table: 'Contacts', Actif: false, Version: 3, Config: inactiveGraph };
+const newRow = { Type: 'Workflow', Table: 'Contacts', Active: false, Version: 3, Config: inactiveGraph };
+const bothTables = (oldRows, newRows) => ({ __legacyNames: false, __preloadTables: { Automation: FRENCH_COLUMNS_ORDER },
+  __preloadTableRows: { Automation: oldRows, Automation_Store: newRows } });
+const FRENCH_COLUMNS_ORDER = ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'];
+
+await scenario('E2E-109 le document porte les deux tables du widget : l\'app lit celle qui a des lignes, la nouvelle si les deux en ont, et n\'en crée ni n\'en renomme aucune', async (page) => {
+  await page.waitForSelector('#add-node');
+  await page.waitForTimeout(800);   // le démarrage a lu le document : s'il avait voulu créer une table, il l'aurait demandé
+  assert.equal(await page.locator('[role=dialog]').count(), 0, 'aucune question : la table existe');
+  assert.deepEqual(await tableNames(page), ['Automation_Store', 'Automation']);
+  assert.equal(await page.evaluate(() => window.__stub.writes.some((write) => write.kind === 'AddTable')), false);
+}, { init: bothTables([], []) });
+
+await scenario('E2E-110 les deux tables du widget, seule l\'ancienne a des lignes : son graphe est relu, et les écritures vont dans l\'ancienne', async (page) => {
+  await page.waitForFunction(() => document.querySelectorAll('.node').length === 2, null, { timeout: 5000 });
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Workflow').Actif === true);
+  assert.deepEqual(await page.evaluate(() => window.__stub.docTables.Automation_Store.rows), [], 'la table anglaise reste vide : elle n\'est pas utilisée');
+}, { init: bothTables([oldRow], []) });
+
+await scenario('E2E-111 les deux tables du widget ont des lignes : la nouvelle sert', async (page) => {
+  await page.waitForFunction(() => document.querySelectorAll('.node').length === 2, null, { timeout: 5000 });
+  await page.click('#toggle-active');
+  await page.waitForFunction(() => window.__stub.docTables.Automation_Store.rows.find((row) => row.Type === 'Workflow').Active === true);
+  assert.equal(await page.evaluate(() => window.__stub.docTables.Automation.rows.find((row) => row.Type === 'Workflow').Actif), false, 'l\'ancienne n\'est pas touchée');
+}, { init: bothTables([oldRow], [newRow]) });
 
 await browser.close();
 server.close();

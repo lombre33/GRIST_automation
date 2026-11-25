@@ -1,5 +1,5 @@
 // Couche Grist du widget : branche le canevas (js/canvas.js), le graphe (js/graph.js) et le moteur (js/engine.js) sur l'API Grist.
-// Le graphe est gardé dans la table Automation du document, créée avec l'accord de la personne ; sans elle (refus, table inutilisable), dans les options
+// Le graphe est gardé dans la table du widget du document (Automation_Store, ou Automation dans un document d'avant la 0.15.6), créée avec l'accord de la personne ; sans elle (refus, table inutilisable), dans les options
 // du widget (grist.setOption), que Grist garde comme une modification de la vue à enregistrer. Le graphe d'options déjà enregistrées se relit toujours.
 // Ce que Grist accorde se lit dans l'adresse du cadre : sans l'accès complet, le widget le dit et attend (Grist recharge le cadre quand il est accordé) ;
 // en lecture seule, le workflow se voit et se teste, rien ne s'écrit ni ne s'exécute dans cet onglet.
@@ -18,14 +18,14 @@ let cache = null;
 let lastRecords = [];
 let cursorRecord = null;       // ligne sélectionnée dans Grist (pour « Tester »)
 const echo = Echo.create();
-let executor = null;           // élection de l'exécutant entre onglets ; null tant que la table Automation n'existe pas
+let executor = null;           // élection de l'exécutant entre onglets ; null tant que la table du widget n'existe pas
 let tab = null;                // l'identifiant de cet onglet pour le verrou (Executor.tabIdentity), connu avec la table de la vue
 const randomId = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 let heartbeat = null;
 const HEARTBEAT_MS = 6000;
 const OPTIONS_WAIT_MS = 1500;   // au plus, l'attente de la première lecture des réglages de la vue avant d'ouvrir un modèle (Grist la donne tout de suite)
 let tables = [];
-let tablesAvailable = false;   // la table Automation existe dans le document
+let tablesAvailable = false;   // la table du widget existe dans le document
 const columnsByTable = new Map();
 let shownModel = null;         // le modèle de départ que l'éditeur montre, tant que rien n'y a changé : rien n'en est enregistré (js/model-opening.js)
 let modelShown = false;        // un modèle a été ouvert dans cette page : les réglages de la vue ne remplacent plus ce que l'éditeur montre
@@ -115,9 +115,23 @@ function lockWorkflow() {
 function storeMessage(err) {
   if (err.code === 'name-taken') return t('log.tableNameTaken', { table: err.table });
   if (err.code === 'renamed') return t('log.tableRenamed', { table: err.table });
-  if (err.code === 'missing-columns') return t('log.tableColumns', { columns: err.columns.join(', ') });
+  if (err.code === 'missing-columns') return t('log.tableColumns', { table: err.table, columns: err.columns.join(', ') });
   if (err.code === 'unreadable-graph') return t('log.badConfig');
+  if (err.code === 'names-changed') return t('log.namesChanged');
   return t('log.storeError', { error: err.message });
+}
+
+// Dit dans le journal l'erreur d'une lecture ou d'une écriture de la table du document, et rend son message. « Rechargez la page » (les noms de la table ont changé, js/store.js n'écrit plus rien)
+// ne se dit qu'une fois : le battement du verrou et chaque exécution le redemanderaient sinon.
+let namesChangedShown = false;
+function logStoreError(err) {
+  const message = storeMessage(err);
+  if (err.code === 'names-changed') {
+    if (namesChangedShown) return message;
+    namesChangedShown = true;
+  }
+  addLog(message);
+  return message;
 }
 
 /* ---------- Sauvegarde ---------- */
@@ -135,7 +149,7 @@ let savedGen = 0;
 let lastSaveError = '';
 let writing = Promise.resolve();
 
-// Une écriture du graphe. Réussie quand le document l'a reçue, ou, sans table Automation, quand les réglages de la vue l'ont reçue.
+// Une écriture du graphe. Réussie quand le document l'a reçue, ou, sans la table du widget, quand les réglages de la vue l'ont reçue.
 async function persist() {
   if (!startupDone) {
     saveTimer = setTimeout(save, 300);
@@ -152,8 +166,7 @@ async function persist() {
       }
     } catch (err) {
       failed = true;
-      lastSaveError = storeMessage(err);
-      addLog(lastSaveError);
+      lastSaveError = logStoreError(err);
       if (err.code === 'unreadable-graph') setLocked(true);   // un autre onglet vient d'y mettre un contenu que cette version ne lit pas
     }
   }
@@ -177,7 +190,7 @@ async function persist() {
 
 // Une constante plutôt qu'une fonction déclarée : rien d'autre dans la page ne peut la remplacer avant que la minuterie ne l'appelle.
 const save = () => {
-  const run = writing.then(persist).catch((err) => { lastSaveError = storeMessage(err); addLog(lastSaveError); });
+  const run = writing.then(persist).catch((err) => { lastSaveError = logStoreError(err); });
   writing = run;
   return run;
 };
@@ -231,7 +244,7 @@ async function ensureStore() {
     startExecutor();
     scheduleSave();
   } catch (err) {
-    addLog(storeMessage(err));
+    logStoreError(err);
   }
   return tablesAvailable;
 }
@@ -285,15 +298,15 @@ async function loadOlderLogs() {
     const page = await Store.logsPage(docApi, tableId, LOG_PAGE, oldestLogId);
     for (const entry of page.rows) {
       // Le diagnostic ne reprend pas l'auteur (une adresse e-mail) : line('') donne la ligne sans lui.
-      const line = (author) => (entry.Evenement === 'activate' || entry.Evenement === 'deactivate'
-        ? t(entry.Evenement === 'activate' ? 'log.activated' : 'log.deactivated') + author
-        : t('log.event', { event: t('event.' + entry.Evenement), row: entry.Ligne, status: t('result.' + entry.Resultat) + author }));
-      addLog(line(entry.Auteur ? ` (${entry.Auteur})` : ''), new Date(entry.Date * 1000), true, line(''));
+      const line = (author) => (entry.Event === 'activate' || entry.Event === 'deactivate'
+        ? t(entry.Event === 'activate' ? 'log.activated' : 'log.deactivated') + author
+        : t('log.event', { event: t('event.' + entry.Event), row: entry.Row, status: t('result.' + entry.Result) + author }));
+      addLog(line(entry.Author ? ` (${entry.Author})` : ''), new Date(entry.Date * 1000), true, line(''));
       oldestLogId = entry.id;
     }
     $('logs-more').hidden = !page.more;
   } catch (err) {
-    addLog(storeMessage(err));
+    logStoreError(err);
   }
 }
 
@@ -303,7 +316,7 @@ async function recordToggle() {
   try {
     await Store.appendLog(docApi, { table: tableId, event: graph.active ? 'activate' : 'deactivate', row: null, result: 'success' });
   } catch (err) {
-    addLog(storeMessage(err));
+    logStoreError(err);
   }
 }
 
@@ -318,11 +331,11 @@ async function recordRun(result) {
       detail: result.error || JSON.stringify(result.effects),
     });
   } catch (err) {
-    addLog(storeMessage(err));
+    logStoreError(err);
   }
 }
 
-// Sans table Automation il n'y a pas de verrou partagé : cet onglet exécute seul (risque de doublon si le document est ouvert ailleurs).
+// Sans la table du widget il n'y a pas de verrou partagé : cet onglet exécute seul (risque de doublon si le document est ouvert ailleurs).
 // En lecture seule, jamais : Grist refuserait chaque écriture, et c'est l'onglet d'une personne qui peut modifier le document qui exécute.
 const canExecute = () => !readOnly && (!executor || executor.isExecutor());
 
@@ -359,7 +372,7 @@ async function elect() {
     if (graph.active) await executor.tick();
     else await executor.release();
   } catch (err) {
-    addLog(storeMessage(err));
+    logStoreError(err);
   }
 }
 
@@ -380,7 +393,7 @@ async function releaseExecutor() {
 
 // Pour `rester` (js/closing.js) : GFS garde l'app après son oui à `fermer`. Elle reprend ce que releaseExecutor avait arrêté : le battement, puis le verrou par l'élection habituelle (les lignes reçues se
 // traitent de nouveau quand elle le tient ; celles qui sont venues entre-temps ne sont pas rejouées, comme pour toute vue fermée). Le battement n'est jamais doublé : deux reprises, ou une reprise sans rien d'arrêté, sont sans danger.
-// Vrai quand l'app est de nouveau comme avant `fermer` (elle tient le verrou, ou aucun workflow n'est actif) ; faux quand un autre onglet tient le travail, ou qu'il n'y a rien à reprendre ici (lecture seule, pas de table Automation).
+// Vrai quand l'app est de nouveau comme avant `fermer` (elle tient le verrou, ou aucun workflow n'est actif) ; faux quand un autre onglet tient le travail, ou qu'il n'y a rien à reprendre ici (lecture seule, pas de table du widget).
 async function resumeExecutor() {
   if (!executor) return false;
   if (!heartbeat) heartbeat = setInterval(electExecutor, HEARTBEAT_MS);
@@ -643,7 +656,7 @@ async function unreadableContent() {
   return { source: fromDocument ? 'document' : 'widget-options', ...Diagnostic.inspectConfig(fromDocument ? stored : lastOptionsWorkflow) };
 }
 
-// Qui exécuterait les workflows actifs : 'read-only' (jamais), 'alone' (pas de table Automation, donc pas de verrou partagé), 'this-tab', 'other-tab' ou 'none' (personne ne tient le verrou).
+// Qui exécuterait les workflows actifs : 'read-only' (jamais), 'alone' (pas de table du widget, donc pas de verrou partagé), 'this-tab', 'other-tab' ou 'none' (personne ne tient le verrou).
 const executorState = () => (readOnly ? 'read-only' : !executor ? 'alone' : executor.isExecutor() ? 'this-tab' : executor.holder() !== '' ? 'other-tab' : 'none');
 
 // Ce que le widget sait de lui-même, dans la forme que Diagnostic.build lit (js/diagnostic.js). Le graphe est copié : le diagnostic ne change rien au widget.

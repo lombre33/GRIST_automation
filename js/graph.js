@@ -173,7 +173,7 @@
     },
   };
 
-  // Résumé lisible d'un graphe (champ « Resume » de la table des workflows), une ligne par chemin déclencheur -> action.
+  // Résumé lisible d'un graphe (champ « Summary » de la table des workflows, « Resume » dans un document d'avant la 0.15.6), une ligne par chemin déclencheur -> action.
   // t : fonction de traduction (clé, paramètres) : le texte écrit dans le document suit la langue de l'interface.
   function summarize(graph, t) {
     const paths = [];

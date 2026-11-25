@@ -1,8 +1,11 @@
 // Simulateur de l'API de widgets Grist pour les tests de bout en bout : sert à la place de grist-plugin-api.js.
-// Contacts et Archive sont fixes ; la table Automation se crée par AddTable et gardent leurs lignes (window.__stub.docTables).
-// window.__noTables : le document démarre sans la table Automation. `applied` ne liste que les écritures hors table Automation.
-// window.__preloadTables : tables ajoutées au démarrage { nom: ['Colonne', …] } (avec __noTables, pour une table Automation incomplète ou un nom pris à la casse près).
-// window.__preloadRows : lignes ajoutées à la table Automation au démarrage.
+// Contacts et Archive sont fixes ; la table du widget se crée par AddTable et garde ses lignes (window.__stub.docTables).
+// Deux jeux de noms (consigne 028 de GFS) : un document neuf a `Automation_Store` et les colonnes anglaises ; avec window.__legacyNames, le document est d'avant la 0.15.6 :
+// `Automation` et ses colonnes françaises (Actif, Resume, Evenement, Ligne, Resultat, Auteur). window.__stub.store est la table du widget, sous le nom que le document lui donne.
+// window.__noTables : le document démarre sans la table du widget. `applied` ne liste que les écritures hors tables du widget.
+// window.__preloadTables : tables ajoutées au démarrage { nom: ['Colonne', …] } (avec __noTables, pour une table du widget incomplète ou un nom pris à la casse près).
+// window.__preloadRows : lignes ajoutées à la table du widget au démarrage, avec les noms de colonnes anglais (traduits en noms d'avant quand le document est d'avant).
+// window.__preloadTableRows : { table: [lignes] } ajoutées telles quelles, sous les noms de colonnes donnés, à n'importe quelle table du document (les deux tables du widget dans un même document).
 // window.__fetchDelay : délai (ms) de la lecture des tables du widget, pour modifier le graphe avant la fin du démarrage.
 // window.__optionsDelay : délai (ms) avant que les réglages de la vue arrivent (Grist les donne tout de suite, mais rien ne le garantit), pour qu'ils arrivent après la fin du démarrage.
 // Comme Grist : une écriture dans une colonne qui n'existe pas échoue en entier, et un identifiant déjà pris (sans tenir compte de la casse) devient `nom_2`.
@@ -18,28 +21,37 @@ const FIXED = window.__fixedTables || {
 // window.__refuseGristInternal : le courtier de GFS refuse toute lecture d'une table `_grist_*` que le manifeste de l'app ne déclare pas (permissions.gristInterne), avec le message qu'il donne (prototype/js/filter.js de GFS).
 const META = window.__metaTables || {};
 const docTables = {};
-function createTable(name, columns) { docTables[name] = { columns: columns.map((c) => c.id), rows: [], nextId: 1 }; }
-if (!window.__noTables && !window.__foreignLock) {
-  createTable('Automation', ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
-}
+function createTable(name, columns) { docTables[name] = { name, columns: columns.map((c) => c.id), rows: [], nextId: 1 }; }
+const ENGLISH = ['Type', 'Table', 'Date', 'Active', 'Version', 'Summary', 'Config', 'Event', 'Row', 'Result', 'Detail', 'Author'];
+const LEGACY = { Active: 'Actif', Summary: 'Resume', Event: 'Evenement', Row: 'Ligne', Result: 'Resultat', Author: 'Auteur' };
+const legacy = Boolean(window.__legacyNames);
+const STORE = legacy ? 'Automation' : 'Automation_Store';
+const named = (key) => (legacy && LEGACY[key]) || key;
+const nameRow = (row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [named(key), value]));
+if (!window.__noTables && !window.__foreignLock) createTable(STORE, ENGLISH.map((id) => ({ id: named(id) })));
 for (const [name, columns] of Object.entries(window.__preloadTables || {})) createTable(name, columns.map((id) => ({ id })));
-if (window.__preloadRows && docTables.Automation) {
-  for (const row of window.__preloadRows) docTables.Automation.rows.push({ id: docTables.Automation.nextId++, ...row });
+if (window.__preloadRows && docTables[STORE]) {
+  for (const row of window.__preloadRows) docTables[STORE].rows.push({ id: docTables[STORE].nextId++, ...nameRow(row) });
+}
+for (const [name, rows] of Object.entries(window.__preloadTableRows || {})) {
+  if (docTables[name]) for (const row of rows) docTables[name].rows.push({ id: docTables[name].nextId++, ...row });
 }
 // window.__preloadLogs : nombre d'anciennes exécutions déjà dans le journal.
-if (window.__preloadLogs && docTables.Automation) {
-  for (let i = 1; i <= window.__preloadLogs; i += 1) docTables.Automation.rows.push({ id: docTables.Automation.nextId++, Type: 'Log', Table: 'Contacts', Date: 1700000000 + i, Evenement: 'update', Ligne: i, Resultat: 'success', Detail: '[]', Auteur: 'moi@exemple.fr' });
+if (window.__preloadLogs && docTables[STORE]) {
+  for (let i = 1; i <= window.__preloadLogs; i += 1) docTables[STORE].rows.push({ id: docTables[STORE].nextId++, ...nameRow({ Type: 'Log', Table: 'Contacts', Date: 1700000000 + i, Event: 'update', Row: i, Result: 'success', Detail: '[]', Author: 'moi@exemple.fr' }) });
 }
 // window.__foreignLock : un autre onglet exécute déjà (verrou à jour, renouvelé chaque seconde).
 if (window.__foreignLock) {
-  createTable('Automation', ['Type', 'Table', 'Date', 'Actif', 'Version', 'Resume', 'Config', 'Evenement', 'Ligne', 'Resultat', 'Detail', 'Auteur'].map((id) => ({ id })));
+  createTable(STORE, ENGLISH.map((id) => ({ id: named(id) })));
   const lock = { id: 1, Type: 'Lock', Table: 'Contacts', Config: 'autre-onglet', Date: 1 };
-  docTables.Automation.rows.push(lock);
-  docTables.Automation.nextId = 2;
+  docTables[STORE].rows.push(lock);
+  docTables[STORE].nextId = 2;
   setInterval(() => { lock.Date += 1; }, 1000);
 }
 // window.__stub.writeDelay (ms) ralentit chaque écriture ; window.__stub.failWith (un message) fait échouer chaque écriture ; writes : chaque action reçue (genre, table, ligne, valeurs), avec l'heure à laquelle elle a eu lieu (Date.now()).
-window.__stub = { applied: [], refused: [], calls: {}, options: window.__preloadOptions || {}, pushRecords: null, docTables, writes: [], writeDelay: 0, failWith: '' };
+window.__stub = { applied: [], refused: [], calls: {}, options: window.__preloadOptions || {}, pushRecords: null, docTables, writes: [], writeDelay: 0, failWith: '',
+  // La table du widget, sous le nom que le document lui donne (Automation_Store, ou Automation dans un document d'avant ; null : le document n'en a pas). Quand il porte les deux, la nouvelle.
+  get store() { return docTables.Automation_Store || docTables.Automation || null; } };
 const readOnly = new URLSearchParams(location.search).get('readonly') === 'true';
 const count = (name) => { window.__stub.calls[name] = (window.__stub.calls[name] || 0) + 1; };
 const refuse = (what) => { window.__stub.refused.push(what); return Promise.reject(new Error('No write access')); };
@@ -84,9 +96,11 @@ window.grist = {
     applyUserActions: (actions) => {
       if (readOnly) return refuse(actions);
       if (window.__stub.failWith) return Promise.reject(new Error(window.__stub.failWith));
+      // Comme le moteur de Grist : une table ou une colonne qui n'existe pas fait échouer toute l'écriture, « [Sandbox] KeyError 'Nom' » (vu dans un vrai Grist le 2026-11-25).
       for (const [kind, name, , values] of actions) {
+        if ((kind === 'AddRecord' || kind === 'UpdateRecord') && !docTables[name] && !FIXED[name]) return Promise.reject(new Error(`[Sandbox] KeyError '${name}'`));
         const unknown = docTables[name] && values && Object.keys(values).find((column) => !docTables[name].columns.includes(column));
-        if (unknown) return Promise.reject(new Error(`Invalid column "${unknown}"`));
+        if (unknown) return Promise.reject(new Error(`[Sandbox] KeyError '${unknown}'`));
       }
       const apply = () => {
         for (const [kind, name, rowId, values] of actions) {

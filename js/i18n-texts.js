@@ -21,15 +21,15 @@ const I18N_TEXTS = {
 
     // Ce qui prend la place du canevas : l'accès à accorder dans Grist, un workflow que cette version ne lit pas (règle 3 de GFS).
     'access.title': 'Le widget a besoin de l\'accès complet au document',
-    'access.body': 'Il lit les tables du document pour proposer leurs colonnes, enregistre le workflow et son journal dans une table Automation, et écrit dans les lignes que vos actions visent. Tant que cet accès n\'est pas accordé, il ne lit ni n\'enregistre rien.',
+    'access.body': 'Il lit les tables du document pour proposer leurs colonnes, enregistre le workflow et son journal dans une table Automation_Store, et écrit dans les lignes que vos actions visent. Tant que cet accès n\'est pas accordé, il ne lit ni n\'enregistre rien.',
     'access.how': 'Dans Grist, ouvrez le panneau de droite de cette vue : sous « Niveau d\'accès », cliquez sur « Accepter », ou choisissez « Accès complet au document ». Le widget se recharge alors tout seul.',
     'locked.title': 'Workflow conservé tel quel',
     'locked.body': 'Le workflow enregistré pour cette table vient d\'une version plus récente du widget, ou son contenu est illisible. Cette version ne l\'ouvre pas, n\'y écrit rien et ne l\'exécute pas : il reste intact dans le document.',
-    'locked.how': 'Pour le modifier, utilisez la dernière version du widget. Pour repartir de zéro, supprimez la ligne Workflow de cette table dans la table Automation, ou retirez le widget de la page puis ajoutez-le de nouveau.',
+    'locked.how': 'Pour le modifier, utilisez la dernière version du widget. Pour repartir de zéro, supprimez la ligne Workflow de cette table dans la table du widget (Automation_Store, ou Automation dans un document plus ancien), ou retirez le widget de la page puis ajoutez-le de nouveau.',
 
-    // La question de la table Automation, posée avant d'y écrire quoi que ce soit.
+    // La question de la table du widget, posée avant d'y écrire quoi que ce soit.
     'consent.title': 'Créer la table du widget dans ce document ?',
-    'consent.body': 'Le widget range ses workflows et son journal dans une seule table du document, nommée Automation, visible dans la liste des pages de Grist. Sans elle, le graphe n\'est gardé que dans ce widget et le journal n\'est pas enregistré.',
+    'consent.body': 'Le widget range ses workflows et son journal dans une seule table du document, nommée Automation_Store, visible dans la liste des pages de Grist. Sans elle, le graphe n\'est gardé que dans ce widget et le journal n\'est pas enregistré.',
     'consent.create': 'Créer la table',
     'consent.decline': 'Ne pas créer',
     'close.title': 'Modifications non enregistrées',
@@ -152,7 +152,7 @@ const I18N_TEXTS = {
     'issue.actionColumn': '« {node} » n\'a pas de colonne.',
     'issue.noPath': 'Aucune action n\'est reliée à un déclencheur.',
 
-    // Le résumé lisible du graphe, enregistré avec lui (colonne Resume de la table Automation).
+    // Le résumé lisible du graphe, enregistré avec lui (colonne Summary de la table du widget).
     'sum.and': 'et',
     'sum.or': 'ou',
     'sum.where': 'où',
@@ -183,9 +183,10 @@ const I18N_TEXTS = {
     'log.storeError': 'Enregistrement dans le document impossible : {error}',
     'log.activated': 'Workflow activé.',
     'log.deactivated': 'Workflow désactivé.',
-    'log.tableNameTaken': 'Le document a déjà une table « {table} » : Grist ne distingue pas les majuscules des minuscules, le widget ne peut donc pas créer sa table Automation. Renommez-la, puis rechargez le widget.',
-    'log.tableRenamed': 'Grist a créé la table « {table} » au lieu de Automation : le widget ne s\'en sert pas. Vous pouvez la supprimer.',
-    'log.tableColumns': 'La table Automation du document n\'a pas les colonnes attendues ({columns}) : le widget ne s\'en sert pas et n\'y écrit rien.',
+    'log.tableNameTaken': 'Le document a déjà une table « {table} » : Grist ne distingue pas les majuscules des minuscules, le widget ne peut donc pas créer sa table Automation_Store. Renommez-la, puis rechargez le widget.',
+    'log.tableRenamed': 'Grist a créé la table « {table} » au lieu de Automation_Store : le widget ne s\'en sert pas. Vous pouvez la supprimer.',
+    'log.tableColumns': 'La table {table} du document n\'a pas les colonnes attendues ({columns}) : le widget ne s\'en sert pas et n\'y écrit rien.',
+    'log.namesChanged': 'La table du widget ou l\'une de ses colonnes a changé de nom ou n\'existe plus dans le document : plus rien n\'y est écrit. Rechargez la page.',
     'event.create': 'création',
     'event.update': 'modification',
     'event.delete': 'suppression',
@@ -277,15 +278,15 @@ const I18N_TEXTS = {
 
     // Ce qui prend la place du canevas : l'accès à accorder dans Grist, un workflow que cette version ne lit pas (règle 3 de GFS).
     'access.title': 'The widget needs full access to the document',
-    'access.body': 'It reads the document\'s tables to offer their columns, saves the workflow and its log in an Automation table, and writes to the rows your actions target. Until this access is granted, it reads and saves nothing.',
+    'access.body': 'It reads the document\'s tables to offer their columns, saves the workflow and its log in an Automation_Store table, and writes to the rows your actions target. Until this access is granted, it reads and saves nothing.',
     'access.how': 'In Grist, open the right panel for this view: under “Access level”, click “Accept”, or choose “Full document access”. The widget then reloads by itself.',
     'locked.title': 'Workflow kept as is',
     'locked.body': 'The workflow saved for this table comes from a newer version of the widget, or its content is unreadable. This version does not open it, writes nothing to it and does not run it: it stays intact in the document.',
-    'locked.how': 'To edit it, use the latest version of the widget. To start over, delete this table\'s Workflow row in the Automation table, or remove the widget from the page and add it again.',
+    'locked.how': 'To edit it, use the latest version of the widget. To start over, delete this table\'s Workflow row in the widget\'s table (Automation_Store, or Automation in an older document), or remove the widget from the page and add it again.',
 
-    // La question de la table Automation, posée avant d'y écrire quoi que ce soit.
+    // La question de la table du widget, posée avant d'y écrire quoi que ce soit.
     'consent.title': 'Create the widget table in this document?',
-    'consent.body': 'The widget keeps its workflows and its log in a single table of the document, named Automation, listed among Grist\'s pages. Without it, the graph is only kept in this widget and the log is not saved.',
+    'consent.body': 'The widget keeps its workflows and its log in a single table of the document, named Automation_Store, listed among Grist\'s pages. Without it, the graph is only kept in this widget and the log is not saved.',
     'consent.create': 'Create the table',
     'consent.decline': 'Do not create',
     'close.title': 'Unsaved changes',
@@ -408,7 +409,7 @@ const I18N_TEXTS = {
     'issue.actionColumn': '"{node}" has no column.',
     'issue.noPath': 'No action is connected to a trigger.',
 
-    // Le résumé lisible du graphe, enregistré avec lui (colonne Resume de la table Automation).
+    // Le résumé lisible du graphe, enregistré avec lui (colonne Summary de la table du widget).
     'sum.and': 'and',
     'sum.or': 'or',
     'sum.where': 'where',
@@ -439,9 +440,10 @@ const I18N_TEXTS = {
     'log.storeError': 'Could not save to the document: {error}',
     'log.activated': 'Workflow turned on.',
     'log.deactivated': 'Workflow turned off.',
-    'log.tableNameTaken': 'The document already has a table "{table}": Grist does not tell upper and lower case apart, so the widget cannot create its Automation table. Rename it, then reload the widget.',
-    'log.tableRenamed': 'Grist created the table "{table}" instead of Automation: the widget does not use it. You can delete it.',
-    'log.tableColumns': 'The Automation table of the document lacks the expected columns ({columns}): the widget does not use it and writes nothing to it.',
+    'log.tableNameTaken': 'The document already has a table "{table}": Grist does not tell upper and lower case apart, so the widget cannot create its Automation_Store table. Rename it, then reload the widget.',
+    'log.tableRenamed': 'Grist created the table "{table}" instead of Automation_Store: the widget does not use it. You can delete it.',
+    'log.tableColumns': 'The {table} table of the document lacks the expected columns ({columns}): the widget does not use it and writes nothing to it.',
+    'log.namesChanged': 'The widget\'s table or one of its columns was renamed or removed in the document: nothing more is written to it. Reload the page.',
     'event.create': 'creation',
     'event.update': 'modification',
     'event.delete': 'deletion',
